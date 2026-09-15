@@ -35,6 +35,92 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pick an audio file, run it through the on-device engine, and copy the text out. Nothing leaves the device.';
 
   @override
+  String get transcribeChooseFile => 'Choose audio file';
+
+  @override
+  String get transcribeChangeFile => 'Change file';
+
+  @override
+  String get transcribeNoFile => 'No audio selected';
+
+  @override
+  String get transcribeFileHint => 'WAV · M4A · MP3, decoded on-device';
+
+  @override
+  String get transcribePickerUnavailable => 'File picking is not wired up yet.';
+
+  @override
+  String get transcribeEngineUnavailableTitle => 'On-device engine unavailable';
+
+  @override
+  String get transcribeEngineUnavailableBody =>
+      'This build ships without the native speech engine, so transcription cannot run yet. Nothing is faked and no audio leaves the device.';
+
+  @override
+  String get transcribeEngineSection => 'Engine';
+
+  @override
+  String get transcribeModel => 'Model';
+
+  @override
+  String get transcribeModelNone => 'Not selected';
+
+  @override
+  String get transcribeBackend => 'Backend';
+
+  @override
+  String get transcribeBackendCpu => 'CPU';
+
+  @override
+  String get transcribeStart => 'Start transcription';
+
+  @override
+  String get transcribeStartUnavailable =>
+      'Transcription is not available in this build.';
+
+  @override
+  String get transcribeProgress => 'Progress';
+
+  @override
+  String get transcribeProgressIdle => 'Waiting to start';
+
+  @override
+  String get transcribeMetrics => 'Live metrics';
+
+  @override
+  String get transcribeResult => 'Result';
+
+  @override
+  String get transcribeResultEmpty => 'The transcript will appear here.';
+
+  @override
+  String get transcribeCopy => 'Copy';
+
+  @override
+  String get transcribeCopied => 'Copied to clipboard';
+
+  @override
+  String get metricTokensPerSec => 'tokens/s';
+
+  @override
+  String get metricCharsPerSec => 'chars/s';
+
+  @override
+  String get metricRtf => 'RTF';
+
+  @override
+  String get metricElapsed => 'Elapsed';
+
+  @override
+  String get metricCpu => 'CPU';
+
+  @override
+  String get metricMemory => 'Memory';
+
+  @override
+  String get metricUnavailable => '—';
+
+  @override
   String get queueTitle => 'Queue';
 
   @override

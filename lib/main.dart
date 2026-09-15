@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app/app_state.dart';
 import 'app/theme.dart';
+import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
 
 void main() => runApp(const PocketAsrApp());
@@ -73,12 +74,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.mic_none,
         selectedNavIcon: Icons.mic,
         label: l10n.navTranscribe,
-        page: _PlaceholderPage(
-          icon: Icons.graphic_eq,
-          title: l10n.transcribeTitle,
-          body: l10n.transcribeBody,
-          hint: l10n.comingSoon,
-        ),
+        page: const TranscribePage(),
       ),
       _Section(
         navIcon: Icons.list_alt_outlined,

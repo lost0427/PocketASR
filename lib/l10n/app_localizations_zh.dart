@@ -34,6 +34,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeBody => '选择音频文件，用设备上的引擎转成文字，并可一键复制。全程不联网。';
 
   @override
+  String get transcribeChooseFile => '选择音频文件';
+
+  @override
+  String get transcribeChangeFile => '更换文件';
+
+  @override
+  String get transcribeNoFile => '尚未选择音频';
+
+  @override
+  String get transcribeFileHint => 'WAV · M4A · MP3，本地解码';
+
+  @override
+  String get transcribePickerUnavailable => '文件选择功能尚未接入。';
+
+  @override
+  String get transcribeEngineUnavailableTitle => '本地引擎不可用';
+
+  @override
+  String get transcribeEngineUnavailableBody =>
+      '当前构建未包含本地语音引擎，暂时无法转录。不会伪造结果，也不会把音频传出设备。';
+
+  @override
+  String get transcribeEngineSection => '引擎';
+
+  @override
+  String get transcribeModel => '模型';
+
+  @override
+  String get transcribeModelNone => '未选择';
+
+  @override
+  String get transcribeBackend => '后端';
+
+  @override
+  String get transcribeBackendCpu => 'CPU';
+
+  @override
+  String get transcribeStart => '开始转录';
+
+  @override
+  String get transcribeStartUnavailable => '当前构建无法进行转录。';
+
+  @override
+  String get transcribeProgress => '进度';
+
+  @override
+  String get transcribeProgressIdle => '等待开始';
+
+  @override
+  String get transcribeMetrics => '实时指标';
+
+  @override
+  String get transcribeResult => '结果';
+
+  @override
+  String get transcribeResultEmpty => '转录文本会显示在这里。';
+
+  @override
+  String get transcribeCopy => '复制';
+
+  @override
+  String get transcribeCopied => '已复制到剪贴板';
+
+  @override
+  String get metricTokensPerSec => 'tokens/s';
+
+  @override
+  String get metricCharsPerSec => '字/s';
+
+  @override
+  String get metricRtf => 'RTF';
+
+  @override
+  String get metricElapsed => '耗时';
+
+  @override
+  String get metricCpu => 'CPU';
+
+  @override
+  String get metricMemory => '内存';
+
+  @override
+  String get metricUnavailable => '—';
+
+  @override
   String get queueTitle => '队列';
 
   @override

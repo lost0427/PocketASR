@@ -146,6 +146,174 @@ abstract class AppLocalizations {
   /// **'Pick an audio file, run it through the on-device engine, and copy the text out. Nothing leaves the device.'**
   String get transcribeBody;
 
+  /// No description provided for @transcribeChooseFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose audio file'**
+  String get transcribeChooseFile;
+
+  /// No description provided for @transcribeChangeFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Change file'**
+  String get transcribeChangeFile;
+
+  /// No description provided for @transcribeNoFile.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio selected'**
+  String get transcribeNoFile;
+
+  /// No description provided for @transcribeFileHint.
+  ///
+  /// In en, this message translates to:
+  /// **'WAV · M4A · MP3, decoded on-device'**
+  String get transcribeFileHint;
+
+  /// No description provided for @transcribePickerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File picking is not wired up yet.'**
+  String get transcribePickerUnavailable;
+
+  /// No description provided for @transcribeEngineUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device engine unavailable'**
+  String get transcribeEngineUnavailableTitle;
+
+  /// No description provided for @transcribeEngineUnavailableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This build ships without the native speech engine, so transcription cannot run yet. Nothing is faked and no audio leaves the device.'**
+  String get transcribeEngineUnavailableBody;
+
+  /// No description provided for @transcribeEngineSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Engine'**
+  String get transcribeEngineSection;
+
+  /// No description provided for @transcribeModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get transcribeModel;
+
+  /// No description provided for @transcribeModelNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not selected'**
+  String get transcribeModelNone;
+
+  /// No description provided for @transcribeBackend.
+  ///
+  /// In en, this message translates to:
+  /// **'Backend'**
+  String get transcribeBackend;
+
+  /// No description provided for @transcribeBackendCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU'**
+  String get transcribeBackendCpu;
+
+  /// No description provided for @transcribeStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start transcription'**
+  String get transcribeStart;
+
+  /// No description provided for @transcribeStartUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is not available in this build.'**
+  String get transcribeStartUnavailable;
+
+  /// No description provided for @transcribeProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Progress'**
+  String get transcribeProgress;
+
+  /// No description provided for @transcribeProgressIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to start'**
+  String get transcribeProgressIdle;
+
+  /// No description provided for @transcribeMetrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Live metrics'**
+  String get transcribeMetrics;
+
+  /// No description provided for @transcribeResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get transcribeResult;
+
+  /// No description provided for @transcribeResultEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The transcript will appear here.'**
+  String get transcribeResultEmpty;
+
+  /// No description provided for @transcribeCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get transcribeCopy;
+
+  /// No description provided for @transcribeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard'**
+  String get transcribeCopied;
+
+  /// No description provided for @metricTokensPerSec.
+  ///
+  /// In en, this message translates to:
+  /// **'tokens/s'**
+  String get metricTokensPerSec;
+
+  /// No description provided for @metricCharsPerSec.
+  ///
+  /// In en, this message translates to:
+  /// **'chars/s'**
+  String get metricCharsPerSec;
+
+  /// No description provided for @metricRtf.
+  ///
+  /// In en, this message translates to:
+  /// **'RTF'**
+  String get metricRtf;
+
+  /// No description provided for @metricElapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Elapsed'**
+  String get metricElapsed;
+
+  /// No description provided for @metricCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU'**
+  String get metricCpu;
+
+  /// No description provided for @metricMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get metricMemory;
+
+  /// No description provided for @metricUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'—'**
+  String get metricUnavailable;
+
   /// No description provided for @queueTitle.
   ///
   /// In en, this message translates to:
