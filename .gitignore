@@ -48,3 +48,15 @@ app.*.map.json
 .widget_preview/
 /plan
 .slim/deepwork/
+
+# Native CrispASR/CrispEmbed binaries are fetched by scripts/ci, never committed.
+# native/ is ignored except its README, which documents versions/licenses.
+native/*
+!native/README.md
+*.so
+android/key.properties
+
+# Android/Gradle first-sync artifacts
+/android/build/
+/android/.project
+/android/.settings/

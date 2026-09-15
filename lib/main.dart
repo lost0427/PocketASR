@@ -68,6 +68,9 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // Production selects the real engine from AppState (sherpa by default);
+    // the page asks it what it can do and stays honest when it cannot run.
+    final engine = AppStateScope.of(context).engine;
 
     // Real feature pages replace the placeholders in later phases.
     final sections = <_Section>[
@@ -75,7 +78,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.mic_none,
         selectedNavIcon: Icons.mic,
         label: l10n.navTranscribe,
-        page: const TranscribePage(),
+        page: TranscribePage(engine: engine),
       ),
       _Section(
         navIcon: Icons.list_alt_outlined,

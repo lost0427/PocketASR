@@ -6,17 +6,16 @@ import '../../l10n/app_localizations.dart';
 
 /// Transcribe tab.
 ///
-/// Phase 4 lays out the whole single-file flow and its honest empty states, and
-/// asks the injected [AsrEngine] what it can actually do. No native library is
-/// bundled yet, so the default [UnavailableAsrEngine] reports unavailable and
-/// every control that needs the engine stays disabled — the page never pretends
-/// a transcript happened. Phase 4 swaps in `CrispAsrEngine` and fills in
-/// [_copy]'s source plus the run loop.
+/// Lays out the whole single-file flow and its honest empty states, and asks
+/// the injected [AsrEngine] what it can actually do. Production passes
+/// `AppState.engine` (sherpa-onnx by default); when that engine's runtime
+/// capabilities say unavailable, every control that needs it stays disabled and
+/// the banner shows why — the page never pretends a transcript happened.
 class TranscribePage extends StatefulWidget {
-  const TranscribePage({super.key, this.engine = const UnavailableAsrEngine()});
+  const TranscribePage({super.key, required this.engine});
 
-  /// The engine to report status for. Defaults to the "no native library"
-  /// stand-in; callers pass `CrispAsrEngine` once the `.so` is bundled.
+  /// The engine to report status for; resolved from `AppState.engine` in
+  /// production and injected directly in tests.
   final AsrEngine engine;
 
   @override

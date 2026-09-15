@@ -27,6 +27,21 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // PocketASR ships native ASR/embedding libraries for arm64 only
+        // (see native/README.md and scripts/ci/fetch_native_android.sh).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // Keep the fetched libcrispasr.so / libcrispembed.so loadable by
+    // DynamicLibrary.open at runtime; app jniLibs are `src/main/jniLibs/<abi>/`
+    // by default, where the fetch script drops them.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
     buildTypes {

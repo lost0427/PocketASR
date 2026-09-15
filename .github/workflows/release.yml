@@ -15,8 +15,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # Honest build: no native CrispASR/CrispEmbed libs are bundled, so this
-      # release ships UnavailableAsrEngine/DeterministicEmbedder stand-ins.
+      # Honest build: no Windows native fetch is wired, so this release ships
+      # UnavailableAsrEngine/DeterministicEmbedder stand-ins.
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v4
         with:
@@ -24,22 +24,35 @@ jobs:
           path: build/windows/x64/runner/Release
           if-no-files-found: error
 
-  # Android release is reserved until the native .so artifacts land in android/.
-  # `flutter build apk --release` would succeed and install, but it bundles no
-  # ASR/embedding library and reports "transcription is unavailable" at runtime.
-  # Uncomment (and drop `needs` if run in parallel) once the libs are present.
-  # android:
-  #   needs: windows
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: subosito/flutter-action@v2
-  #       with:
-  #         channel: stable
-  #     - run: flutter pub get
-  #     - run: flutter build apk --release
-  #     - uses: actions/upload-artifact@v4
-  #       with:
-  #         name: pocket-asr-android-${{ github.ref_name }}
-  #         path: build/app/outputs/flutter-apk/app-release.apk
-  #         if-no-files-found: error
+  # Android release is enabled now that the native fetch path is wired. The fetch
+  # is the job's first real step and is fail-fast: if the pinned CrispASR
+  # download or its SHA-256 check fails, the job aborts before `flutter build apk`
+  # and no APK is uploaded. CrispEmbed is bundled by the crispembed plugin's own
+  # `fetchCrispembedLibs` Gradle task during the build — the only confirmed
+  # CrispEmbed mechanism; no other CrispEmbed version/asset is substituted.
+  #
+  # The APK bundles native ENGINE libraries only. Model files (see
+  # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
+  # users must provide models at runtime. Do not present this artifact as a model
+  # bundle or fabricate a model download.
+  android:
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Fetch pinned CrispASR Android library
+        run: bash scripts/ci/fetch_native_android.sh
+      - name: Verify libcrispasr.so staged in jniLibs
+        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so
+      - run: flutter build apk --release
+      - name: Verify libcrispasr.so packaged in the APK
+        run: unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispasr.so'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pocket-asr-android-${{ github.ref_name }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

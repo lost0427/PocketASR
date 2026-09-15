@@ -2,7 +2,8 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
-import '../engine/asr_engine.dart' show Backend;
+import '../engine/asr_engine.dart' show AsrEngine, Backend;
+import '../engine/engine_registry.dart';
 
 /// App-wide settings.
 ///
@@ -45,6 +46,31 @@ class AppState extends ChangeNotifier {
     _modelQuant = value;
     notifyListeners();
   }
+
+  /// Builds engines by id. Held here so the app picks a real adapter without a
+  /// DI package; tests can override [engineRegistry] before touching [engine].
+  final EngineRegistry engineRegistry = EngineRegistry();
+
+  /// Real engine preferred by default: sherpa-onnx's Flutter plugin bundles its
+  /// own natives, so it is the one adapter that can be genuinely available on a
+  /// stock build. CrispASR stays selectable via [engineId] once staged.
+  static const String defaultEngineId = 'sherpa';
+
+  String _engineId = defaultEngineId;
+  String get engineId => _engineId;
+  set engineId(String value) {
+    if (value == _engineId) return;
+    _engineId = value;
+    _engine = null; // rebuild lazily for the new id
+    notifyListeners();
+  }
+
+  AsrEngine? _engine;
+
+  /// The selected [AsrEngine], built once per [engineId] so native probes are
+  /// not repeated on every widget rebuild. Whether it can actually run is a
+  /// runtime fact the UI reads from `engine.capabilities()`.
+  AsrEngine get engine => _engine ??= engineRegistry.createAsr(_engineId);
 
   /// Compute backend. Fixed to CPU for the first release (decision D17); kept
   /// as state so a picker can be added later without touching callers.
@@ -90,6 +116,12 @@ class AppState extends ChangeNotifier {
   static int _defaultThreads() {
     final half = Platform.numberOfProcessors ~/ 2;
     return half < 1 ? 1 : half;
+  }
+
+  @override
+  void dispose() {
+    _engine?.dispose();
+    super.dispose();
   }
 }
 

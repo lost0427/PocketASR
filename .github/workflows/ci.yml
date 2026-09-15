@@ -22,3 +22,33 @@ jobs:
           name: windows-debug
           path: build/windows/x64/runner/Debug
           if-no-files-found: error
+
+  # Android (arm64-v8a). Like release.yml, this runs the pinned native fetch
+  # before the build:
+  #   - CrispASR: scripts/ci/fetch_native_android.sh verifies the SHA-256 and
+  #     stages libcrispasr.so into android/app/src/main/jniLibs/arm64-v8a/.
+  #   - CrispEmbed: the crispembed plugin's own `fetchCrispembedLibs` Gradle task
+  #     downloads its prebuilt .so during `flutter build apk`. That is the only
+  #     CrispEmbed mechanism used here — do not substitute an unverified asset.
+  # Model files are NOT fetched or bundled. The APK ships engine libraries only;
+  # users must supply models (see assets/model_allowlist.json) at runtime.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Fetch pinned CrispASR Android library
+        run: bash scripts/ci/fetch_native_android.sh
+      - name: Verify libcrispasr.so staged in jniLibs
+        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so
+      - run: flutter build apk --debug
+      - name: Verify libcrispasr.so packaged in the APK
+        run: unzip -l build/app/outputs/flutter-apk/app-debug.apk | grep -q 'lib/arm64-v8a/libcrispasr.so'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

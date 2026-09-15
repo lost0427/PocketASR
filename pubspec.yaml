@@ -8,10 +8,13 @@ environment:
 
 dependencies:
   characters: ^1.4.1
+  crispasr: 0.8.32
+  crispembed: 0.16.1
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  sherpa_onnx: 1.13.8
   # v2 keeps the plain DynamicLibrary loading that works under `flutter test`;
   # v3 needs Dart native-asset hooks the Flutter test runner does not build yet.
   sqlite3: ^2.9.0

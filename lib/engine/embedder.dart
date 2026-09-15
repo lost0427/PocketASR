@@ -30,6 +30,19 @@ abstract class Embedder {
   Future<void> dispose();
 }
 
+/// Raised when a native embedder library or model cannot be loaded.
+///
+/// Deliberately an error, with no fallback to [DeterministicEmbedder]: a silent
+/// fallback would let semantic search return plausible-but-meaningless hits.
+class EmbedderUnavailableException implements Exception {
+  const EmbedderUnavailableException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'EmbedderUnavailableException: $message';
+}
+
 /// Deterministic, dependency-free [Embedder] for tests and as a fallback when
 /// no native embedding library is bundled.
 ///
