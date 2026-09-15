@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "comment": "Curated models PocketASR may run on-device. This build has no downloader, so entries only declare the local file the app expects. sizeBytes is omitted until a real download size is confirmed; the catalog never invents one.",
+  "models": [
+    {
+      "id": "sensevoice-small",
+      "displayName": "SenseVoice Small",
+      "family": "sensevoice",
+      "quant": "q8",
+      "fileName": "sensevoice-small-q8.onnx"
+    },
+    {
+      "id": "whisper-base",
+      "displayName": "Whisper Base",
+      "family": "whisper",
+      "quant": "q5",
+      "fileName": "whisper-base-q5.onnx"
+    }
+  ]
+}

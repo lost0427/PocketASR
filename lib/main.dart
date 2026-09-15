@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app/app_state.dart';
 import 'app/theme.dart';
+import 'features/models/models_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
 
@@ -102,12 +103,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.layers_outlined,
         selectedNavIcon: Icons.layers,
         label: l10n.navModels,
-        page: _PlaceholderPage(
-          icon: Icons.layers,
-          title: l10n.modelsTitle,
-          body: l10n.modelsBody,
-          hint: l10n.comingSoon,
-        ),
+        page: const ModelsPage(),
       ),
       _Section(
         navIcon: Icons.settings_outlined,
