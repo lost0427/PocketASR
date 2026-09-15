@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   characters: ^1.4.1
+  crypto: ^3.0.6
   file_selector: ^1.0.3
   crispasr: 0.8.32
   crispembed: 0.16.1

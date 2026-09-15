@@ -24,6 +24,8 @@ class ModelEntry {
     this.family,
     this.quant,
     this.sizeBytes,
+    this.url,
+    this.sha256,
   });
 
   /// Parses one allowlist object, rejecting entries the store could not map to
@@ -51,6 +53,8 @@ class ModelEntry {
       family: _stringOrNull(json['family']),
       quant: _stringOrNull(json['quant']),
       sizeBytes: size as int?,
+      url: _stringOrNull(json['url']),
+      sha256: _stringOrNull(json['sha256']),
     );
   }
 
@@ -71,6 +75,8 @@ class ModelEntry {
 
   /// Confirmed download size, or null when the catalog has none yet.
   final int? sizeBytes;
+  final String? url;
+  final String? sha256;
 }
 
 /// Parses the allowlist [source] into entries, throwing [FormatException] on a
