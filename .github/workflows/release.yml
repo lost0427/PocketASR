@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -18,10 +21,13 @@ jobs:
       # Honest build: no Windows native fetch is wired, so this release ships
       # UnavailableAsrEngine/DeterministicEmbedder stand-ins.
       - run: flutter build windows --release
+      - name: Package Windows release
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath pocket-asr-windows-${{ github.ref_name }}.zip
       - uses: actions/upload-artifact@v4
         with:
           name: pocket-asr-windows-${{ github.ref_name }}
-          path: build/windows/x64/runner/Release
+          path: pocket-asr-windows-${{ github.ref_name }}.zip
           if-no-files-found: error
 
   # Android release is enabled now that the native fetch path is wired. The fetch
@@ -56,3 +62,22 @@ jobs:
           name: pocket-asr-android-${{ github.ref_name }}
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+  publish:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pocket-asr-*
+          path: release-assets
+          merge-multiple: true
+      - name: Rename Android package
+        run: mv release-assets/app-release.apk release-assets/pocket-asr-android-${{ github.ref_name }}.apk
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: PocketASR ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
