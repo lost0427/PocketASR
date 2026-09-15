@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
 import '../../l10n/app_localizations.dart';
@@ -26,10 +27,12 @@ class _TranscribePageState extends State<TranscribePage> {
   late Future<EngineCapabilities> _capabilities;
 
   String? _fileName;
+  String? _filePath;
 
   // Phase 4 replaces these with live run state (progress stream + result text).
   final String _result = '';
-  final double? _progress = null;
+  double? _progress;
+  final bool _running = false;
 
   @override
   void initState() {
@@ -43,14 +46,23 @@ class _TranscribePageState extends State<TranscribePage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _pickFile() {
-    // Phase 4: replace with the platform audio picker.
-    _notify(AppLocalizations.of(context).transcribePickerUnavailable);
+  Future<void> _pickFile() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Audio', extensions: ['wav', 'm4a', 'mp3', 'flac']),
+      ],
+    );
+    if (!mounted || file == null) return;
+    setState(() {
+      _filePath = file.path;
+      _fileName = file.name;
+    });
   }
 
-  void _start() {
-    // Reached only once the engine reports available, which Phase 4 pairs with
-    // the real `engine.transcribe(request)` call.
+  Future<void> _start() async {
+    if (_filePath == null) return;
+    // Model selection and service wiring are deliberately blocked until a real
+    // model path exists; never report a transcript without one.
     _notify(AppLocalizations.of(context).transcribeStartUnavailable);
   }
 
@@ -80,7 +92,7 @@ class _TranscribePageState extends State<TranscribePage> {
       builder: (context, snapshot) {
         final capabilities = snapshot.data;
         final engineAvailable = capabilities?.available ?? false;
-        final running = _progress != null;
+        final running = _running;
         final canStart = engineAvailable && _fileName != null && !running;
         final hasResult = _result.isNotEmpty;
 

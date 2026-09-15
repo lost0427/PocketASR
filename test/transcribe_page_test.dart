@@ -93,7 +93,7 @@ void main() {
     expect(start.onPressed, isNull);
   });
 
-  testWidgets('file picker is an honest placeholder', (tester) async {
+  testWidgets('file picker no longer uses the placeholder flow', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -101,7 +101,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('File picking is not wired up yet.'), findsOneWidget);
+    expect(find.text('File picking is not wired up yet.'), findsNothing);
   });
 
   testWidgets('localizes the unavailable state to Chinese', (tester) async {
