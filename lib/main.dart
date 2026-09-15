@@ -4,6 +4,7 @@ import 'app/app_state.dart';
 import 'app/theme.dart';
 import 'features/models/models_page.dart';
 import 'features/history/history_page.dart';
+import 'features/queue/queue_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
@@ -91,12 +92,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.list_alt_outlined,
         selectedNavIcon: Icons.list_alt,
         label: l10n.navQueue,
-        page: _PlaceholderPage(
-          icon: Icons.playlist_play,
-          title: l10n.queueTitle,
-          body: l10n.queueBody,
-          hint: l10n.comingSoon,
-        ),
+        page: QueuePage(engine: engine),
       ),
       _Section(
         navIcon: Icons.history,
@@ -152,73 +148,4 @@ class _Section {
   final IconData selectedNavIcon;
   final String label;
   final Widget page;
-}
-
-/// Empty page with enough structure to look intentional: tonal badge, title,
-/// one line of context.
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.hint,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.secondaryContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 44, color: scheme.onSecondaryContainer),
-              ),
-              const SizedBox(height: 28),
-              Text(
-                title,
-                style: theme.textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Chip(
-                avatar: const Icon(Icons.schedule, size: 18),
-                label: Text(hint),
-                side: BorderSide(color: scheme.outlineVariant),
-                backgroundColor: Colors.transparent,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

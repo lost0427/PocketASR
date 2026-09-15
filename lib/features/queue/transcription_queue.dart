@@ -41,6 +41,8 @@ class TranscriptionQueue {
   /// Snapshot of the queue in run order.
   List<TranscriptionJob> get jobs => List.unmodifiable(_jobs);
 
+  bool get hasPending => _jobs.any((job) => job.status == TranscriptionJobStatus.pending);
+
   int get length => _jobs.length;
 
   bool get isEmpty => _jobs.isEmpty;
