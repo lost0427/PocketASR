@@ -7,10 +7,15 @@ environment:
   sdk: ^3.13.3
 
 dependencies:
+  characters: ^1.4.1
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  # v2 keeps the plain DynamicLibrary loading that works under `flutter test`;
+  # v3 needs Dart native-asset hooks the Flutter test runner does not build yet.
+  sqlite3: ^2.9.0
+  sqlite3_flutter_libs: ^0.5.0
 
 dev_dependencies:
   flutter_test:
