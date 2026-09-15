@@ -169,8 +169,118 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageChinese => '中文';
 
   @override
-  String get settingsNotPersisted =>
-      'Theme and language reset on restart for now.';
+  String get settingsModel => 'Model';
+
+  @override
+  String get settingsModelFamily => 'Model family';
+
+  @override
+  String get settingsQuantization => 'Quantization';
+
+  @override
+  String get settingsPerformance => 'Performance';
+
+  @override
+  String get settingsThreads => 'Threads';
+
+  @override
+  String settingsThreadsValue(int used, int max) {
+    return '$used of $max';
+  }
+
+  @override
+  String get settingsThreadsHint => 'Defaults to half the CPU cores.';
+
+  @override
+  String get settingsAudio => 'Audio';
+
+  @override
+  String get settingsLoudness => 'Loudness normalization';
+
+  @override
+  String get settingsLoudnessHint =>
+      'Lifts quiet recordings to the target level before transcription. This is loudness, not peak.';
+
+  @override
+  String get settingsLoudnessTarget => 'Target loudness';
+
+  @override
+  String get settingsLoudnessUnit => 'LUFS';
+
+  @override
+  String get settingsAbout => 'About';
+
+  @override
+  String settingsVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get settingsAboutHint =>
+      'Runs entirely on the device. Nothing is uploaded.';
+
+  @override
+  String get settingsNotPersisted => 'Settings reset on restart for now.';
+
+  @override
+  String get benchTitle => 'Benchmark';
+
+  @override
+  String get benchIntro =>
+      'Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.';
+
+  @override
+  String get benchUnavailableTitle => 'Nothing can run in this build';
+
+  @override
+  String get benchUnavailableEngine =>
+      'The native speech engine is not bundled, so no run could produce real numbers.';
+
+  @override
+  String benchUnavailableSample(String asset) {
+    return 'The fixed sample $asset is missing, so runs would not be comparable.';
+  }
+
+  @override
+  String get benchHonesty =>
+      'No performance figure is shown until a real run produces one.';
+
+  @override
+  String get benchMatrix => 'CPU matrix';
+
+  @override
+  String get benchCpuOnly => 'CPU only — GPU and NPU are deferred.';
+
+  @override
+  String get benchFamily => 'Family';
+
+  @override
+  String get benchQuant => 'Quant';
+
+  @override
+  String get benchStatus => 'Status';
+
+  @override
+  String get benchStatusUnavailable => 'Unavailable';
+
+  @override
+  String get benchStatusNotRun => 'Not run';
+
+  @override
+  String get benchResults => 'Results';
+
+  @override
+  String get benchRun => 'Run benchmark';
+
+  @override
+  String get benchNoResultsTitle => 'No results yet';
+
+  @override
+  String get benchNoResultsBody =>
+      'A run fills this table with load time, wall clock, RTF, tokens/s and peak memory. Until then it stays empty.';
+
+  @override
+  String get benchExitHint => 'Tap the title seven times to leave.';
 
   @override
   String get comingSoon => 'Coming soon';

@@ -164,7 +164,112 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageChinese => '中文';
 
   @override
-  String get settingsNotPersisted => '主题与语言暂不持久化，重启后恢复默认。';
+  String get settingsModel => '模型';
+
+  @override
+  String get settingsModelFamily => '模型家族';
+
+  @override
+  String get settingsQuantization => '量化档';
+
+  @override
+  String get settingsPerformance => '性能';
+
+  @override
+  String get settingsThreads => '线程数';
+
+  @override
+  String settingsThreadsValue(int used, int max) {
+    return '$used / $max';
+  }
+
+  @override
+  String get settingsThreadsHint => '默认使用一半的 CPU 核心。';
+
+  @override
+  String get settingsAudio => '音频';
+
+  @override
+  String get settingsLoudness => '响度归一';
+
+  @override
+  String get settingsLoudnessHint => '转录前把偏小的声音抬到目标响度。这是响度，不是峰值。';
+
+  @override
+  String get settingsLoudnessTarget => '目标响度';
+
+  @override
+  String get settingsLoudnessUnit => 'LUFS';
+
+  @override
+  String get settingsAbout => '关于';
+
+  @override
+  String settingsVersion(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String get settingsAboutHint => '完全在本机运行，不会上传任何内容。';
+
+  @override
+  String get settingsNotPersisted => '设置暂不持久化，重启后恢复默认。';
+
+  @override
+  String get benchTitle => '性能基准';
+
+  @override
+  String get benchIntro => '对同一段固定素材跑完整个 CPU 矩阵，数字才可比较。每格都复用转录页的同一套指标口径。';
+
+  @override
+  String get benchUnavailableTitle => '当前构建无法运行';
+
+  @override
+  String get benchUnavailableEngine => '未打包本地语音引擎，因此无法产生真实数据。';
+
+  @override
+  String benchUnavailableSample(String asset) {
+    return '缺少固定素材 $asset，跑出来的结果无法比较。';
+  }
+
+  @override
+  String get benchHonesty => '没有真实运行之前，不显示任何性能数字。';
+
+  @override
+  String get benchMatrix => 'CPU 矩阵';
+
+  @override
+  String get benchCpuOnly => '仅 CPU——GPU 与 NPU 暂缓。';
+
+  @override
+  String get benchFamily => '家族';
+
+  @override
+  String get benchQuant => '量化';
+
+  @override
+  String get benchStatus => '状态';
+
+  @override
+  String get benchStatusUnavailable => '不可用';
+
+  @override
+  String get benchStatusNotRun => '未运行';
+
+  @override
+  String get benchResults => '结果';
+
+  @override
+  String get benchRun => '运行基准测试';
+
+  @override
+  String get benchNoResultsTitle => '暂无结果';
+
+  @override
+  String get benchNoResultsBody => '运行后会填上加载耗时、墙钟、RTF、tokens/s 与峰值内存。在此之前保持为空。';
+
+  @override
+  String get benchExitHint => '连续点击标题七次可退出。';
 
   @override
   String get comingSoon => '即将推出';

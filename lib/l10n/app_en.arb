@@ -51,6 +51,55 @@
   "languageSystem": "System",
   "languageEnglish": "English",
   "languageChinese": "中文",
-  "settingsNotPersisted": "Theme and language reset on restart for now.",
+  "settingsModel": "Model",
+  "settingsModelFamily": "Model family",
+  "settingsQuantization": "Quantization",
+  "settingsPerformance": "Performance",
+  "settingsThreads": "Threads",
+  "settingsThreadsValue": "{used} of {max}",
+  "@settingsThreadsValue": {
+    "placeholders": {
+      "used": { "type": "int" },
+      "max": { "type": "int" }
+    }
+  },
+  "settingsThreadsHint": "Defaults to half the CPU cores.",
+  "settingsAudio": "Audio",
+  "settingsLoudness": "Loudness normalization",
+  "settingsLoudnessHint": "Lifts quiet recordings to the target level before transcription. This is loudness, not peak.",
+  "settingsLoudnessTarget": "Target loudness",
+  "settingsLoudnessUnit": "LUFS",
+  "settingsAbout": "About",
+  "settingsVersion": "Version {version}",
+  "@settingsVersion": {
+    "placeholders": {
+      "version": { "type": "String" }
+    }
+  },
+  "settingsAboutHint": "Runs entirely on the device. Nothing is uploaded.",
+  "settingsNotPersisted": "Settings reset on restart for now.",
+  "benchTitle": "Benchmark",
+  "benchIntro": "Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.",
+  "benchUnavailableTitle": "Nothing can run in this build",
+  "benchUnavailableEngine": "The native speech engine is not bundled, so no run could produce real numbers.",
+  "benchUnavailableSample": "The fixed sample {asset} is missing, so runs would not be comparable.",
+  "@benchUnavailableSample": {
+    "placeholders": {
+      "asset": { "type": "String" }
+    }
+  },
+  "benchHonesty": "No performance figure is shown until a real run produces one.",
+  "benchMatrix": "CPU matrix",
+  "benchCpuOnly": "CPU only — GPU and NPU are deferred.",
+  "benchFamily": "Family",
+  "benchQuant": "Quant",
+  "benchStatus": "Status",
+  "benchStatusUnavailable": "Unavailable",
+  "benchStatusNotRun": "Not run",
+  "benchResults": "Results",
+  "benchRun": "Run benchmark",
+  "benchNoResultsTitle": "No results yet",
+  "benchNoResultsBody": "A run fills this table with load time, wall clock, RTF, tokens/s and peak memory. Until then it stays empty.",
+  "benchExitHint": "Tap the title seven times to leave.",
   "comingSoon": "Coming soon"
 }

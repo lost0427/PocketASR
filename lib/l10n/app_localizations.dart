@@ -404,11 +404,209 @@ abstract class AppLocalizations {
   /// **'中文'**
   String get languageChinese;
 
+  /// No description provided for @settingsModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get settingsModel;
+
+  /// No description provided for @settingsModelFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Model family'**
+  String get settingsModelFamily;
+
+  /// No description provided for @settingsQuantization.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantization'**
+  String get settingsQuantization;
+
+  /// No description provided for @settingsPerformance.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance'**
+  String get settingsPerformance;
+
+  /// No description provided for @settingsThreads.
+  ///
+  /// In en, this message translates to:
+  /// **'Threads'**
+  String get settingsThreads;
+
+  /// No description provided for @settingsThreadsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {max}'**
+  String settingsThreadsValue(int used, int max);
+
+  /// No description provided for @settingsThreadsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Defaults to half the CPU cores.'**
+  String get settingsThreadsHint;
+
+  /// No description provided for @settingsAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get settingsAudio;
+
+  /// No description provided for @settingsLoudness.
+  ///
+  /// In en, this message translates to:
+  /// **'Loudness normalization'**
+  String get settingsLoudness;
+
+  /// No description provided for @settingsLoudnessHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifts quiet recordings to the target level before transcription. This is loudness, not peak.'**
+  String get settingsLoudnessHint;
+
+  /// No description provided for @settingsLoudnessTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Target loudness'**
+  String get settingsLoudnessTarget;
+
+  /// No description provided for @settingsLoudnessUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'LUFS'**
+  String get settingsLoudnessUnit;
+
+  /// No description provided for @settingsAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsAbout;
+
+  /// No description provided for @settingsVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String settingsVersion(String version);
+
+  /// No description provided for @settingsAboutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs entirely on the device. Nothing is uploaded.'**
+  String get settingsAboutHint;
+
   /// No description provided for @settingsNotPersisted.
   ///
   /// In en, this message translates to:
-  /// **'Theme and language reset on restart for now.'**
+  /// **'Settings reset on restart for now.'**
   String get settingsNotPersisted;
+
+  /// No description provided for @benchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Benchmark'**
+  String get benchTitle;
+
+  /// No description provided for @benchIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.'**
+  String get benchIntro;
+
+  /// No description provided for @benchUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing can run in this build'**
+  String get benchUnavailableTitle;
+
+  /// No description provided for @benchUnavailableEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'The native speech engine is not bundled, so no run could produce real numbers.'**
+  String get benchUnavailableEngine;
+
+  /// No description provided for @benchUnavailableSample.
+  ///
+  /// In en, this message translates to:
+  /// **'The fixed sample {asset} is missing, so runs would not be comparable.'**
+  String benchUnavailableSample(String asset);
+
+  /// No description provided for @benchHonesty.
+  ///
+  /// In en, this message translates to:
+  /// **'No performance figure is shown until a real run produces one.'**
+  String get benchHonesty;
+
+  /// No description provided for @benchMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU matrix'**
+  String get benchMatrix;
+
+  /// No description provided for @benchCpuOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU only — GPU and NPU are deferred.'**
+  String get benchCpuOnly;
+
+  /// No description provided for @benchFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Family'**
+  String get benchFamily;
+
+  /// No description provided for @benchQuant.
+  ///
+  /// In en, this message translates to:
+  /// **'Quant'**
+  String get benchQuant;
+
+  /// No description provided for @benchStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get benchStatus;
+
+  /// No description provided for @benchStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get benchStatusUnavailable;
+
+  /// No description provided for @benchStatusNotRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Not run'**
+  String get benchStatusNotRun;
+
+  /// No description provided for @benchResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get benchResults;
+
+  /// No description provided for @benchRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run benchmark'**
+  String get benchRun;
+
+  /// No description provided for @benchNoResultsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No results yet'**
+  String get benchNoResultsTitle;
+
+  /// No description provided for @benchNoResultsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A run fills this table with load time, wall clock, RTF, tokens/s and peak memory. Until then it stays empty.'**
+  String get benchNoResultsBody;
+
+  /// No description provided for @benchExitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the title seven times to leave.'**
+  String get benchExitHint;
 
   /// No description provided for @comingSoon.
   ///

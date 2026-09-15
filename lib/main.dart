@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app/app_state.dart';
 import 'app/theme.dart';
 import 'features/models/models_page.dart';
+import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
 
@@ -15,7 +16,6 @@ class PocketAsrApp extends StatefulWidget {
   @override
   State<PocketAsrApp> createState() => _PocketAsrAppState();
 }
-
 class _PocketAsrAppState extends State<PocketAsrApp> {
   final AppState _state = AppState();
 
@@ -109,7 +109,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.settings_outlined,
         selectedNavIcon: Icons.settings,
         label: l10n.navSettings,
-        page: const _SettingsPage(),
+        page: const SettingsPage(),
       ),
     ];
 
@@ -218,100 +218,3 @@ class _PlaceholderPage extends StatelessWidget {
   }
 }
 
-const String _systemLanguage = 'system';
-
-/// Placeholder for Phase 9. Already wires the tri-state theme and language
-/// overrides that live in [AppState].
-class _SettingsPage extends StatelessWidget {
-  const _SettingsPage();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final state = AppStateScope.of(context);
-    final scheme = Theme.of(context).colorScheme;
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
-        _SectionLabel(l10n.settingsAppearance),
-        const SizedBox(height: 12),
-        SegmentedButton<ThemeMode>(
-          expandedInsets: EdgeInsets.zero,
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(
-              value: ThemeMode.system,
-              label: Text(l10n.themeSystem),
-            ),
-            ButtonSegment(
-              value: ThemeMode.light,
-              label: Text(l10n.themeLight),
-            ),
-            ButtonSegment(
-              value: ThemeMode.dark,
-              label: Text(l10n.themeDark),
-            ),
-          ],
-          selected: {state.themeMode},
-          onSelectionChanged: (selection) => state.themeMode = selection.first,
-        ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsLanguage),
-        const SizedBox(height: 12),
-        SegmentedButton<String>(
-          expandedInsets: EdgeInsets.zero,
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(
-              value: _systemLanguage,
-              label: Text(l10n.languageSystem),
-            ),
-            ButtonSegment(value: 'en', label: Text(l10n.languageEnglish)),
-            ButtonSegment(value: 'zh', label: Text(l10n.languageChinese)),
-          ],
-          selected: {state.locale?.languageCode ?? _systemLanguage},
-          onSelectionChanged: (selection) {
-            final code = selection.first;
-            state.locale = code == _systemLanguage ? null : Locale(code);
-          },
-        ),
-        const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                l10n.settingsNotPersisted,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Text(
-      text,
-      style: theme.textTheme.labelLarge?.copyWith(
-        color: theme.colorScheme.primary,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
-      ),
-    );
-  }
-}
