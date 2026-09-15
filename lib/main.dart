@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app/app_state.dart';
 import 'app/theme.dart';
 import 'features/models/models_page.dart';
+import 'features/history/history_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
@@ -101,12 +102,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.history,
         selectedNavIcon: Icons.history,
         label: l10n.navHistory,
-        page: _PlaceholderPage(
-          icon: Icons.history,
-          title: l10n.historyTitle,
-          body: l10n.historyBody,
-          hint: l10n.comingSoon,
-        ),
+        page: HistoryPage(repo: state.transcriptRepo, search: state.searchRepo),
       ),
       _Section(
         navIcon: Icons.layers_outlined,
