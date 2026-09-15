@@ -97,7 +97,7 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Choose audio file'));
+    await tester.tap(find.text('Choose audio file').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 

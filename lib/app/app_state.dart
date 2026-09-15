@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../engine/asr_engine.dart' show AsrEngine, Backend;
 import '../engine/engine_registry.dart';
+import '../data/db.dart';
+import '../data/search_repo.dart';
+import '../data/transcript_repo.dart';
 
 /// App-wide settings.
 ///
@@ -12,6 +15,9 @@ import '../engine/engine_registry.dart';
 /// round out the Settings tab. Persistence lands in Phase 5 (settings table),
 /// so for now every value lives in memory only.
 class AppState extends ChangeNotifier {
+  final AppDatabase database = AppDatabase.open();
+  late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
+  late final SearchRepo searchRepo = SearchRepo(database);
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
   set themeMode(ThemeMode value) {
@@ -121,6 +127,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _engine?.dispose();
+    database.close();
     super.dispose();
   }
 }

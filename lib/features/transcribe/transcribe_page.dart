@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
+import '../../data/transcript_repo.dart';
+import '../../core/audio/audio_preprocessor.dart';
+import 'transcription_service.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Transcribe tab.
@@ -13,11 +16,22 @@ import '../../l10n/app_localizations.dart';
 /// capabilities say unavailable, every control that needs it stays disabled and
 /// the banner shows why — the page never pretends a transcript happened.
 class TranscribePage extends StatefulWidget {
-  const TranscribePage({super.key, required this.engine});
+  const TranscribePage({
+    super.key,
+    required this.engine,
+    this.transcriptRepo,
+    this.loudnessEnabled = true,
+    this.loudnessTargetLufs = -16,
+    this.service,
+  });
 
   /// The engine to report status for; resolved from `AppState.engine` in
   /// production and injected directly in tests.
   final AsrEngine engine;
+  final TranscriptRepo? transcriptRepo;
+  final bool loudnessEnabled;
+  final double loudnessTargetLufs;
+  final TranscriptionService? service;
 
   @override
   State<TranscribePage> createState() => _TranscribePageState();
@@ -28,11 +42,13 @@ class _TranscribePageState extends State<TranscribePage> {
 
   String? _fileName;
   String? _filePath;
+  String? _modelPath;
 
   // Phase 4 replaces these with live run state (progress stream + result text).
-  final String _result = '';
+  String _result = '';
   double? _progress;
-  final bool _running = false;
+  bool _running = false;
+  String? _error;
 
   @override
   void initState() {
@@ -61,9 +77,51 @@ class _TranscribePageState extends State<TranscribePage> {
 
   Future<void> _start() async {
     if (_filePath == null) return;
-    // Model selection and service wiring are deliberately blocked until a real
-    // model path exists; never report a transcript without one.
-    _notify(AppLocalizations.of(context).transcribeStartUnavailable);
+    if (_modelPath == null) {
+      _notify(AppLocalizations.of(context).transcribeStartUnavailable);
+      return;
+    }
+    setState(() { _running = true; _error = null; _progress = 0; });
+    try {
+      final result = await (widget.service ?? TranscriptionService(
+        engine: widget.engine,
+        preprocessor: AudioPreprocessor(
+          enabled: widget.loudnessEnabled,
+          targetLufs: widget.loudnessTargetLufs,
+        ),
+      )).transcribe(
+        audioPath: _filePath!,
+        model: EngineModelSpec(path: _modelPath!),
+      );
+      widget.transcriptRepo?.insert(
+        title: _fileName ?? _filePath!,
+        text: result.text,
+        audioPath: _filePath,
+        audioSeconds: result.audioDuration.inMilliseconds / 1000,
+        engine: result.engine,
+        modelPath: result.model.path,
+        backend: result.backend.name,
+        rtf: result.rtf,
+        tokens: result.tokens,
+        totalMs: result.elapsed.inMilliseconds,
+        avgTokensPerSec: result.avgTokensPerSec,
+      );
+      if (mounted) setState(() { _result = result.text; _progress = 1; });
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  Future<void> _pickModel() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Model', extensions: ['gguf', 'onnx', 'bin']),
+      ],
+    );
+    if (!mounted || file == null) return;
+    setState(() => _modelPath = file.path);
   }
 
   Future<void> _copy() async {
@@ -136,7 +194,9 @@ class _TranscribePageState extends State<TranscribePage> {
                         child: _StatusTile(
                           icon: Icons.layers_outlined,
                           label: l10n.transcribeModel,
-                          value: l10n.transcribeModelNone,
+                          value: _modelPath == null
+                              ? l10n.transcribeModelNone
+                              : _modelPath!.split(RegExp(r'[\\/]')).last,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -149,6 +209,15 @@ class _TranscribePageState extends State<TranscribePage> {
                       ),
                     ],
                   ),
+                  OutlinedButton.icon(
+                    onPressed: running ? null : _pickModel,
+                    icon: const Icon(Icons.model_training_outlined),
+                    label: Text(l10n.transcribeChooseFile),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_error!, style: TextStyle(color: scheme.error)),
+                  ],
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     onPressed: canStart ? _start : null,
