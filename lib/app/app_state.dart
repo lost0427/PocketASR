@@ -18,11 +18,31 @@ class AppState extends ChangeNotifier {
   final AppDatabase database = AppDatabase.open();
   late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
   late final SearchRepo searchRepo = SearchRepo(database);
+
+  AppState() {
+    _loadSettings();
+  }
+
+  void _loadSettings() {
+    final mode = database.getSetting('theme_mode');
+    _themeMode = ThemeMode.values.any((value) => value.name == mode)
+        ? ThemeMode.values.firstWhere((value) => value.name == mode)
+        : ThemeMode.system;
+    final language = database.getSetting('locale');
+    _locale = language == null || language.isEmpty ? null : Locale(language);
+    _modelFamily = database.getSetting('model_family') ?? _modelFamily;
+    _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
+    _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
+    _loudnessTargetLufs = double.tryParse(database.getSetting('loudness_target') ?? '') ?? _loudnessTargetLufs;
+  }
+
+  void _save(String key, String value) => database.setSetting(key, value);
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
   set themeMode(ThemeMode value) {
     if (value == _themeMode) return;
     _themeMode = value;
+    _save('theme_mode', value.name);
     notifyListeners();
   }
 
@@ -32,6 +52,7 @@ class AppState extends ChangeNotifier {
   set locale(Locale? value) {
     if (value == _locale) return;
     _locale = value;
+    _save('locale', value?.languageCode ?? '');
     notifyListeners();
   }
 
@@ -41,6 +62,7 @@ class AppState extends ChangeNotifier {
   set modelFamily(String value) {
     if (value == _modelFamily) return;
     _modelFamily = value;
+    _save('model_family', value);
     notifyListeners();
   }
 
@@ -50,6 +72,7 @@ class AppState extends ChangeNotifier {
   set modelQuant(String value) {
     if (value == _modelQuant) return;
     _modelQuant = value;
+    _save('model_quant', value);
     notifyListeners();
   }
 
@@ -107,6 +130,7 @@ class AppState extends ChangeNotifier {
   set loudnessEnabled(bool value) {
     if (value == _loudnessEnabled) return;
     _loudnessEnabled = value;
+    _save('loudness_enabled', value.toString());
     notifyListeners();
   }
 
@@ -116,6 +140,7 @@ class AppState extends ChangeNotifier {
   set loudnessTargetLufs(double value) {
     if (value == _loudnessTargetLufs) return;
     _loudnessTargetLufs = value;
+    _save('loudness_target', value.toString());
     notifyListeners();
   }
 
