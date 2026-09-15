@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      # Honest build: no native CrispASR/CrispEmbed libs are bundled, so this
+      # release ships UnavailableAsrEngine/DeterministicEmbedder stand-ins.
+      - run: flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pocket-asr-windows-${{ github.ref_name }}
+          path: build/windows/x64/runner/Release
+          if-no-files-found: error
+
+  # Android release is reserved until the native .so artifacts land in android/.
+  # `flutter build apk --release` would succeed and install, but it bundles no
+  # ASR/embedding library and reports "transcription is unavailable" at runtime.
+  # Uncomment (and drop `needs` if run in parallel) once the libs are present.
+  # android:
+  #   needs: windows
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: subosito/flutter-action@v2
+  #       with:
+  #         channel: stable
+  #     - run: flutter pub get
+  #     - run: flutter build apk --release
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: pocket-asr-android-${{ github.ref_name }}
+  #         path: build/app/outputs/flutter-apk/app-release.apk
+  #         if-no-files-found: error
