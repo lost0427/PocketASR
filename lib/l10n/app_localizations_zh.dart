@@ -10,6 +10,11 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String modelsParameterCount(String count) {
+    return '$count 百万参数';
+  }
+
+  @override
   String get appTitle => 'PocketASR';
 
   @override

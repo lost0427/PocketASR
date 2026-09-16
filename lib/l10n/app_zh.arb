@@ -1,4 +1,5 @@
 {
+  "modelsParameterCount": "{count} 百万参数",
   "@@locale": "zh",
   "appTitle": "PocketASR",
   "navTranscribe": "转录",

@@ -4,6 +4,7 @@
   "models": [
     {
       "id": "sherpa-sensevoice-int8",
+      "parameters": 234000000,
       "displayName": "SenseVoice Small (sherpa-onnx int8)",
       "engine": "sherpa",
       "type": "asr",
@@ -30,6 +31,7 @@
     },
     {
       "id": "sherpa-whisper-base-int8",
+      "parameters": 74000000,
       "displayName": "Whisper Base (sherpa-onnx int8)",
       "engine": "sherpa",
       "type": "asr",
@@ -62,6 +64,7 @@
     },
     {
       "id": "crispasr-sensevoice-q4k",
+      "parameters": 233999167,
       "displayName": "SenseVoice Small (CrispASR q4_k GGUF)",
       "engine": "crispasr",
       "type": "asr",
@@ -81,6 +84,7 @@
     },
     {
       "id": "crispembed-e5-small-q8",
+      "parameters": 117505920,
       "displayName": "Multilingual E5 Small (CrispEmbed q8_0 GGUF)",
       "engine": "crispembed",
       "type": "embedding",
@@ -93,6 +97,26 @@
           "url": "https://huggingface.co/cstr/multilingual-e5-small-GGUF/resolve/178420da727e544c2689e89b6648b205ad176eda/multilingual-e5-small-q8_0.gguf",
           "sizeBytes": 131624960,
           "sha256": "0a34067a40f25d3149b36885faa62bee0e5284d0f9edc102acfc00e115d953e8"
+        }
+      ]
+    },
+    {
+      "id": "crispasr-qwen3-asr-0.6b-q4k",
+      "displayName": "Qwen3-ASR 0.6B (CrispASR q4_k GGUF)",
+      "engine": "crispasr",
+      "type": "asr",
+      "family": "qwen3",
+      "quant": "q4_k",
+      "parameters": 938034704,
+      "languages": ["zh", "yue", "en", "ja", "ko", "de", "fr", "es", "pt", "ru", "it", "ar", "cs", "da", "el", "fa", "fi", "fil", "hi", "hu", "id", "mk", "ms", "nl", "pl", "ro", "sv", "th", "tr", "vi"],
+      "license": "Apache-2.0 (Qwen/Qwen3-ASR-0.6B weights and cstr GGUF conversion)",
+      "files": [
+        {
+          "fileName": "qwen3-asr-0.6b-q4_k.gguf",
+          "role": "model",
+          "url": "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/58bd3202f835f46b24b17142cb503b0860c737a5/qwen3-asr-0.6b-q4_k.gguf",
+          "sizeBytes": 631026336,
+          "sha256": "f63771c02dfa486d9399d41ab6ab8cd2d8ca24e077cd32130ea1f67f4fd8dade"
         }
       ]
     },

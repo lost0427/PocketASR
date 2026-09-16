@@ -10,6 +10,11 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String modelsParameterCount(String count) {
+    return '${count}M parameters';
+  }
+
+  @override
   String get appTitle => 'PocketASR';
 
   @override

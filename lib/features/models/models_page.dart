@@ -556,6 +556,8 @@ class _ModelTile extends StatelessWidget {
       if (entry.engine != null) entry.engine!,
       if (entry.family != null) entry.family!,
       if (entry.quant != null) entry.quant!,
+      if (entry.parameters != null)
+        l10n.modelsParameterCount((entry.parameters! / 1000000).toStringAsFixed(1)),
       if (entry.languages.isNotEmpty) entry.languages.join('/'),
       if (size != null) _formatBytes(size),
     ];

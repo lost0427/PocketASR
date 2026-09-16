@@ -1,4 +1,6 @@
 {
+  "modelsParameterCount": "{count}M parameters",
+  "@modelsParameterCount": {"placeholders": {"count": {"type": "String"}}},
   "@@locale": "en",
   "appTitle": "PocketASR",
   "navTranscribe": "Transcribe",

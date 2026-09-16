@@ -148,7 +148,11 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(5));
+      expect(entries, hasLength(6));
+      final qwen = entries.singleWhere((entry) => entry.family == 'qwen3');
+      expect(qwen.engine, 'crispasr');
+      expect(qwen.parameters, 938034704);
+      expect(qwen.primaryFile.sha256, hasLength(64));
       for (final entry in entries) {
         // Every allowlist file must carry a verified size and checksum —
         // the store and downloader gate on both.

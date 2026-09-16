@@ -98,6 +98,12 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @modelsParameterCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}M parameters'**
+  String modelsParameterCount(String count);
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:

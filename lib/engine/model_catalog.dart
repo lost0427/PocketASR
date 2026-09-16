@@ -75,6 +75,7 @@ class ModelEntry {
     this.type = 'asr',
     this.license,
     this.languages = const [],
+    this.parameters,
     this.sizeBytes,
     this.url,
     this.sha256,
@@ -141,6 +142,7 @@ class ModelEntry {
       type: _stringOrNull(json['type']) ?? 'asr',
       license: _stringOrNull(json['license']),
       languages: languages,
+      parameters: _sizeOrNull(json['parameters'], id, 'parameters'),
       sizeBytes: total ?? _sizeOrNull(json['sizeBytes'], id, fileName),
       url: _stringOrNull(json['url']) ?? primary?.url,
       sha256: _stringOrNull(json['sha256']) ?? primary?.sha256,
@@ -180,6 +182,9 @@ class ModelEntry {
 
   /// Language tags the model claims; empty when unverified.
   final List<String> languages;
+
+  /// Verified parameter count, independent of quantized file size.
+  final int? parameters;
 
   /// Confirmed bundle size (sum of verified file sizes), or the legacy
   /// declared size; null when the catalog has neither.
