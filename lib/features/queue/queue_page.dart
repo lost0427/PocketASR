@@ -5,6 +5,8 @@ import '../../app/app_state.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
 import '../../l10n/app_localizations.dart';
+import '../models/model_library.dart';
+import '../models/model_picker.dart';
 import '../transcribe/transcription_service.dart';
 import 'queue_worker.dart';
 import 'transcription_queue.dart';
@@ -23,6 +25,8 @@ class QueuePage extends StatefulWidget {
     required this.transcriptRepo,
     this.state,
     this.service,
+    this.modelLibrary,
+    this.onManageModels,
   });
 
   final AsrEngine engine;
@@ -33,6 +37,8 @@ class QueuePage extends StatefulWidget {
 
   /// Service seam for tests; production builds one from [engine].
   final TranscriptionService? service;
+  final ModelLibrary? modelLibrary;
+  final VoidCallback? onManageModels;
 
   @override
   State<QueuePage> createState() => _QueuePageState();
@@ -46,17 +52,8 @@ class _QueuePageState extends State<QueuePage> {
   /// instead of one job shadowing the other.
   int _seq = 0;
 
-  /// Model path used only when no [AppState] is injected.
-  String? _localModelPath;
-
-  /// The full model spec shared with the transcribe page, companions included;
-  /// the local path is only the no-AppState test seam.
-  EngineModelSpec? get _modelSpec {
-    final state = widget.state;
-    if (state != null) return state.modelSpec;
-    final path = _localModelPath;
-    return path == null ? null : EngineModelSpec(path: path);
-  }
+  /// The full catalog spec shared with the transcribe page, companions included.
+  EngineModelSpec? get _modelSpec => widget.state?.modelSpec;
 
   /// Shared, persisted model path; a pick in either page updates the same value.
   String? get _modelPath => _modelSpec?.path;
@@ -100,10 +97,7 @@ class _QueuePageState extends State<QueuePage> {
     setState(() {
       for (final file in files) {
         _queue.add(
-          TranscriptionJob(
-            id: '${file.path}#${_seq++}',
-            audioPath: file.path,
-          ),
+          TranscriptionJob(id: '${file.path}#${_seq++}', audioPath: file.path),
         );
       }
     });
@@ -161,19 +155,15 @@ class _QueuePageState extends State<QueuePage> {
 
   Future<void> _pickModel() async {
     if (_running) return; // a run owns the current model
-    final l10n = AppLocalizations.of(context);
-    final file = await openFile(
-      acceptedTypeGroups: [
-        XTypeGroup(
-          label: l10n.fileTypeModel,
-          extensions: const ['gguf', 'onnx', 'bin'],
-        ),
-      ],
+    final state = widget.state;
+    final library = widget.modelLibrary;
+    if (state == null || library == null) return;
+    await showDownloadedModelPicker(
+      context: context,
+      library: library,
+      state: state,
+      onManageModels: widget.onManageModels,
     );
-    if (!mounted || file == null) return;
-    _localModelPath = file.path;
-    widget.state?.modelPath = file.path;
-    setState(() {});
   }
 
   String _statusLabel(AppLocalizations l10n, TranscriptionJobStatus status) =>
@@ -192,9 +182,7 @@ class _QueuePageState extends State<QueuePage> {
     // Rebuild on queue transitions and on the shared state's busy flag, so a
     // run started on the transcribe page disables this one too.
     return ListenableBuilder(
-      listenable: state == null
-          ? _queue
-          : Listenable.merge([_queue, state]),
+      listenable: state == null ? _queue : Listenable.merge([_queue, state]),
       builder: (context, _) => _buildContent(context),
     );
   }
@@ -225,13 +213,21 @@ class _QueuePageState extends State<QueuePage> {
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: running ? null : _pickModel,
+                  onPressed:
+                      running ||
+                          busyElsewhere ||
+                          widget.state == null ||
+                          widget.modelLibrary == null
+                      ? null
+                      : _pickModel,
                   icon: const Icon(Icons.model_training_outlined),
-                  label: Text(
-                    modelPath == null
-                        ? l10n.queueChooseModel
-                        : l10n.queueChangeModel,
-                  ),
+                  label: modelPath == null
+                      ? Text(l10n.queueChooseModel)
+                      : SelectedModelName(
+                          library: widget.modelLibrary,
+                          state: widget.state!,
+                          emptyLabel: l10n.queueChooseModel,
+                        ),
                 ),
               ),
             ],
@@ -285,7 +281,8 @@ class _QueuePageState extends State<QueuePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: FilledButton.icon(
-            onPressed: modelPath != null &&
+            onPressed:
+                modelPath != null &&
                     !needsDecoder &&
                     !needsVad &&
                     _queue.hasPending &&

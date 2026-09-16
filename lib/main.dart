@@ -7,6 +7,7 @@ import 'app/app_state.dart';
 import 'app/theme.dart';
 import 'data/db.dart';
 import 'features/models/models_page.dart';
+import 'features/models/model_library.dart';
 import 'features/history/history_page.dart';
 import 'features/queue/queue_page.dart';
 import 'features/settings/settings_page.dart';
@@ -16,20 +17,26 @@ import 'l10n/app_localizations.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final directory = await getApplicationDocumentsDirectory();
-  runApp(PocketAsrApp(database: AppDatabase.open(
-    path: '${directory.path}${Platform.pathSeparator}pocket_asr.sqlite',
-  )));
+  runApp(
+    PocketAsrApp(
+      database: AppDatabase.open(
+        path: '${directory.path}${Platform.pathSeparator}pocket_asr.sqlite',
+      ),
+    ),
+  );
 }
 
 /// Root of the app. Owns the single [AppState] and hands it to the tree.
 class PocketAsrApp extends StatefulWidget {
-  const PocketAsrApp({super.key, this.database});
+  const PocketAsrApp({super.key, this.database, this.modelLibrary});
 
   final AppDatabase? database;
+  final ModelLibrary? modelLibrary;
 
   @override
   State<PocketAsrApp> createState() => _PocketAsrAppState();
 }
+
 class _PocketAsrAppState extends State<PocketAsrApp> {
   late final AppState _state = AppState(database: widget.database);
 
@@ -41,13 +48,18 @@ class _PocketAsrAppState extends State<PocketAsrApp> {
 
   @override
   Widget build(BuildContext context) {
-    return AppStateScope(notifier: _state, child: const _LocalizedApp());
+    return AppStateScope(
+      notifier: _state,
+      child: _LocalizedApp(modelLibrary: widget.modelLibrary),
+    );
   }
 }
 
 /// Sits below [AppStateScope], so a theme or locale change rebuilds the app.
 class _LocalizedApp extends StatelessWidget {
-  const _LocalizedApp();
+  const _LocalizedApp({this.modelLibrary});
+
+  final ModelLibrary? modelLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +77,7 @@ class _LocalizedApp extends StatelessWidget {
       locale: state.locale, // null = follow the system language
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const HomeShell(),
+      home: HomeShell(modelLibrary: modelLibrary),
     );
   }
 }
@@ -73,7 +85,9 @@ class _LocalizedApp extends StatelessWidget {
 /// Bottom navigation shell. [IndexedStack] keeps every page alive, so state
 /// survives tab switches.
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  const HomeShell({super.key, this.modelLibrary});
+
+  final ModelLibrary? modelLibrary;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -81,6 +95,10 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  late final ModelLibrary _modelLibrary =
+      widget.modelLibrary ?? ModelLibrary.local();
+
+  void _openModels() => setState(() => _index = 3);
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +118,8 @@ class _HomeShellState extends State<HomeShell> {
           engine: engine,
           state: state,
           transcriptRepo: state.transcriptRepo,
+          modelLibrary: _modelLibrary,
+          onManageModels: _openModels,
         ),
       ),
       _Section(
@@ -110,6 +130,8 @@ class _HomeShellState extends State<HomeShell> {
           engine: engine,
           state: state,
           transcriptRepo: state.transcriptRepo,
+          modelLibrary: _modelLibrary,
+          onManageModels: _openModels,
         ),
       ),
       _Section(
@@ -126,13 +148,16 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.layers_outlined,
         selectedNavIcon: Icons.layers,
         label: l10n.navModels,
-        page: ModelsPage(state: state),
+        page: ModelsPage(state: state, library: _modelLibrary),
       ),
       _Section(
         navIcon: Icons.settings_outlined,
         selectedNavIcon: Icons.settings,
         label: l10n.navSettings,
-        page: const SettingsPage(),
+        page: SettingsPage(
+          modelLibrary: _modelLibrary,
+          onManageModels: _openModels,
+        ),
       ),
     ];
 

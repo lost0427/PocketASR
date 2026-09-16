@@ -4,20 +4,8 @@ import '../../app/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
-
-/// Model families the first release may run (plan D15 whitelist).
-const List<String> settingsModelFamilies = <String>[
-  'sensevoice',
-  'whisper',
-  'qwen3',
-  'funasr',
-  'parakeet',
-];
-
-/// Quantization tags the catalog exposes (plan D17). `int8` is here because the
-/// curated sherpa bundles ship int8, and a selected bundle writes its quant
-/// into [AppState.modelQuant].
-const List<String> settingsQuants = <String>['q8_0', 'q4_k', 'q6_k', 'int8'];
+import '../models/model_library.dart';
+import '../models/model_picker.dart';
 
 /// Target loudness values in LUFS (plan Phase 3).
 const List<double> settingsLoudnessTargets = <double>[-16, -14, -23];
@@ -27,15 +15,18 @@ const String settingsAppVersion = '0.1.0';
 
 const String _systemLanguage = 'system';
 
-/// Settings tab: appearance, language, the day-to-day model/quant entry, CPU
-/// thread count and loudness normalization.
+/// Settings tab: appearance, language, the active downloaded model, CPU thread
+/// count and loudness normalization.
 ///
 /// Every control writes to the in-memory [AppState] — nothing is persisted yet
 /// (plan Phase 5 adds the settings table). Backend has no picker on purpose:
 /// the first release is CPU-only, and [AppState.backend] already carries the
 /// value so one can be added later without touching callers (plan D17).
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.modelLibrary, this.onManageModels});
+
+  final ModelLibrary? modelLibrary;
+  final VoidCallback? onManageModels;
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +47,8 @@ class SettingsPage extends StatelessWidget {
               value: ThemeMode.system,
               label: Text(l10n.themeSystem),
             ),
-            ButtonSegment(
-              value: ThemeMode.light,
-              label: Text(l10n.themeLight),
-            ),
-            ButtonSegment(
-              value: ThemeMode.dark,
-              label: Text(l10n.themeDark),
-            ),
+            ButtonSegment(value: ThemeMode.light, label: Text(l10n.themeLight)),
+            ButtonSegment(value: ThemeMode.dark, label: Text(l10n.themeDark)),
           ],
           selected: {state.themeMode},
           onSelectionChanged: (selection) => state.themeMode = selection.first,
@@ -91,7 +76,13 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsModel),
         const SizedBox(height: 12),
-        _Card(child: _ModelControl(state: state)),
+        _Card(
+          child: _ModelControl(
+            state: state,
+            modelLibrary: modelLibrary,
+            onManageModels: onManageModels,
+          ),
+        ),
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsPerformance),
         const SizedBox(height: 12),
@@ -131,9 +122,8 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           l10n.settingsAboutHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 20),
         Row(
@@ -144,9 +134,8 @@ class SettingsPage extends StatelessWidget {
             Expanded(
               child: Text(
                 l10n.settingsNotPersisted,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
           ],
@@ -168,70 +157,69 @@ class SettingsPage extends StatelessWidget {
 }
 
 class _ModelControl extends StatelessWidget {
-  const _ModelControl({required this.state});
+  const _ModelControl({
+    required this.state,
+    required this.modelLibrary,
+    required this.onManageModels,
+  });
 
   final AppState state;
+  final ModelLibrary? modelLibrary;
+  final VoidCallback? onManageModels;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final spec = state.modelSpec;
-    final selectedName = spec == null
-        ? l10n.settingsActiveModelNone
-        : spec.path.split(RegExp(r'[\\/]')).last;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ControlLabel(l10n.settingsActiveModel),
         const SizedBox(height: 6),
-        Text(selectedName, style: theme.textTheme.bodyMedium),
+        SelectedModelName(
+          library: modelLibrary,
+          state: state,
+          emptyLabel: l10n.settingsActiveModelNone,
+          maxLines: 2,
+          style: theme.textTheme.bodyMedium,
+        ),
         if (state.modelSelectionMissing) ...[
           const SizedBox(height: 4),
           Text(
             l10n.modelSelectionMissing,
             style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
           ),
-        ] else if (state.modelSelectionIsManual) ...[
+        ],
+        if (state.modelSpec != null) ...[
           const SizedBox(height: 4),
           Text(
-            l10n.settingsActiveModelManual,
+            [state.engineId, state.modelFamily, state.modelQuant].join(' | '),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
-              height: 1.45,
             ),
           ),
         ],
-        const SizedBox(height: 20),
-        _ControlLabel(l10n.settingsModelFamily),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final family in settingsModelFamilies)
-              ChoiceChip(
-                label: Text(family),
-                selected: state.modelFamily == family,
-                onSelected: (_) => state.modelFamily = family,
-              ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _ControlLabel(l10n.settingsQuantization),
-        const SizedBox(height: 10),
-        SegmentedButton<String>(
-          expandedInsets: EdgeInsets.zero,
-          showSelectedIcon: false,
-          segments: [
-            for (final quant in settingsQuants)
-              ButtonSegment(value: quant, label: Text(quant)),
-          ],
-          selected: {state.modelQuant},
-          onSelectionChanged: (selection) =>
-              state.modelQuant = selection.first,
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: state.engineBusy || modelLibrary == null
+              ? null
+              : () => showDownloadedModelPicker(
+                  context: context,
+                  library: modelLibrary!,
+                  state: state,
+                  onManageModels: onManageModels,
+                ),
+          icon: const Icon(Icons.model_training_outlined),
+          label: Text(
+            state.modelSpec == null
+                ? l10n.transcribeChooseModel
+                : l10n.transcribeChangeModel,
+          ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+          ),
         ),
       ],
     );
@@ -259,7 +247,10 @@ class _ThreadsControl extends StatelessWidget {
             Icon(Icons.memory, size: 18, color: scheme.onSurfaceVariant),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(l10n.settingsThreads, style: theme.textTheme.bodyMedium),
+              child: Text(
+                l10n.settingsThreads,
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
             Text(
               l10n.settingsThreadsValue(state.threads, max),
@@ -448,9 +439,8 @@ class _ChunkControl extends StatelessWidget {
           value: state.chunkSeconds,
           min: AppState.minChunkSeconds,
           max: AppState.maxChunkSeconds,
-          divisions:
-              ((AppState.maxChunkSeconds - AppState.minChunkSeconds) / 5)
-                  .round(),
+          divisions: ((AppState.maxChunkSeconds - AppState.minChunkSeconds) / 5)
+              .round(),
           label: l10n.settingsChunkSecondsValue(state.chunkSeconds.round()),
           onChanged: (value) => state.chunkSeconds = value,
         ),
@@ -552,7 +542,9 @@ class _ChunkControl extends StatelessWidget {
           children: [
             Expanded(child: _ControlLabel(l10n.settingsVadMinSilence)),
             Text(
-              l10n.settingsVadSecondsValue(_seconds(state.vadMinSilenceSeconds)),
+              l10n.settingsVadSecondsValue(
+                _seconds(state.vadMinSilenceSeconds),
+              ),
               style: valueStyle,
             ),
           ],

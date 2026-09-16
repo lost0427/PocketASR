@@ -68,7 +68,8 @@ const _availableCaps = EngineCapabilities(
 /// Service stub that replays a fixed progress script and returns a result,
 /// so the page's live-metric wiring is tested without real audio or native IO.
 class _ScriptedService extends TranscriptionService {
-  _ScriptedService(this.steps) : super(engine: const _FakeEngine(_availableCaps));
+  _ScriptedService(this.steps)
+    : super(engine: const _FakeEngine(_availableCaps));
 
   final List<TranscribeProgress> steps;
 
@@ -235,22 +236,25 @@ void main() {
   testWidgets('a finished run shows real metrics and saves the transcript', (
     tester,
   ) async {
-    final picks = <List<String>>[
-      ['meeting.wav'],
-      ['model.onnx'],
-    ];
-    var pick = 0;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
-      if (call.method == 'openFile') return picks[pick++];
+      if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final database = AppDatabase.open(); // in-memory
     addTearDown(database.close);
     final repo = TranscriptRepo(database);
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.selectModel(
+      spec: const EngineModelSpec(path: 'model.onnx'),
+      engineId: 'sherpa',
+    );
 
     const engine = _FakeEngine(_availableCaps);
     final service = _ScriptedService(const [
@@ -269,14 +273,17 @@ void main() {
     ]);
 
     await tester.pumpWidget(
-      _app(engine: engine, transcriptRepo: repo, service: service),
+      _app(
+        engine: engine,
+        state: state,
+        transcriptRepo: repo,
+        service: service,
+      ),
     );
     await tester.pumpAndSettle();
 
-    // Pick the audio, then the model.
+    // Pick the audio; the model is the catalog selection in shared state.
     await tester.tap(find.text('Choose audio file').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose model file'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Start transcription'));
@@ -307,7 +314,9 @@ void main() {
     expect(rows.single.rtf, 4.0);
   });
 
-  testWidgets('file picker no longer uses the placeholder flow', (tester) async {
+  testWidgets('file picker no longer uses the placeholder flow', (
+    tester,
+  ) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -329,23 +338,28 @@ void main() {
   testWidgets('sends family, quant, backend and chunk settings to the service', (
     tester,
   ) async {
-    final picks = <List<String>>[
-      ['meeting.wav'],
-      ['model.onnx'],
-    ];
-    var pick = 0;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
-      if (call.method == 'openFile') return picks[pick++];
+      if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);
-    state.modelFamily = 'sensevoice';
-    state.modelQuant = 'q8_0';
+    state.selectModel(
+      spec: const EngineModelSpec(
+        path: 'model.onnx',
+        family: 'sensevoice',
+        quant: 'q8_0',
+      ),
+      engineId: 'sherpa',
+      family: 'sensevoice',
+      quant: 'q8_0',
+    );
     state.chunkStrategy = ChunkStrategy.energy;
     state.chunkSeconds = 12;
     state.energyThreshold = 0.02;
@@ -356,7 +370,11 @@ void main() {
     final repo = TranscriptRepo(database);
 
     final service = _ScriptedService(const [
-      TranscribeProgress(elapsed: Duration(seconds: 1), ratio: 1, partialText: 'hi'),
+      TranscribeProgress(
+        elapsed: Duration(seconds: 1),
+        ratio: 1,
+        partialText: 'hi',
+      ),
     ]);
 
     await tester.pumpWidget(
@@ -370,8 +388,6 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Choose audio file').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose model file'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start transcription'));
     await tester.pumpAndSettle();
@@ -403,7 +419,9 @@ void main() {
       if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);
@@ -419,7 +437,7 @@ void main() {
     await tester.tap(find.text('Choose audio file').first);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('needs a separate decoder'), findsOneWidget);
+    expect(find.textContaining('model bundle is incomplete'), findsOneWidget);
     final start = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Start transcription'),
     );
@@ -435,7 +453,9 @@ void main() {
       if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);
@@ -473,7 +493,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The bundle carries its decoder, so it is not blocked.
-    expect(find.textContaining('needs a separate decoder'), findsNothing);
+    expect(find.textContaining('model bundle is incomplete'), findsNothing);
 
     await tester.tap(find.text('Start transcription'));
     await tester.pumpAndSettle();
@@ -496,7 +516,9 @@ void main() {
       if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState()..modelPath = 'model.onnx';
     addTearDown(state.dispose);
@@ -537,27 +559,31 @@ void main() {
   testWidgets('cancelling shows the real wait and drops the late result', (
     tester,
   ) async {
-    final picks = <List<String>>[
-      ['meeting.wav'],
-      ['model.onnx'],
-    ];
-    var pick = 0;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
-      if (call.method == 'openFile') return picks[pick++];
+      if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final database = AppDatabase.open();
     addTearDown(database.close);
     final repo = TranscriptRepo(database);
     final service = _SlowService();
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.selectModel(
+      spec: const EngineModelSpec(path: 'model.onnx'),
+      engineId: 'sherpa',
+    );
 
     await tester.pumpWidget(
       _app(
         engine: const _FakeEngine(_availableCaps),
+        state: state,
         transcriptRepo: repo,
         service: service,
         metricsSamplerFactory: _FakeSampler.new,
@@ -566,8 +592,6 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Choose audio file').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose model file'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start transcription'));
     await tester.pump();
@@ -598,7 +622,9 @@ void main() {
       if (call.method == 'openFile') return ['meeting.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);

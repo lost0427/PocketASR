@@ -74,9 +74,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileTypeAudio => '音频';
 
   @override
-  String get fileTypeModel => '模型文件';
-
-  @override
   String get transcribePickerUnavailable => '文件选择功能尚未接入。';
 
   @override
@@ -129,20 +126,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeCopied => '已复制到剪贴板';
 
   @override
-  String get transcribeChooseModel => '选择模型文件';
+  String get transcribeChooseModel => '选择已下载模型';
 
   @override
-  String get transcribeChangeModel => '更换模型文件';
+  String get transcribeChangeModel => '更换模型';
 
   @override
-  String get transcribeModelRequired => '开始前请先选择模型文件。';
+  String get transcribeModelRequired => '开始前请先选择已下载的语音模型。';
 
   @override
-  String get modelNeedsDecoder =>
-      'Whisper 需要单独的 decoder 文件，而本构建只接受单个模型文件，因此当前选择不受支持。';
+  String get modelNeedsDecoder => '所选模型包不完整，请前往“模型”页重新下载。';
 
   @override
-  String get modelSelectionMissing => '上次选择的模型文件已不在本机，请重新选择。';
+  String get modelSelectionMissing => '上次选择的已下载模型已不在本机，请选择其他模型。';
+
+  @override
+  String get modelPickerTitle => '选择语音模型';
+
+  @override
+  String get modelPickerEmpty => '本机没有已下载的语音模型，请先前往“模型”页下载。';
+
+  @override
+  String get modelPickerManage => '打开模型页';
 
   @override
   String get metricTokensPerSec => 'tokens/s';
@@ -178,16 +183,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get queueChooseModel => '选择模型';
 
   @override
-  String get queueChangeModel => '更换模型';
-
-  @override
   String get queueRun => '运行队列';
 
   @override
   String get queueEmpty => '队列为空';
 
   @override
-  String get queueModelRequired => '运行前请先选择模型文件。';
+  String get queueModelRequired => '运行前请先选择已下载的语音模型。';
 
   @override
   String get queueStatusPending => '排队中';
@@ -400,15 +402,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsActiveModelNone => '未选择';
-
-  @override
-  String get settingsActiveModelManual => '手动选择的文件；家族与量化档以下方控件为准。';
-
-  @override
-  String get settingsModelFamily => '模型家族';
-
-  @override
-  String get settingsQuantization => '量化档';
 
   @override
   String get settingsPerformance => '性能';

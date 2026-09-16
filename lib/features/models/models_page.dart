@@ -1,22 +1,20 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
 import '../../engine/model_catalog.dart';
 import '../../engine/model_downloader.dart';
 import '../../l10n/app_localizations.dart';
+import 'model_library.dart';
 
 /// Runs one model download. Matches [ModelDownloader.download] so production can
 /// pass the real method and tests can pass a fake.
-typedef ModelDownloadRunner =
-    Future<void> Function(
-      ModelEntry entry, {
-      void Function(ModelDownloadProgress progress)? onProgress,
-      Future<void>? cancel,
-    });
+typedef ModelDownloadRunner = Future<void> Function(
+  ModelEntry entry, {
+  void Function(ModelDownloadProgress progress)? onProgress,
+  Future<void>? cancel,
+});
 
 /// Models tab: the curated allowlist, what is on disk, and the download/delete
 /// chain for each entry.
@@ -33,6 +31,7 @@ class ModelsPage extends StatefulWidget {
     this.store,
     this.download,
     this.state,
+    this.library,
   });
 
   /// Pre-loaded catalog; when null the page reads [modelAllowlistAsset].
@@ -50,6 +49,10 @@ class ModelsPage extends StatefulWidget {
   /// Null only in tests that render the list without a selection.
   final AppState? state;
 
+  /// Shared production catalog/store. Explicit [entries] and [store] remain
+  /// available as focused test seams and take precedence.
+  final ModelLibrary? library;
+
   @override
   State<ModelsPage> createState() => _ModelsPageState();
 }
@@ -64,23 +67,24 @@ class _ModelsPageState extends State<ModelsPage> {
   /// Live downloads by entry id; an absent id means "not downloading".
   final Map<String, _DownloadJob> _jobs = {};
 
-  Future<List<ModelEntry>> _loadEntries() async =>
-      widget.entries ?? await loadModelAllowlist();
+  Future<List<ModelEntry>> _loadEntries() async {
+    final entries = widget.entries;
+    if (entries != null) return entries;
+    final library = widget.library;
+    if (library != null) return library.entries;
+    return loadModelAllowlist();
+  }
 
   Future<ModelStore?> _resolveStore() async {
     final injected = widget.store;
     if (injected != null) return injected;
     try {
-      return LocalModelStore(await _modelDirectory());
+      final library = widget.library;
+      if (library != null) return await library.store;
+      return await ModelLibrary.local().store;
     } catch (_) {
       return null; // no directory: offer no downloads rather than fake one
     }
-  }
-
-  /// App-private directory the models are downloaded into.
-  Future<Directory> _modelDirectory() async {
-    final base = await getApplicationSupportDirectory();
-    return Directory('${base.path}${Platform.pathSeparator}models');
   }
 
   /// Real downloader when the page owns the store, else the injected runner.
@@ -179,7 +183,12 @@ class _ModelsPageState extends State<ModelsPage> {
 
   /// Routes a tile's Use button to the selection it actually changes. A VAD
   /// bundle is *never* adopted as the ASR model.
-  void _adopt(_ModelKind kind, ModelEntry entry, ModelStore store, AppState state) {
+  void _adopt(
+    _ModelKind kind,
+    ModelEntry entry,
+    ModelStore store,
+    AppState state,
+  ) {
     switch (kind) {
       case _ModelKind.asr:
         _use(entry, store, state);
@@ -255,8 +264,14 @@ class _ModelsPageState extends State<ModelsPage> {
       for (final e in entries)
         if (e.type != 'embedding' && e.type != 'vad') e,
     ];
-    final vad = [for (final e in entries) if (e.type == 'vad') e];
-    final embedding = [for (final e in entries) if (e.type == 'embedding') e];
+    final vad = [
+      for (final e in entries)
+        if (e.type == 'vad') e,
+    ];
+    final embedding = [
+      for (final e in entries)
+        if (e.type == 'embedding') e,
+    ];
 
     Widget tile(
       ModelEntry entry, {
@@ -264,7 +279,10 @@ class _ModelsPageState extends State<ModelsPage> {
       required bool selectable,
     }) {
       final canSelect =
-          selectable && store != null && state != null && store.isDownloaded(entry);
+          selectable &&
+          store != null &&
+          state != null &&
+          store.isDownloaded(entry);
       final path = store?.pathFor(entry);
       final selected =
           state != null &&
@@ -342,7 +360,8 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 24),
           _SectionLabel(l10n.modelsAsrSection),
           const SizedBox(height: 12),
-          for (final entry in asr) tile(entry, kind: _ModelKind.asr, selectable: true),
+          for (final entry in asr)
+            tile(entry, kind: _ModelKind.asr, selectable: true),
         ],
         if (vad.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -350,13 +369,12 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 6),
           Text(
             l10n.modelsVadNote,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.45,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
-          for (final entry in vad) tile(entry, kind: _ModelKind.vad, selectable: true),
+          for (final entry in vad)
+            tile(entry, kind: _ModelKind.vad, selectable: true),
         ],
         if (embedding.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -364,10 +382,8 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 6),
           Text(
             l10n.modelsEmbeddingNote,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.45,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
           for (final entry in embedding)
@@ -393,11 +409,7 @@ class _DownloadJob {
 
 /// One-line note above the list: a selection file is gone, or a run is active.
 class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.icon,
-    required this.text,
-    required this.color,
-  });
+  const _Notice({required this.icon, required this.text, required this.color});
 
   final IconData icon;
   final String text;
@@ -557,7 +569,9 @@ class _ModelTile extends StatelessWidget {
       if (entry.family != null) entry.family!,
       if (entry.quant != null) entry.quant!,
       if (entry.parameters != null)
-        l10n.modelsParameterCount((entry.parameters! / 1000000).toStringAsFixed(1)),
+        l10n.modelsParameterCount(
+          (entry.parameters! / 1000000).toStringAsFixed(1),
+        ),
       if (entry.languages.isNotEmpty) entry.languages.join('/'),
       if (size != null) _formatBytes(size),
     ];
@@ -670,12 +684,12 @@ class _ModelTile extends StatelessWidget {
                         ? null
                         : onUse,
                     icon: Icon(
-                      selected ? Icons.check_circle_outline : Icons.play_circle_outline,
+                      selected
+                          ? Icons.check_circle_outline
+                          : Icons.play_circle_outline,
                       size: 18,
                     ),
-                    label: Text(
-                      selected ? l10n.modelsInUse : l10n.modelsUse,
-                    ),
+                    label: Text(selected ? l10n.modelsInUse : l10n.modelsUse),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -729,7 +743,10 @@ class _StatusChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final (Color background, Color foreground) = switch (tone) {
-      _StatusTone.active => (scheme.primaryContainer, scheme.onPrimaryContainer),
+      _StatusTone.active => (
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
+      ),
       _StatusTone.busy => (
         scheme.secondaryContainer,
         scheme.onSecondaryContainer,

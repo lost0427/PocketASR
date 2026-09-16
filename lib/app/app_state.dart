@@ -82,7 +82,9 @@ class AppState extends ChangeNotifier {
     _engineId = database.getSetting('engine_id') ?? _engineId;
     _restoreSelection();
     _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
-    _loudnessTargetLufs = double.tryParse(database.getSetting('loudness_target') ?? '') ?? _loudnessTargetLufs;
+    _loudnessTargetLufs =
+        double.tryParse(database.getSetting('loudness_target') ?? '') ??
+        _loudnessTargetLufs;
     _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
@@ -147,6 +149,7 @@ class AppState extends ChangeNotifier {
   }
 
   Locale? _locale;
+
   /// `null` means follow the system language.
   Locale? get locale => _locale;
   set locale(Locale? value) {
@@ -285,6 +288,9 @@ class AppState extends ChangeNotifier {
   /// Sets a hand-picked model file. Replaces any bundle selection with a
   /// path-only spec and points the engine at the format's adapter, so a GGUF is
   /// never silently fed to a sherpa adapter (or vice versa).
+  ///
+  /// ponytail: retained for persisted-data and test compatibility; production
+  /// UI selects complete catalog bundles through [selectModel].
   set modelPath(String? value) {
     final path = _nonEmpty(value);
     if (path == null) {
@@ -305,7 +311,7 @@ class AppState extends ChangeNotifier {
 
   /// The spec the transcribe and queue flows load, or null when nothing is
   /// selected. A catalog bundle keeps its tokens/encoder/decoder here; a
-  /// hand-picked file resolves family/quant from the Settings controls.
+  /// legacy hand-picked file resolves family/quant from persisted settings.
   EngineModelSpec? get modelSpec {
     final spec = _selectedSpec;
     if (spec == null) return null;
@@ -321,8 +327,7 @@ class AppState extends ChangeNotifier {
   /// named is gone; the selection is cleared and the UI says so.
   bool get modelSelectionMissing => _modelSelectionMissing;
 
-  /// True when the selection is a hand-picked file rather than a catalog
-  /// bundle, so family/quant come from the Settings controls.
+  /// True when a restored selection predates catalog-only model picking.
   bool get modelSelectionIsManual => _manualSelection && _selectedSpec != null;
 
   /// Selects a catalog bundle in one step: engine, family, quant and the full
@@ -547,9 +552,7 @@ class AppState extends ChangeNotifier {
   int _vadPadMs = defaultVadPadMs;
   int get vadPadMs => _vadPadMs;
   set vadPadMs(int value) {
-    final capped = value < 0
-        ? 0
-        : (value > maxVadPadMs ? maxVadPadMs : value);
+    final capped = value < 0 ? 0 : (value > maxVadPadMs ? maxVadPadMs : value);
     if (capped == _vadPadMs) return;
     _vadPadMs = capped;
     _save('vad_pad_ms', '$capped');

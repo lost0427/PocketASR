@@ -1,19 +1,27 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/engine_registry.dart';
+import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
+import 'package:pocket_asr/features/models/model_library.dart';
 import 'package:pocket_asr/features/settings/settings_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
-Widget host(AppState state) =>
-    AppStateScope(notifier: state, child: const _Host());
+Widget host(AppState state, {ModelLibrary? modelLibrary}) => AppStateScope(
+  notifier: state,
+  child: _Host(modelLibrary: modelLibrary),
+);
 
 /// Mirrors [main.dart]'s `_LocalizedApp`: it depends on [AppStateScope], so a
 /// locale or theme change rebuilds the [MaterialApp] under test.
 class _Host extends StatelessWidget {
-  const _Host();
+  const _Host({this.modelLibrary});
+
+  final ModelLibrary? modelLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -23,18 +31,22 @@ class _Host extends StatelessWidget {
       themeMode: state.themeMode,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const Scaffold(body: SettingsPage()),
+      home: Scaffold(body: SettingsPage(modelLibrary: modelLibrary)),
     );
   }
 }
 
 void main() {
   // A tall surface keeps every control on screen, so taps never miss.
-  Future<void> pumpSettings(WidgetTester tester, AppState state) async {
+  Future<void> pumpSettings(
+    WidgetTester tester,
+    AppState state, {
+    ModelLibrary? modelLibrary,
+  }) async {
     tester.view.physicalSize = const Size(1200, 4200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(host(state));
+    await tester.pumpWidget(host(state, modelLibrary: modelLibrary));
   }
 
   testWidgets('theme and language controls still drive AppState', (
@@ -53,19 +65,38 @@ void main() {
     expect(find.text('外观'), findsOneWidget);
   });
 
-  testWidgets('model, quant, threads and loudness write to AppState', (
+  testWidgets('downloaded model, threads and loudness write to AppState', (
     tester,
   ) async {
     final state = AppState();
-    await pumpSettings(tester, state);
+    addTearDown(state.dispose);
+    final directory = Directory.systemTemp.createTempSync(
+      'pocket_asr_settings',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final store = LocalModelStore(directory);
+    const model = ModelEntry(
+      id: 'whisper',
+      displayName: 'Whisper Base',
+      fileName: 'model.onnx',
+      engine: 'sherpa',
+      family: 'whisper',
+      quant: 'int8',
+    );
+    File(store.pathFor(model))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync([1]);
+    final library = ModelLibrary.fixed(entries: const [model], store: store);
+    await pumpSettings(tester, state, modelLibrary: library);
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'whisper'));
+    await tester.tap(find.text('Choose downloaded model'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Whisper Base'));
+    await tester.pumpAndSettle();
+
     expect(state.modelFamily, 'whisper');
-
-    await tester.tap(find.text('q8_0'));
-    await tester.pumpAndSettle();
-    expect(state.modelQuant, 'q8_0');
+    expect(state.modelQuant, 'int8');
+    expect(find.text('Whisper Base'), findsOneWidget);
 
     expect(find.byType(Slider), findsWidgets);
 
@@ -126,7 +157,10 @@ void main() {
 
     expect(state.chunkStrategy, ChunkStrategy.fixed);
     expect(state.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
-    expect(state.energyThreshold, AppState.defaultChunkSettings.energyThreshold);
+    expect(
+      state.energyThreshold,
+      AppState.defaultChunkSettings.energyThreshold,
+    );
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
   });
 }

@@ -76,9 +76,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fileTypeAudio => 'Audio';
 
   @override
-  String get fileTypeModel => 'Model files';
-
-  @override
   String get transcribePickerUnavailable => 'File picking is not wired up yet.';
 
   @override
@@ -132,21 +129,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeCopied => 'Copied to clipboard';
 
   @override
-  String get transcribeChooseModel => 'Choose model file';
+  String get transcribeChooseModel => 'Choose downloaded model';
 
   @override
-  String get transcribeChangeModel => 'Change model file';
+  String get transcribeChangeModel => 'Change model';
 
   @override
-  String get transcribeModelRequired => 'Choose a model file before starting.';
+  String get transcribeModelRequired =>
+      'Select a downloaded speech model before starting.';
 
   @override
   String get modelNeedsDecoder =>
-      'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.';
+      'The selected model bundle is incomplete. Download it again from Models.';
 
   @override
   String get modelSelectionMissing =>
-      'The model selected last time is no longer on this device. Choose it again.';
+      'The downloaded model selected last time is no longer on this device. Choose another one.';
+
+  @override
+  String get modelPickerTitle => 'Choose speech model';
+
+  @override
+  String get modelPickerEmpty =>
+      'No downloaded speech models. Download one from Models first.';
+
+  @override
+  String get modelPickerManage => 'Open Models';
 
   @override
   String get metricTokensPerSec => 'tokens/s';
@@ -183,16 +191,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueChooseModel => 'Choose model';
 
   @override
-  String get queueChangeModel => 'Change model';
-
-  @override
   String get queueRun => 'Run queue';
 
   @override
   String get queueEmpty => 'Queue is empty';
 
   @override
-  String get queueModelRequired => 'Choose a model file before running.';
+  String get queueModelRequired =>
+      'Select a downloaded speech model before running.';
 
   @override
   String get queueStatusPending => 'Pending';
@@ -412,16 +418,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsActiveModelNone => 'None selected';
-
-  @override
-  String get settingsActiveModelManual =>
-      'Hand-picked file; family and quantization come from the controls below.';
-
-  @override
-  String get settingsModelFamily => 'Model family';
-
-  @override
-  String get settingsQuantization => 'Quantization';
 
   @override
   String get settingsPerformance => 'Performance';

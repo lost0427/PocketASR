@@ -218,12 +218,6 @@ abstract class AppLocalizations {
   /// **'Audio'**
   String get fileTypeAudio;
 
-  /// No description provided for @fileTypeModel.
-  ///
-  /// In en, this message translates to:
-  /// **'Model files'**
-  String get fileTypeModel;
-
   /// No description provided for @transcribePickerUnavailable.
   ///
   /// In en, this message translates to:
@@ -329,32 +323,50 @@ abstract class AppLocalizations {
   /// No description provided for @transcribeChooseModel.
   ///
   /// In en, this message translates to:
-  /// **'Choose model file'**
+  /// **'Choose downloaded model'**
   String get transcribeChooseModel;
 
   /// No description provided for @transcribeChangeModel.
   ///
   /// In en, this message translates to:
-  /// **'Change model file'**
+  /// **'Change model'**
   String get transcribeChangeModel;
 
   /// No description provided for @transcribeModelRequired.
   ///
   /// In en, this message translates to:
-  /// **'Choose a model file before starting.'**
+  /// **'Select a downloaded speech model before starting.'**
   String get transcribeModelRequired;
 
   /// No description provided for @modelNeedsDecoder.
   ///
   /// In en, this message translates to:
-  /// **'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.'**
+  /// **'The selected model bundle is incomplete. Download it again from Models.'**
   String get modelNeedsDecoder;
 
   /// No description provided for @modelSelectionMissing.
   ///
   /// In en, this message translates to:
-  /// **'The model selected last time is no longer on this device. Choose it again.'**
+  /// **'The downloaded model selected last time is no longer on this device. Choose another one.'**
   String get modelSelectionMissing;
+
+  /// No description provided for @modelPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose speech model'**
+  String get modelPickerTitle;
+
+  /// No description provided for @modelPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No downloaded speech models. Download one from Models first.'**
+  String get modelPickerEmpty;
+
+  /// No description provided for @modelPickerManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Models'**
+  String get modelPickerManage;
 
   /// No description provided for @metricTokensPerSec.
   ///
@@ -422,12 +434,6 @@ abstract class AppLocalizations {
   /// **'Choose model'**
   String get queueChooseModel;
 
-  /// No description provided for @queueChangeModel.
-  ///
-  /// In en, this message translates to:
-  /// **'Change model'**
-  String get queueChangeModel;
-
   /// No description provided for @queueRun.
   ///
   /// In en, this message translates to:
@@ -443,7 +449,7 @@ abstract class AppLocalizations {
   /// No description provided for @queueModelRequired.
   ///
   /// In en, this message translates to:
-  /// **'Choose a model file before running.'**
+  /// **'Select a downloaded speech model before running.'**
   String get queueModelRequired;
 
   /// No description provided for @queueStatusPending.
@@ -865,24 +871,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'None selected'**
   String get settingsActiveModelNone;
-
-  /// No description provided for @settingsActiveModelManual.
-  ///
-  /// In en, this message translates to:
-  /// **'Hand-picked file; family and quantization come from the controls below.'**
-  String get settingsActiveModelManual;
-
-  /// No description provided for @settingsModelFamily.
-  ///
-  /// In en, this message translates to:
-  /// **'Model family'**
-  String get settingsModelFamily;
-
-  /// No description provided for @settingsQuantization.
-  ///
-  /// In en, this message translates to:
-  /// **'Quantization'**
-  String get settingsQuantization;
 
   /// No description provided for @settingsPerformance.
   ///

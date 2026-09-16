@@ -11,6 +11,8 @@ import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/text/token_counter.dart';
+import '../models/model_library.dart';
+import '../models/model_picker.dart';
 import 'transcription_service.dart';
 import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
@@ -30,6 +32,8 @@ class TranscribePage extends StatefulWidget {
     this.transcriptRepo,
     this.service,
     this.metricsSamplerFactory,
+    this.modelLibrary,
+    this.onManageModels,
   });
 
   /// The engine to report status for; resolved from `AppState.engine` in
@@ -43,6 +47,8 @@ class TranscribePage extends StatefulWidget {
 
   final TranscriptRepo? transcriptRepo;
   final TranscriptionService? service;
+  final ModelLibrary? modelLibrary;
+  final VoidCallback? onManageModels;
 
   /// Builds the process metrics sampler used only while a run is active.
   /// Tests inject a sampler with fixed readings; production uses the real
@@ -59,18 +65,8 @@ class _TranscribePageState extends State<TranscribePage> {
   String? _fileName;
   String? _filePath;
 
-  /// Model path used only when no [AppState] is injected.
-  String? _localModelPath;
-
-  /// The full model spec shared with the queue page, companions included; the
-  /// local path is only the no-AppState test seam. Never rebuilt from a path
-  /// here, so a whisper bundle keeps its encoder/decoder.
-  EngineModelSpec? get _modelSpec {
-    final state = widget.state;
-    if (state != null) return state.modelSpec;
-    final path = _localModelPath;
-    return path == null ? null : EngineModelSpec(path: path);
-  }
+  /// The full catalog spec shared with the queue page, companions included.
+  EngineModelSpec? get _modelSpec => widget.state?.modelSpec;
 
   /// Shared, persisted model path; a pick in either page updates the same value.
   String? get _modelPath => _modelSpec?.path;
@@ -362,7 +358,8 @@ class _TranscribePageState extends State<TranscribePage> {
   /// [dispose], so sampling never outlives the run or the page.
   void _startMetricsSampling() {
     _metricsTimer?.cancel();
-    final sampler = (widget.metricsSamplerFactory ?? SystemMetricsSampler.new)();
+    final sampler =
+        (widget.metricsSamplerFactory ?? SystemMetricsSampler.new)();
     _metricsTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _sampleMetrics(sampler),
@@ -388,21 +385,15 @@ class _TranscribePageState extends State<TranscribePage> {
 
   Future<void> _pickModel() async {
     if (_running) return; // a run owns the current model
-    final l10n = AppLocalizations.of(context);
-    final file = await openFile(
-      acceptedTypeGroups: [
-        XTypeGroup(
-          label: l10n.fileTypeModel,
-          extensions: const ['gguf', 'onnx', 'bin'],
-        ),
-      ],
+    final state = widget.state;
+    final library = widget.modelLibrary;
+    if (state == null || library == null) return;
+    await showDownloadedModelPicker(
+      context: context,
+      library: library,
+      state: state,
+      onManageModels: widget.onManageModels,
     );
-    if (!mounted || file == null) return;
-    // Store it in the shared state so the queue page sees the same model, and
-    // fall back to a local copy when no state was injected.
-    _localModelPath = file.path;
-    widget.state?.modelPath = file.path;
-    setState(() {});
   }
 
   Future<void> _copy() async {
@@ -414,7 +405,10 @@ class _TranscribePageState extends State<TranscribePage> {
       ..showSnackBar(SnackBar(content: Text(l10n.transcribeCopied)));
   }
 
-  String _backendLabel(EngineCapabilities? capabilities, AppLocalizations l10n) {
+  String _backendLabel(
+    EngineCapabilities? capabilities,
+    AppLocalizations l10n,
+  ) {
     // Once a run finished, the tile shows the backend that actually ran.
     final ran = _runBackend;
     if (ran != null) return ran.name.toUpperCase();
@@ -454,12 +448,12 @@ class _TranscribePageState extends State<TranscribePage> {
             (state?.chunkStrategy ?? ChunkStrategy.fixed) ==
             ChunkStrategy.neural;
         // Neural mode without its own model cannot start; no silent fallback.
-        final needsVadModel = neuralSelected && !(state?.neuralVadReady ?? false);
+        final needsVadModel =
+            neuralSelected && !(state?.neuralVadReady ?? false);
         // Another page's run owns the shared engine; this one must not start.
-        final busyElsewhere =
-            (widget.state?.engineBusy ?? false) && !running;
-        // Nothing starts without a model file, and a selection the engine cannot
-        // load (whisper without its decoder) is refused up front.
+        final busyElsewhere = (widget.state?.engineBusy ?? false) && !running;
+        // Nothing starts without a model bundle, and an incomplete restored
+        // selection (such as whisper without its decoder) is refused up front.
         final canStart =
             engineAvailable &&
             _fileName != null &&
@@ -468,7 +462,8 @@ class _TranscribePageState extends State<TranscribePage> {
             !busyElsewhere &&
             !needsDecoder &&
             !needsVadModel &&
-            !_previewing && !_recordingBusy;
+            !_previewing &&
+            !_recordingBusy;
         final hasResult = _result.isNotEmpty;
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
@@ -504,7 +499,11 @@ class _TranscribePageState extends State<TranscribePage> {
                     onBusy: (busy) => setState(() => _recordingBusy = busy),
                     onRecorded: (path) => setState(() {
                       _filePath = path;
-                      _fileName = path.split(RegExp(r'[\\/]')).reversed.skip(1).first;
+                      _fileName = path
+                          .split(RegExp(r'[\\/]'))
+                          .reversed
+                          .skip(1)
+                          .first;
                       _vadPreview = null;
                       _vadPreviewSignature = null;
                       _vadPreviewError = null;
@@ -528,9 +527,19 @@ class _TranscribePageState extends State<TranscribePage> {
                         child: _StatusTile(
                           icon: Icons.layers_outlined,
                           label: l10n.transcribeModel,
-                          value: _modelPath == null
-                              ? l10n.transcribeModelNone
-                              : _modelPath!.split(RegExp(r'[\\/]')).last,
+                          valueChild: state == null
+                              ? Text(
+                                  l10n.transcribeModelNone,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium,
+                                )
+                              : SelectedModelName(
+                                  library: widget.modelLibrary,
+                                  state: state,
+                                  emptyLabel: l10n.transcribeModelNone,
+                                  style: theme.textTheme.titleMedium,
+                                ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -552,7 +561,13 @@ class _TranscribePageState extends State<TranscribePage> {
                     ],
                   ),
                   OutlinedButton.icon(
-                    onPressed: running ? null : _pickModel,
+                    onPressed:
+                        running ||
+                            busyElsewhere ||
+                            state == null ||
+                            widget.modelLibrary == null
+                        ? null
+                        : _pickModel,
                     icon: const Icon(Icons.model_training_outlined),
                     label: Text(
                       modelPath == null
@@ -706,7 +721,10 @@ class _TranscribePageState extends State<TranscribePage> {
     final scheme = theme.colorScheme;
     final preview = _vadPreview;
     final canPreview =
-        _filePath != null && !_previewing && !_running && !_recordingBusy &&
+        _filePath != null &&
+        !_previewing &&
+        !_running &&
+        !_recordingBusy &&
         (widget.state?.neuralVadReady ?? false);
     final stale =
         preview != null &&
@@ -996,12 +1014,14 @@ class _StatusTile extends StatelessWidget {
   const _StatusTile({
     required this.icon,
     required this.label,
-    required this.value,
-  });
+    this.value,
+    this.valueChild,
+  }) : assert(value != null || valueChild != null);
 
   final IconData icon;
   final String label;
-  final String value;
+  final String? value;
+  final Widget? valueChild;
 
   @override
   Widget build(BuildContext context) {
@@ -1029,12 +1049,13 @@ class _StatusTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium,
-          ),
+          valueChild ??
+              Text(
+                value!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium,
+              ),
         ],
       ),
     );
@@ -1095,7 +1116,9 @@ String? _rate(double? value) => value?.toStringAsFixed(1);
 String? _elapsed(Duration? value) {
   if (value == null) return null;
   final millis = value.inMilliseconds;
-  return millis < 1000 ? '${millis}ms' : '${(millis / 1000).toStringAsFixed(1)}s';
+  return millis < 1000
+      ? '${millis}ms'
+      : '${(millis / 1000).toStringAsFixed(1)}s';
 }
 
 /// One-decimal MiB for a measured RSS, or null when not measured.
