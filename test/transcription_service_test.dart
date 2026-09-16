@@ -53,8 +53,10 @@ class _FakeEngine implements AsrEngine {
       Stream<TranscribeProgress>.fromIterable(progress);
 
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) async =>
-      const VadPlan.empty();
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) async => const VadPlan.empty();
 
   @override
   Future<void> dispose() async {}
@@ -105,12 +107,67 @@ class _ChunkedEngine implements AsrEngine {
   }
 
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) async =>
-      const VadPlan.empty();
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) async => const VadPlan.empty();
 
   @override
   Future<void> dispose() async {}
 }
+
+/// Fake neural VAD worker: replays a canned plan and records everything the
+/// service sent while the temp input file still existed.
+class _VadEngine implements AsrEngine {
+  _VadEngine(this.plan);
+
+  final VadPlan plan;
+  final requests = <TranscribeRequest>[];
+  NeuralVadSettings? lastSettings;
+  Uint8List? inputBytes;
+  void Function()? onPlan;
+  Object? failWith;
+
+  @override
+  String get id => 'vadfake';
+
+  @override
+  Future<List<Backend>> availableBackends() async => const [Backend.cpu];
+
+  @override
+  Future<EngineCapabilities> capabilities() async => const EngineCapabilities(
+    available: true,
+    backends: {Backend.cpu},
+    supportsVad: true,
+  );
+
+  @override
+  Future<void> load(EngineModelSpec spec, Backend backend) async =>
+      throw StateError('a VAD worker must never load an ASR model');
+
+  @override
+  Stream<TranscribeProgress> transcribe(TranscribeRequest request) =>
+      Stream.error(StateError('a VAD worker must never transcribe'));
+
+  @override
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) async {
+    requests.add(request);
+    lastSettings = vad;
+    inputBytes = File(request.audioPath).readAsBytesSync();
+    onPlan?.call();
+    final failure = failWith;
+    if (failure != null) throw failure;
+    return plan;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+const _defaultVad = NeuralVadSettings(modelPath: 'silero.onnx');
 
 TranscriptionService _service(AsrEngine engine, [AudioBuffer? audio]) =>
     TranscriptionService(
@@ -448,5 +505,320 @@ void main() {
 
     expect(engine.loadCount, 0);
     expect(engine.requests, isEmpty);
+  });
+
+  group('neural VAD', () {
+    /// N seconds at 16 kHz: 0–1 s constant 0.25, 2–3 s constant 0.5 — exact
+    /// under PCM16 round-trip, so concatenated chunk samples are checkable.
+    AudioBuffer bursts([int seconds = 4]) {
+      final samples = Float32List(seconds * 16000);
+      samples.setRange(0, 16000, List<double>.filled(16000, 0.25));
+      samples.setRange(32000, 48000, List<double>.filled(16000, 0.5));
+      return AudioBuffer(samples: samples, sampleRate: 16000);
+    }
+
+    const speechPlan = VadPlan([
+      VadSegment(start: Duration.zero, end: Duration(seconds: 1)),
+      VadSegment(start: Duration(seconds: 2), end: Duration(seconds: 3)),
+    ]);
+
+    const nopad = NeuralVadSettings(
+      modelPath: 'silero.onnx',
+      speechPadMs: 0,
+    );
+
+    TranscriptionService neural(
+      _ChunkedEngine asr,
+      _VadEngine vad,
+      AudioBuffer audio,
+    ) => TranscriptionService(
+      engine: asr,
+      vadEngine: vad,
+      source: _BufferSource(audio),
+      preprocessor: const AudioPreprocessor(enabled: false),
+    );
+
+    test(
+      'plans on the VAD worker before any ASR load and sends '
+      'concatenated speech, never the silence between',
+      () async {
+        final asr = _ChunkedEngine([
+          const [
+            TranscribeProgress(
+              elapsed: Duration(milliseconds: 100),
+              ratio: 1,
+              partialText: 'a b',
+              tokens: 4,
+            ),
+          ],
+        ]);
+        final vad = _VadEngine(speechPlan);
+        var asrLoadedDuringPlanning = true;
+        vad.onPlan = () => asrLoadedDuringPlanning = asr.loadCount > 0;
+
+        final result = await neural(asr, vad, bursts()).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          neuralVad: nopad,
+        );
+
+        expect(asrLoadedDuringPlanning, isFalse);
+        expect(vad.requests, hasLength(1));
+        expect(vad.lastSettings, same(nopad));
+        // The VAD worker got the full 16 kHz mono normalized audio as a WAV.
+        final wave = WavDecoder().decode(vad.inputBytes!);
+        expect(wave.sampleRate, 16000);
+        expect(wave.samples, hasLength(64000));
+
+        // One request: 1 s + 1 s of speech back-to-back. A first-to-last
+        // slice would have been 3 s long with a silent middle.
+        expect(asr.requests, hasLength(1));
+        expect(asr.chunkSamples.single, hasLength(32000));
+        expect(asr.chunkSamples.single.first, 0.25);
+        expect(asr.chunkSamples.single[16000], 0.5);
+        expect(result.text, 'a b');
+        expect(result.tokens, 4);
+        // Timeline coordinates stay the full audio's.
+        expect(result.audioDuration, const Duration(seconds: 4));
+      },
+    );
+
+    test('windows respect the max-speech cap across merges', () async {
+      final asr = _ChunkedEngine([
+        const [
+          TranscribeProgress(
+            elapsed: Duration(milliseconds: 10),
+            ratio: 1,
+            partialText: 'x',
+          ),
+        ],
+        const [
+          TranscribeProgress(
+            elapsed: Duration(milliseconds: 10),
+            ratio: 1,
+            partialText: 'y',
+          ),
+        ],
+      ]);
+      final vad = _VadEngine(
+        const VadPlan([
+          VadSegment(start: Duration.zero, end: Duration(seconds: 3)),
+          VadSegment(start: Duration(seconds: 10), end: Duration(seconds: 13)),
+          VadSegment(start: Duration(seconds: 20), end: Duration(seconds: 23)),
+        ]),
+      );
+
+      await neural(asr, vad, bursts(25)).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+        neuralVad: const NeuralVadSettings(
+          modelPath: 'silero.onnx',
+          speechPadMs: 0,
+          maxSpeechSeconds: 7,
+        ),
+      );
+
+      // 3+3=6 fits under 7; adding the third run would reach 9 → new window.
+      expect(asr.requests, hasLength(2));
+      expect(asr.chunkSamples[0], hasLength(96000)); // 6 s, not the 23 s span
+      expect(asr.chunkSamples[1], hasLength(48000)); // 3 s
+    });
+
+    test('no speech throws instead of faking a success, ASR untouched', () async {
+      final asr = _ChunkedEngine(const []);
+      final vad = _VadEngine(const VadPlan.empty());
+
+      await expectLater(
+        neural(asr, vad, bursts()).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          neuralVad: _defaultVad,
+        ),
+        throwsA(isA<EngineUnavailableException>()),
+      );
+
+      expect(vad.requests, hasLength(1));
+      expect(asr.loadCount, 0);
+      expect(asr.requests, isEmpty);
+    });
+
+    test('VAD failure propagates and its temp input is removed', () async {
+      final asr = _ChunkedEngine(const []);
+      final vad = _VadEngine(speechPlan)
+        ..failWith = const EngineUnavailableException('vad boom');
+
+      await expectLater(
+        neural(asr, vad, bursts()).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          neuralVad: _defaultVad,
+        ),
+        throwsA(
+          isA<EngineUnavailableException>().having(
+            (e) => e.message,
+            'message',
+            contains('vad boom'),
+          ),
+        ),
+      );
+
+      expect(asr.loadCount, 0);
+      expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
+    });
+
+    test('invalid settings or double mode fail before any IO', () async {
+      final asr = _ChunkedEngine(const []);
+      final vad = _VadEngine(speechPlan);
+      final service = neural(asr, vad, bursts());
+      const bad = <NeuralVadSettings>[
+        NeuralVadSettings(modelPath: ''),
+        NeuralVadSettings(modelPath: '   '),
+        NeuralVadSettings(modelPath: 'v', threshold: 0),
+        NeuralVadSettings(modelPath: 'v', threshold: 1),
+        NeuralVadSettings(modelPath: 'v', threshold: double.nan),
+        NeuralVadSettings(modelPath: 'v', minSilenceDuration: -0.1),
+        NeuralVadSettings(modelPath: 'v', minSpeechDuration: -1),
+        NeuralVadSettings(modelPath: 'v', speechPadMs: -1),
+        NeuralVadSettings(modelPath: 'v', maxSpeechSeconds: 0),
+      ];
+      for (final settings in bad) {
+        await expectLater(
+          service.transcribe(
+            audioPath: 'ignored.wav',
+            model: const EngineModelSpec(path: 'model.gguf'),
+            neuralVad: settings,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: settings.modelPath,
+        );
+        await expectLater(
+          service.previewVad(
+            audioPath: 'ignored.wav',
+            neuralVad: settings,
+          ),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+      await expectLater(
+        service.transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          chunkSettings: _oneSecondFixed,
+          neuralVad: _defaultVad,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(vad.requests, isEmpty);
+      expect(asr.loadCount, 0);
+      expect(asr.requests, isEmpty);
+    });
+
+    test('cancel before planning sends nothing anywhere', () async {
+      final asr = _ChunkedEngine(const []);
+      final vad = _VadEngine(speechPlan);
+
+      await expectLater(
+        neural(asr, vad, bursts()).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          neuralVad: _defaultVad,
+          isCancelled: () => true,
+        ),
+        throwsA(isA<EngineCancelledException>()),
+      );
+
+      expect(vad.requests, isEmpty);
+      expect(asr.loadCount, 0);
+      expect(asr.requests, isEmpty);
+    });
+
+    test('cancel flagged during planning aborts before any chunk and '
+        'cleans the VAD input', () async {
+      final asr = _ChunkedEngine(const []);
+      var cancel = false;
+      final vad = _VadEngine(speechPlan)..onPlan = () => cancel = true;
+
+      await expectLater(
+        neural(asr, vad, bursts()).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          neuralVad: _defaultVad,
+          isCancelled: () => cancel,
+        ),
+        throwsA(
+          isA<EngineCancelledException>().having(
+            (e) => e.message,
+            'message',
+            contains('chunk 1 of'),
+          ),
+        ),
+      );
+
+      // Planning happened, transcription did not, temp input is gone.
+      expect(vad.requests, hasLength(1));
+      expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
+      expect(asr.requests, isEmpty);
+    });
+
+    test(
+      'previewVad returns real padded boundaries without touching the '
+      'ASR engine, and cleans up',
+      () async {
+        final asr = _ChunkedEngine(const []);
+        final vad = _VadEngine(speechPlan);
+
+        final preview = await neural(
+          asr,
+          vad,
+          bursts(),
+        ).previewVad(
+          audioPath: 'ignored.wav',
+          neuralVad: const NeuralVadSettings(
+            modelPath: 'silero.onnx',
+            speechPadMs: 100,
+          ),
+        );
+
+        expect(asr.loadCount, 0);
+        expect(asr.requests, isEmpty);
+        expect(vad.requests, hasLength(1));
+        final wave = WavDecoder().decode(vad.inputBytes!);
+        expect(wave.sampleRate, 16000);
+        expect(wave.samples, hasLength(64000));
+
+        // Real boundaries with pad, on the audio timeline — two spans, not
+        // one first-to-last slice over the silence.
+        expect(preview.windows, hasLength(1));
+        expect(
+          preview.windows.single
+              .map((s) => [s.start.inMilliseconds, s.end.inMilliseconds])
+              .toList(),
+          [
+            [0, 1100], // head pad clamped to 0
+            [1900, 3100],
+          ],
+        );
+        expect(preview.speechDuration, const Duration(milliseconds: 2300));
+        expect(preview.sampleRate, 16000);
+        // The whole temp directory (vad input included) is gone.
+        expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
+      },
+    );
+
+    test('previewVad on silent audio throws instead of empty success', () async {
+      final asr = _ChunkedEngine(const []);
+      final vad = _VadEngine(const VadPlan.empty());
+
+      await expectLater(
+        neural(
+          asr,
+          vad,
+          bursts(),
+        ).previewVad(audioPath: 'ignored.wav', neuralVad: _defaultVad),
+        throwsA(isA<EngineUnavailableException>()),
+      );
+      expect(asr.loadCount, 0);
+    });
   });
 }

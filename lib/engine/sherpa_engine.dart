@@ -7,6 +7,8 @@
 /// failures always surface as [EngineUnavailableException].
 library;
 
+import 'dart:typed_data';
+
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'asr_engine.dart';
@@ -75,9 +77,11 @@ class SherpaEngine implements AsrEngine {
     return const EngineCapabilities(
       available: true,
       backends: {Backend.cpu},
-      // OfflineRecognizerResult.tokens is a real tokenizer count; VAD needs a
-      // separate Silero model this build does not ship.
-      supportsVad: false,
+      // The bindings expose the real Silero VoiceActivityDetector; the model
+      // file itself arrives per call in NeuralVadSettings. planVad still
+      // fails loudly when that file is missing or unreadable.
+      supportsVad: true,
+      // OfflineRecognizerResult.tokens is a real tokenizer count.
       supportsTokenCount: true,
     );
   }
@@ -193,13 +197,107 @@ class SherpaEngine implements AsrEngine {
     }
   }
 
+  /// Silero VAD's fixed window at 16 kHz; [acceptWaveform] is fed exactly
+  /// this many samples at a time and the buffer drained after each window.
+  static const int _vadWindow = 512;
+
+  /// Runs the real Silero `VoiceActivityDetector` over the WAV at
+  /// [TranscribeRequest.audioPath]. No ASR model is loaded and none is run:
+  /// the detector only needs its own ONNX plus the caller's [NeuralVadSettings].
+  /// Segments are drained as they complete, trailing speech is flushed, and
+  /// the native detector is always freed.
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) => Future.error(
-    const EngineUnavailableException(
-      'sherpa-onnx VAD needs a separate Silero/ten-vad model file that this '
-      'build does not ship; VAD is unavailable.',
-    ),
-  );
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) async {
+    vad.validate();
+    _ensureInitialized();
+    if (_initError != null) throw EngineUnavailableException(_initError!);
+
+    final wave = sherpa.readWave(request.audioPath);
+    final samples = wave.samples;
+    final sampleRate = wave.sampleRate;
+    if (samples.isEmpty || sampleRate <= 0) {
+      throw EngineUnavailableException(
+        'sherpa-onnx VAD could not read WAV audio "${request.audioPath}" '
+        '(missing, unreadable or not a WAV).',
+      );
+    }
+    if (sampleRate != 16000) {
+      throw EngineUnavailableException(
+        'Silero VAD runs at 16000 Hz; "${request.audioPath}" is $sampleRate Hz.',
+      );
+    }
+
+    final sherpa.VoiceActivityDetector detector;
+    try {
+      detector = sherpa.VoiceActivityDetector(
+        config: sherpa.VadModelConfig(
+          sileroVad: sherpa.SileroVadModelConfig(
+            model: vad.modelPath,
+            threshold: vad.threshold,
+            minSilenceDuration: vad.minSilenceDuration,
+            minSpeechDuration: vad.minSpeechDuration,
+            windowSize: _vadWindow,
+            maxSpeechDuration: vad.maxSpeechSeconds,
+          ),
+          sampleRate: sampleRate,
+          numThreads: 1,
+          provider: 'cpu',
+          debug: false,
+        ),
+        // Drained every window, so it only ever holds one speech run plus pad.
+        bufferSizeInSeconds:
+            vad.maxSpeechSeconds + vad.speechPadMs / 1000 + 1,
+      );
+    } catch (error) {
+      throw EngineUnavailableException(
+        'sherpa-onnx failed to load VAD model "${vad.modelPath}": $error',
+      );
+    }
+    final segments = <VadSegment>[];
+    void drain() {
+      while (!detector.isEmpty()) {
+        final speech = detector.front();
+        final startSample = speech.start;
+        final length = speech.samples.length;
+        detector.pop();
+        if (length <= 0) continue;
+        segments.add(
+          VadSegment(
+            start: _durationFromSample(startSample, sampleRate),
+            end: _durationFromSample(startSample + length, sampleRate),
+          ),
+        );
+      }
+    }
+
+    try {
+      var i = 0;
+      for (; i + _vadWindow <= samples.length; i += _vadWindow) {
+        detector.acceptWaveform(
+          Float32List.sublistView(samples, i, i + _vadWindow),
+        );
+        drain();
+      }
+      if (i < samples.length) {
+        detector.acceptWaveform(Float32List.sublistView(samples, i));
+      }
+      detector.flush();
+      drain();
+    } on EngineUnavailableException {
+      rethrow;
+    } catch (error) {
+      throw EngineUnavailableException('sherpa-onnx VAD failed: $error');
+    } finally {
+      detector.free();
+    }
+    return VadPlan(segments);
+  }
+
+  static Duration _durationFromSample(int sample, int rate) =>
+      Duration(microseconds: (sample * 1000000 / rate).round());
 
   @override
   Future<void> dispose() async {

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "comment": "Curated bundles PocketASR may fetch and run on-device. Each bundle is one primary model file plus companions (tokens, whisper encoder/decoder). sizeBytes/sha256 are the exact values pinned at the Hugging Face revision named in each URL; nothing here is estimated. license names the upstream license; where the mirror ships no LICENSE file, that is stated instead of implied.",
+  "comment": "Curated bundles PocketASR may fetch and run on-device. Each bundle is one primary model file plus companions (tokens, whisper encoder/decoder). sizeBytes/sha256 are the exact values pinned at the Hugging Face revision named in each URL; nothing here is estimated. license names the upstream license; where the mirror ships no LICENSE file, that is stated instead of implied. The vad bundle comes from a mutable GitHub release tag, so its sha256 is the integrity gate, not the URL.",
   "models": [
     {
       "id": "sherpa-sensevoice-int8",
@@ -93,6 +93,22 @@
           "url": "https://huggingface.co/cstr/multilingual-e5-small-GGUF/resolve/178420da727e544c2689e89b6648b205ad176eda/multilingual-e5-small-q8_0.gguf",
           "sizeBytes": 131624960,
           "sha256": "0a34067a40f25d3149b36885faa62bee0e5284d0f9edc102acfc00e115d953e8"
+        }
+      ]
+    },
+    {
+      "id": "sherpa-silero-vad",
+      "displayName": "Silero VAD (sherpa-onnx export)",
+      "engine": "sherpa",
+      "type": "vad",
+      "license": "MIT (per k2-fsa official sherpa-onnx export)",
+      "files": [
+        {
+          "fileName": "silero_vad.onnx",
+          "role": "model",
+          "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+          "sizeBytes": 643854,
+          "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
         }
       ]
     }

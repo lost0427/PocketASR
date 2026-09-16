@@ -127,8 +127,11 @@ class WorkerAsrEngine implements CancellableAsrEngine {
   }
 
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) async {
-    final value = await _call('planVad', request);
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) async {
+    final value = await _call('planVad', (request, vad));
     return (value as VadPlan);
   }
 
@@ -397,11 +400,13 @@ Future<void> _entry(_Boot boot) async {
             }
             main.send(_AsrEvent(_eventReply, cmd.id, null));
           case 'planVad':
+            final (vadRequest, vadSettings) = cmd.payload!
+                as (TranscribeRequest, NeuralVadSettings);
             main.send(
               _AsrEvent(
                 _eventReply,
                 cmd.id,
-                await engine.planVad(cmd.payload! as TranscribeRequest),
+                await engine.planVad(vadRequest, vadSettings),
               ),
             );
           case 'dispose':

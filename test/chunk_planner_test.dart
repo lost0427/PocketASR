@@ -165,4 +165,112 @@ void main() {
     const settings = ChunkSettings(chunkSeconds: double.nan);
     expect(settings.validate, throwsA(isA<ArgumentError>()));
   });
+
+  group('groupVad (real neural boundaries)', () {
+    AudioChunk seg(double fromS, double toS) => AudioChunk(
+      start: Duration(microseconds: (fromS * 1000000).round()),
+      end: Duration(microseconds: (toS * 1000000).round()),
+    );
+    int speechSeconds(List<AudioChunk> window) => window.fold(
+      0,
+      (sum, span) => sum + span.duration.inSeconds,
+    );
+
+    test('pads each boundary and clamps at head and EOF', () {
+      final windows = ChunkPlanner.groupVad(
+        segments: [seg(0, 0.5), seg(3.5, 4)],
+        audio: _audio(4),
+        speechPadMs: 200,
+        maxSpeechSeconds: 30,
+      );
+      expect(windows, hasLength(1));
+      expect(windows.single, hasLength(2));
+      expect(windows.single[0].start, Duration.zero); // pad clamped to 0
+      expect(windows.single[0].end.inMilliseconds, 700);
+      expect(windows.single[1].start.inMilliseconds, 3300);
+      expect(windows.single[1].end.inMilliseconds, 4000); // clamped to EOF
+    });
+
+    test('pads that overlap join into one boundary', () {
+      final windows = ChunkPlanner.groupVad(
+        segments: [seg(1, 1.5), seg(1.6, 2)],
+        audio: _audio(4),
+        speechPadMs: 200,
+        maxSpeechSeconds: 30,
+      );
+      expect(windows.single, hasLength(1));
+      expect(windows.single.single.start.inMilliseconds, 800);
+      expect(windows.single.single.end.inMilliseconds, 2200);
+    });
+
+    test('merges short segments until the speech total would pass max', () {
+      // 3 x 12 s of speech with huge silences between, cap 30 s: 12+12=24
+      // fits in one window, adding the third would reach 36 — so it starts
+      // its own window and keeps its real timeline position.
+      final windows = ChunkPlanner.groupVad(
+        segments: [seg(10, 22), seg(82, 94), seg(154, 166)],
+        audio: _audio(170),
+        speechPadMs: 0,
+        maxSpeechSeconds: 30,
+      );
+      expect(windows.map((w) => w.length), [2, 1]);
+      expect(speechSeconds(windows.first), 24);
+      // Silence is NOT smuggled in: the window's spans stay separate pieces.
+      expect(windows.first[1].start.inSeconds, 82);
+      expect(windows[1].single.start.inSeconds, 154);
+    });
+
+    test('a single oversized speech run splits into max-length windows', () {
+      final windows = ChunkPlanner.groupVad(
+        segments: [seg(0, 70)],
+        audio: _audio(70),
+        speechPadMs: 0,
+        maxSpeechSeconds: 30,
+      );
+      expect(
+        windows.map((w) => w.single.duration.inSeconds).toList(),
+        [30, 30, 10],
+      );
+    });
+
+    test('empty input plans nothing', () {
+      expect(
+        ChunkPlanner.groupVad(
+          segments: const [],
+          audio: _audio(2),
+          speechPadMs: 30,
+          maxSpeechSeconds: 30,
+        ),
+        isEmpty,
+      );
+      expect(
+        ChunkPlanner.groupVad(
+          segments: [seg(0, 1)],
+          audio: _audio(0),
+          speechPadMs: 30,
+          maxSpeechSeconds: 30,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('invalid grouping arguments throw', () {
+      for (final bad in <List<Object>>[
+        [-1, 30.0],
+        [0, 0.0],
+        [0, double.nan],
+      ]) {
+        expect(
+          () => ChunkPlanner.groupVad(
+            segments: const [],
+            audio: _audio(1),
+            speechPadMs: bad[0] as int,
+            maxSpeechSeconds: bad[1] as double,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'pad=${bad[0]} max=${bad[1]}',
+        );
+      }
+    });
+  });
 }

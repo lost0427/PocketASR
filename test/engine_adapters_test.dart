@@ -152,7 +152,10 @@ void main() {
         emitsError(isA<EngineUnavailableException>()),
       );
       await expectLater(
-        engine.planVad(request),
+        engine.planVad(
+          request,
+          const NeuralVadSettings(modelPath: 'missing-vad.onnx'),
+        ),
         throwsA(isA<EngineUnavailableException>()),
       );
     });
@@ -167,12 +170,51 @@ void main() {
         expect(caps.unavailableReason, isNull);
         expect(caps.backends, isNotEmpty);
         expect(caps.supportsTokenCount, isTrue);
+        // Real Silero VoiceActivityDetector in the loaded bindings.
+        expect(caps.supportsVad, isTrue);
       } else {
         expect(caps.unavailableReason, isNotEmpty);
         expect(caps.backends, isEmpty);
+        // No library, no VAD — never report support that cannot run.
+        expect(caps.supportsVad, isFalse);
       }
 
       await engine.dispose();
+    });
+
+    test('planVad fails loudly when the Silero model cannot be opened', () async {
+      final engine = SherpaEngine();
+      addTearDown(engine.dispose);
+
+      // No model is loaded and none is needed; the missing VAD ONNX (or the
+      // missing native library) must surface as an error, not silence.
+      await expectLater(
+        engine.planVad(
+          const TranscribeRequest(audioPath: 'missing-input.wav'),
+          const NeuralVadSettings(modelPath: 'definitely-missing-silero.onnx'),
+        ),
+        throwsA(isA<EngineUnavailableException>()),
+      );
+    });
+
+    test('planVad rejects invalid settings before touching native code', () async {
+      final engine = SherpaEngine();
+      addTearDown(engine.dispose);
+
+      // validate() runs before any native call — but after the library probe,
+      // so on a library-less host this is still an availability error.
+      await expectLater(
+        engine.planVad(
+          const TranscribeRequest(audioPath: 'x.wav'),
+          const NeuralVadSettings(modelPath: 'v.onnx', threshold: 2),
+        ),
+        throwsA(
+          anyOf(
+            isA<ArgumentError>(),
+            isA<EngineUnavailableException>(),
+          ),
+        ),
+      );
     });
 
     test('fails load loudly when the model files are absent', () async {

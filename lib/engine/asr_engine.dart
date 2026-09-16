@@ -82,6 +82,84 @@ class EngineCapabilities {
   final String? unavailableReason;
 }
 
+/// Minimal config for a *real* neural VAD (Silero via sherpa-onnx's
+/// `VoiceActivityDetector`) — the knobs offline planning actually uses.
+///
+/// All durations are seconds on the 16 kHz mono timeline the app normalizes
+/// to. [modelPath] must point at a Silero VAD ONNX the user supplied (see
+/// the `type: vad` entry in `assets/model_allowlist.json`); nothing here
+/// fabricates a model or substitutes an energy gate.
+class NeuralVadSettings {
+  const NeuralVadSettings({
+    required this.modelPath,
+    this.threshold = 0.5,
+    this.minSilenceDuration = 0.5,
+    this.minSpeechDuration = 0.25,
+    this.speechPadMs = 30,
+    this.maxSpeechSeconds = 30,
+  });
+
+  /// Local path of the Silero VAD model file.
+  final String modelPath;
+
+  /// Speech-probability gate (exclusive 0..1) passed to the model.
+  final double threshold;
+
+  /// Trailing silence (seconds) required to close a segment.
+  final double minSilenceDuration;
+
+  /// Shortest speech the model emits, in seconds.
+  final double minSpeechDuration;
+
+  /// Each detected boundary grows outward by this many milliseconds, clamped
+  /// to the audio; overlapping pads join into one boundary.
+  final int speechPadMs;
+
+  /// Ceiling on the *speech* total of one transcribable window; shorter
+  /// segments merge until adding the next would pass it. Oversized spans are
+  /// split, never truncated away.
+  final double maxSpeechSeconds;
+
+  /// Throws [ArgumentError] on values that could not drive a real detector,
+  /// so callers fail before any IO. File existence is the engine's problem.
+  void validate() {
+    if (modelPath.trim().isEmpty) {
+      throw ArgumentError.value(modelPath, 'modelPath', 'must not be empty');
+    }
+    if (!threshold.isFinite || threshold <= 0 || threshold >= 1) {
+      throw ArgumentError.value(
+        threshold,
+        'threshold',
+        'must be finite and inside (0, 1)',
+      );
+    }
+    if (!minSilenceDuration.isFinite || minSilenceDuration < 0) {
+      throw ArgumentError.value(
+        minSilenceDuration,
+        'minSilenceDuration',
+        'must be finite and >= 0',
+      );
+    }
+    if (!minSpeechDuration.isFinite || minSpeechDuration < 0) {
+      throw ArgumentError.value(
+        minSpeechDuration,
+        'minSpeechDuration',
+        'must be finite and >= 0',
+      );
+    }
+    if (speechPadMs < 0) {
+      throw ArgumentError.value(speechPadMs, 'speechPadMs', 'must be >= 0');
+    }
+    if (!maxSpeechSeconds.isFinite || maxSpeechSeconds <= 0) {
+      throw ArgumentError.value(
+        maxSpeechSeconds,
+        'maxSpeechSeconds',
+        'must be finite and > 0',
+      );
+    }
+  }
+}
+
 /// One detected speech region, in audio-timeline coordinates.
 class VadSegment {
   const VadSegment({required this.start, required this.end});
@@ -202,8 +280,13 @@ abstract class AsrEngine {
   /// Runs transcription, emitting progress until the stream completes.
   Stream<TranscribeProgress> transcribe(TranscribeRequest request);
 
-  /// Returns cut boundaries only — does not run ASR.
-  Future<VadPlan> planVad(TranscribeRequest request);
+  /// Returns cut boundaries only — does not run ASR and needs no model
+  /// [load]: the neural VAD is a separate model ([NeuralVadSettings.modelPath])
+  /// and code path, which is what makes the live preview cheap (§1.2).
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  );
 
   /// Releases native resources.
   Future<void> dispose();
@@ -279,8 +362,10 @@ class UnavailableAsrEngine implements AsrEngine {
       Stream.error(EngineUnavailableException(reason));
 
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) =>
-      Future.error(EngineUnavailableException(reason));
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) => Future.error(EngineUnavailableException(reason));
 
   @override
   Future<void> dispose() async {}

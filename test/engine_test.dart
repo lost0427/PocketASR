@@ -27,7 +27,10 @@ void main() {
         throwsA(isA<EngineUnavailableException>()),
       );
       await expectLater(
-        engine.planVad(request),
+        engine.planVad(
+          request,
+          const NeuralVadSettings(modelPath: 'vad.onnx'),
+        ),
         throwsA(isA<EngineUnavailableException>()),
       );
     });
@@ -120,5 +123,39 @@ void main() {
     expect(plan.isEmpty, isFalse);
     expect(plan.speechDuration, const Duration(seconds: 3));
     expect(const VadPlan.empty().isEmpty, isTrue);
+  });
+
+  group('NeuralVadSettings', () {
+    test('defaults match the pinned Silero planning knobs', () {
+      const settings = NeuralVadSettings(modelPath: 'silero.onnx');
+      expect(settings.threshold, 0.5);
+      expect(settings.minSilenceDuration, 0.5);
+      expect(settings.minSpeechDuration, 0.25);
+      expect(settings.speechPadMs, 30);
+      expect(settings.maxSpeechSeconds, 30);
+      expect(settings.validate, returnsNormally);
+    });
+
+    test('rejects values that could not drive a real detector', () {
+      const bad = <NeuralVadSettings>[
+        NeuralVadSettings(modelPath: ''),
+        NeuralVadSettings(modelPath: '   '),
+        NeuralVadSettings(modelPath: 'v', threshold: 0),
+        NeuralVadSettings(modelPath: 'v', threshold: 1),
+        NeuralVadSettings(modelPath: 'v', threshold: double.nan),
+        NeuralVadSettings(modelPath: 'v', minSilenceDuration: -0.1),
+        NeuralVadSettings(modelPath: 'v', minSpeechDuration: -1),
+        NeuralVadSettings(modelPath: 'v', speechPadMs: -1),
+        NeuralVadSettings(modelPath: 'v', maxSpeechSeconds: 0),
+        NeuralVadSettings(modelPath: 'v', maxSpeechSeconds: double.infinity),
+      ];
+      for (final settings in bad) {
+        expect(
+          settings.validate,
+          throwsA(isA<ArgumentError>()),
+          reason: '$settings',
+        );
+      }
+    });
   });
 }

@@ -218,6 +218,82 @@ class ChunkPlanner {
     start: _duration(startSample, rate),
     end: _duration(endSample, rate),
   );
+
+  /// Groups *real* VAD boundaries (from a neural detector's [VadPlan]) into
+  /// transcribable windows. This is planning arithmetic on supplied
+  /// boundaries — it does not detect anything itself.
+  ///
+  /// Each segment is padded outward by [speechPadMs] (clamped to the audio,
+  /// so head and EOF never reach outside), overlapping pads join into one
+  /// boundary, spans longer than [maxSpeechSeconds] are split, and pieces are
+  /// then packed into windows whose total **speech** stays ≤ max. Silence
+  /// between pieces inside a window is real but *never* sliced in: callers
+  /// must concatenate the window's span PCM, never cut from `first.start`
+  /// to `last.end`, or long gaps would be smuggled back into the audio.
+  /// Time coordinates stay on the original audio timeline.
+  static List<List<AudioChunk>> groupVad({
+    required List<AudioChunk> segments,
+    required AudioBuffer audio,
+    required int speechPadMs,
+    required double maxSpeechSeconds,
+  }) {
+    if (speechPadMs < 0) {
+      throw ArgumentError.value(speechPadMs, 'speechPadMs', 'must be >= 0');
+    }
+    if (!maxSpeechSeconds.isFinite || maxSpeechSeconds <= 0) {
+      throw ArgumentError.value(
+        maxSpeechSeconds,
+        'maxSpeechSeconds',
+        'must be finite and > 0',
+      );
+    }
+    final rate = audio.sampleRate;
+    if (rate <= 0) {
+      throw ArgumentError.value(rate, 'audio.sampleRate', 'must be > 0');
+    }
+    final total = audio.samples.length;
+    if (total == 0) return const [];
+    final pad = speechPadMs * rate ~/ 1000;
+
+    // Pad, clamp, then join spans whose padded edges overlap.
+    final spans = <List<int>>[];
+    for (final segment in segments) {
+      final start = math.max(
+        0,
+        segment.startSampleAt(rate) - pad,
+      );
+      final end = math.min(total, segment.endSampleAt(rate) + pad);
+      if (end <= start) continue;
+      if (spans.isNotEmpty && start <= spans.last[1]) {
+        if (end > spans.last[1]) spans.last[1] = end;
+        continue;
+      }
+      spans.add([start, end]);
+    }
+
+    // Cut anything longer than one window first (always terminates: the
+    // piece step is maxSamples >= 1), then pack pieces greedily by their
+    // summed length, so a window's *speech* total respects the cap.
+    final maxSamples = math.max(1, (maxSpeechSeconds * rate).round());
+    final windows = <List<AudioChunk>>[];
+    var group = <AudioChunk>[];
+    var groupSamples = 0;
+    for (final span in spans) {
+      for (var s = span[0]; s < span[1]; s += maxSamples) {
+        final end = math.min(span[1], s + maxSamples);
+        final length = end - s;
+        if (group.isNotEmpty && groupSamples + length > maxSamples) {
+          windows.add(group);
+          group = <AudioChunk>[];
+          groupSamples = 0;
+        }
+        group.add(_at(s, end, rate));
+        groupSamples += length;
+      }
+    }
+    if (group.isNotEmpty) windows.add(group);
+    return windows;
+  }
 }
 
 int _sampleIndex(Duration at, int rate) =>

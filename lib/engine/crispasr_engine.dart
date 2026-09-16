@@ -64,8 +64,9 @@ class CrispAsrEngine implements AsrEngine {
     return const EngineCapabilities(
       available: true,
       backends: {Backend.cpu},
-      // CrispASR's VAD path needs a separate VAD model file this build does not
-      // ship, and it reports segments/words rather than tokenizer tokens.
+      // CrispASR carries no neural VAD of its own (real Silero detection runs
+      // in a separate sherpa-onnx worker), and it reports segments/words
+      // rather than tokenizer tokens.
       supportsVad: false,
       supportsTokenCount: false,
     );
@@ -121,11 +122,18 @@ class CrispAsrEngine implements AsrEngine {
     }
   }
 
+  /// CrispASR has no neural VAD of its own; transcription using it gets cut
+  /// boundaries from a *separate* sherpa-onnx Silero worker (the service's
+  /// `vadEngine`), so neural VAD is not bound to this ASR. This method only
+  /// exists to satisfy the interface and reports that honestly.
   @override
-  Future<VadPlan> planVad(TranscribeRequest request) => Future.error(
+  Future<VadPlan> planVad(
+    TranscribeRequest request,
+    NeuralVadSettings vad,
+  ) => Future.error(
     const EngineUnavailableException(
-      'CrispASR VAD needs a separate Silero/VAD model file that this build '
-      'does not ship; VAD is unavailable.',
+      'CrispASR has no neural VAD; supply a separate sherpa-onnx Silero '
+      'engine as the service vadEngine to cut on real speech.',
     ),
   );
 

@@ -148,17 +148,19 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(4));
+      expect(entries, hasLength(5));
       for (final entry in entries) {
         // Every allowlist file must carry a verified size and checksum —
         // the store and downloader gate on both.
         for (final file in entry.bundleFiles) {
           expect(file.sizeBytes, isNotNull, reason: file.fileName);
           expect(file.sha256, isNotNull, reason: file.fileName);
-          expect(file.url, startsWith('https://huggingface.co/'));
+          // ASR/embedding live on Hugging Face; the Silero VAD comes from a
+          // (mutable) k2-fsa GitHub release tag — the sha256 is the gate.
+          expect(file.url, startsWith('https://'), reason: file.fileName);
         }
         expect(entry.engine, isNotNull);
-        expect(entry.type, anyOf('asr', 'embedding'));
+        expect(entry.type, anyOf('asr', 'embedding', 'vad'));
       }
       // The two multi-file sherpa bundles keep their companions distinct.
       final whisper = entries.firstWhere((e) => e.family == 'whisper');
