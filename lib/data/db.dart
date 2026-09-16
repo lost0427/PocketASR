@@ -19,13 +19,13 @@ class AppDatabase {
     try {
       _migrate(raw);
     } catch (_) {
-      raw.dispose();
+      raw.close();
       rethrow;
     }
     return AppDatabase._(raw);
   }
 
-  void close() => db.dispose();
+  void close() => db.close();
 
   /// Reads a [settings] value, or null when the key is unset.
   String? getSetting(String key) {

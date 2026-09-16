@@ -154,7 +154,7 @@ void main() {
 
     final raw = sqlite3.open(path);
     raw.execute('PRAGMA user_version = ${schemaVersion + 1}');
-    raw.dispose();
+    raw.close();
 
     expect(() => AppDatabase.open(path: path), throwsA(isA<StateError>()));
   });

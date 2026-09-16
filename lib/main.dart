@@ -1,7 +1,11 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app/app_state.dart';
 import 'app/theme.dart';
+import 'data/db.dart';
 import 'features/models/models_page.dart';
 import 'features/history/history_page.dart';
 import 'features/queue/queue_page.dart';
@@ -9,17 +13,25 @@ import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_localizations.dart';
 
-void main() => runApp(const PocketAsrApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final directory = await getApplicationDocumentsDirectory();
+  runApp(PocketAsrApp(database: AppDatabase.open(
+    path: '${directory.path}${Platform.pathSeparator}pocket_asr.sqlite',
+  )));
+}
 
 /// Root of the app. Owns the single [AppState] and hands it to the tree.
 class PocketAsrApp extends StatefulWidget {
-  const PocketAsrApp({super.key});
+  const PocketAsrApp({super.key, this.database});
+
+  final AppDatabase? database;
 
   @override
   State<PocketAsrApp> createState() => _PocketAsrAppState();
 }
 class _PocketAsrAppState extends State<PocketAsrApp> {
-  final AppState _state = AppState();
+  late final AppState _state = AppState(database: widget.database);
 
   @override
   void dispose() {

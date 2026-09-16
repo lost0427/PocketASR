@@ -17,10 +17,10 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   sherpa_onnx: 1.13.8
-  # v2 keeps the plain DynamicLibrary loading that works under `flutter test`;
-  # v3 needs Dart native-asset hooks the Flutter test runner does not build yet.
-  sqlite3: ^2.9.0
-  sqlite3_flutter_libs: ^0.5.0
+  # sqlite3 3.x provides native assets; the obsolete sqlite3_flutter_libs
+  # plugin is intentionally not used because it is incompatible with AGP 9.
+  sqlite3: ^3.6.0
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

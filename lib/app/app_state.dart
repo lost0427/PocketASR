@@ -15,13 +15,13 @@ import '../data/transcript_repo.dart';
 /// round out the Settings tab. Persistence lands in Phase 5 (settings table),
 /// so for now every value lives in memory only.
 class AppState extends ChangeNotifier {
-  final AppDatabase database = AppDatabase.open();
-  late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
-  late final SearchRepo searchRepo = SearchRepo(database);
-
-  AppState() {
+  AppState({AppDatabase? database}) : database = database ?? AppDatabase.open() {
     _loadSettings();
   }
+
+  final AppDatabase database;
+  late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
+  late final SearchRepo searchRepo = SearchRepo(database);
 
   void _loadSettings() {
     final mode = database.getSetting('theme_mode');

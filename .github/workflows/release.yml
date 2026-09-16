@@ -50,13 +50,13 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - name: Fetch pinned CrispASR Android library
-        run: bash scripts/ci/fetch_native_android.sh
-      - name: Verify libcrispasr.so staged in jniLibs
-        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so
+      - name: Fetch pinned native Android libraries
+        run: bash scripts/ci/fetch_native_android.sh --with-crispembed
+      - name: Verify native libraries staged in jniLibs
+        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so && test -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so
       - run: flutter build apk --release
-      - name: Verify libcrispasr.so packaged in the APK
-        run: unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispasr.so'
+      - name: Verify native libraries packaged in the APK
+        run: unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispasr.so' && unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispembed.so'
       - uses: actions/upload-artifact@v4
         with:
           name: pocket-asr-android-${{ github.ref_name }}
