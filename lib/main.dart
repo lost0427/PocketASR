@@ -56,6 +56,9 @@ class _LocalizedApp extends StatelessWidget {
     return MaterialApp(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => Platform.isWindows
+          ? ExcludeSemantics(child: child ?? const SizedBox.shrink())
+          : child ?? const SizedBox.shrink(),
       theme: buildLightTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: state.themeMode,
