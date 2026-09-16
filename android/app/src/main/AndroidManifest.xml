@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app downloads user-supplied model files at runtime; release
+         builds get no overlay manifest, so this must live in main. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="PocketASR"
         android:name="${applicationName}"

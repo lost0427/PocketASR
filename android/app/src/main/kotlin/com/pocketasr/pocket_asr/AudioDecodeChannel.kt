@@ -136,7 +136,7 @@ class AudioDecodeChannel(
             val channels = max(1, trackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
             if (inRate <= 0) throw IOException("Invalid source sample rate $inRate")
 
-            val (decoder, floatRequested) = openDecoder(mime, trackFormat, inRate, channels)
+            val (decoder, floatRequested) = openDecoder(mime, trackFormat)
             codec = decoder
             decoder.start()
             var useFloat = outputIsFloat(decoder, floatRequested)
@@ -230,17 +230,20 @@ class AudioDecodeChannel(
     private fun openDecoder(
         mime: String,
         trackFormat: MediaFormat,
-        rate: Int,
-        channels: Int,
     ): Pair<MediaCodec, Boolean> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // createAudioFormat is API 29; below that we only configure from
-            // the extractor's format and take whatever PCM the codec emits.
+            // The copy constructor is API 29. Copy the track format instead
+            // of rebuilding one: MediaFormat.createAudioFormat(mime, rate,
+            // channels) keeps only those three keys, drops the AAC csd-0/
+            // csd-1, and the decoder then happily configures and emits
+            // nothing. The original stays untouched for the fallback below.
+            val requested = MediaFormat(trackFormat)
+            requested.setInteger(
+                MediaFormat.KEY_PCM_ENCODING,
+                AudioFormat.ENCODING_PCM_FLOAT,
+            )
             var codec: MediaCodec? = null
             try {
-                val requested = MediaFormat.createAudioFormat(mime, rate, channels).apply {
-                    setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_FLOAT)
-                }
                 codec = MediaCodec.createDecoderByType(mime)
                 codec.configure(requested, null, null, 0)
                 return codec to true

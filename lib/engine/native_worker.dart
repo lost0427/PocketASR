@@ -369,6 +369,17 @@ AsrEngine _buildNative(Object? config) {
   };
 }
 
+/// Field-by-field identity: [EngineModelSpec] has no `==`, and every field
+/// feeds a native loader (paths) or labels the session (family/quant), so a
+/// session may only be reused when all of them match.
+bool _sameModel(EngineModelSpec a, EngineModelSpec b) =>
+    a.path == b.path &&
+    a.family == b.family &&
+    a.quant == b.quant &&
+    a.tokensPath == b.tokensPath &&
+    a.encoderPath == b.encoderPath &&
+    a.decoderPath == b.decoderPath;
+
 Future<void> _entry(_Boot boot) async {
   late final ReceivePort commands;
   final main = boot.main;
@@ -376,6 +387,9 @@ Future<void> _entry(_Boot boot) async {
     commands = ReceivePort();
     main.send(_AsrEvent(_eventReady, null, commands.sendPort));
     final engine = boot.builder(boot.config);
+    // The session this worker currently holds, or null while none/unloaded.
+    EngineModelSpec? loadedSpec;
+    Backend? loadedBackend;
     // Sequential on purpose: one command's synchronous native work must
     // finish before the next starts, so sessions are never touched concurrently.
     await for (final message in commands) {
@@ -391,7 +405,20 @@ Future<void> _entry(_Boot boot) async {
           case 'load':
             final (spec, backend) = cmd.payload! as
                 (EngineModelSpec, Backend);
+            if (loadedSpec != null &&
+                loadedBackend == backend &&
+                _sameModel(loadedSpec, spec)) {
+              // Same engine instance (threads are fixed at worker build),
+              // same spec fields, same backend: the session is already live.
+              main.send(_AsrEvent(_eventReply, cmd.id, null));
+              break;
+            }
+            // Clear *before* awaiting: a failed load must never sit cached.
+            loadedSpec = null;
+            loadedBackend = null;
             await engine.load(spec, backend);
+            loadedSpec = spec;
+            loadedBackend = backend;
             main.send(_AsrEvent(_eventReply, cmd.id, null));
           case 'transcribe':
             await for (final progress

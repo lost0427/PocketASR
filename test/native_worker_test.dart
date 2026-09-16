@@ -316,6 +316,53 @@ void main() {
     );
   });
 
+  test(
+    'identical load reuses the session; any spec field or backend change reloads',
+    () async {
+      final e = engine('normal');
+      int loads() => log('normal').where((l) => l.startsWith('load:')).length;
+
+      await e.load(const EngineModelSpec(path: 'm', family: 'f'), Backend.cpu);
+      await e.load(const EngineModelSpec(path: 'm', family: 'f'), Backend.cpu);
+      await e.load(const EngineModelSpec(path: 'm', family: 'f'), Backend.cpu);
+      expect(loads(), 1); // one native load served all three
+
+      // Every spec field is part of the identity, not just the path...
+      await e.load(
+        const EngineModelSpec(path: 'm', family: 'f', quant: 'q8'),
+        Backend.cpu,
+      );
+      expect(loads(), 2);
+      // ...and so is the backend.
+      await e.load(
+        const EngineModelSpec(path: 'm', family: 'f', quant: 'q8'),
+        Backend.vulkan,
+      );
+      expect(loads(), 3);
+      await e.dispose();
+    },
+  );
+
+  test('a failed load is never cached as loaded', () async {
+    final e = engine('fail-load');
+    const spec = EngineModelSpec(path: 'm');
+    await expectLater(
+      e.load(spec, Backend.cpu),
+      throwsA(isA<EngineUnavailableException>()),
+    );
+    await expectLater(
+      e.load(spec, Backend.cpu),
+      throwsA(isA<EngineUnavailableException>()),
+    );
+    // Both attempts reached the engine: the failure did not short-circuit
+    // the identical second load into a fake success.
+    expect(
+      log('fail-load').where((l) => l.startsWith('load:')).length,
+      2,
+    );
+    await e.dispose();
+  });
+
   test('registry-backed sherpa worker probes honestly on this host', () async {
     // The real adapter runs inside the worker isolate: availability must
     // mirror the host (no fake successes) and load must fail loudly when the

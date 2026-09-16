@@ -106,10 +106,11 @@ class TranscriptionService {
   /// transcribed). A VAD plan with no speech throws like the energy gate
   /// does; nothing is faked.
   ///
-  /// [isCancelled] is polled before each chunk (and before the single request
-  /// when unchunked, and before VAD planning): when it turns true, the job
-  /// throws [EngineCancelledException] at the next boundary instead of
-  /// returning a partial success. In-flight native work cannot be hard-killed,
+  /// [isCancelled] is polled before each chunk and re-polled after every
+  /// awaited native call completes (VAD planning, the final chunk result):
+  /// when it turns true, the job throws
+  /// [EngineCancelledException] at the next boundary instead of returning a
+  /// partial success. In-flight native work cannot be hard-killed,
   /// so cancellation is cooperative and takes effect between chunks — pair it
   /// with [CancellableAsrEngine.cancel] so the engine refuses later chunks
   /// even without this poll. The temp directory is cleaned in `finally` on
@@ -232,6 +233,14 @@ class TranscriptionService {
         }
         doneUs += chunkUs;
       }
+      if (isCancelled?.call() ?? false) {
+        // Cancel can land while the *final* native call drains — the loop
+        // top never runs again, so this is the last gate before "success".
+        throw EngineCancelledException(
+          'Cancelled during the final chunk; ${parts.length} chunk(s) were '
+          'transcribed but discarded — a cancelled job returns no text.',
+        );
+      }
       return TranscriptionJobResult(
         text: parts.join(' ').trim(),
         elapsed: elapsed,
@@ -304,11 +313,18 @@ class TranscriptionService {
         span.endSampleAt(rate),
       );
     }
-    final out = Float32List(_windowSpeechUs(window) * rate ~/ 1000000);
+    // Allocate by the summed sample counts themselves: converting speech
+    // microseconds through the sample rate floors per-span rounding errors
+    // and under-allocates (RangeError) for odd boundaries.
+    final bounds = [
+      for (final span in window)
+        (span.startSampleAt(rate), span.endSampleAt(rate)),
+    ];
+    final out = Float32List(
+      bounds.fold(0, (int total, (int, int) b) => total + b.$2 - b.$1),
+    );
     var at = 0;
-    for (final span in window) {
-      final start = span.startSampleAt(rate);
-      final end = span.endSampleAt(rate);
+    for (final (start, end) in bounds) {
       out.setRange(at, at + end - start, audio.samples, start);
       at += end - start;
     }
@@ -340,6 +356,13 @@ class TranscriptionService {
         dir: dir,
         isCancelled: isCancelled,
       );
+      if (isCancelled?.call() ?? false) {
+        // Cancelled mid-planning: the preview must not come back as a
+        // success the user asked to abort; the `finally` still cleans the dir.
+        throw const EngineCancelledException(
+          'Cancelled during neural VAD planning; the preview was discarded.',
+        );
+      }
       if (windows.isEmpty) {
         throw const EngineUnavailableException(
           'Neural VAD found no speech in this audio; nothing to preview.',

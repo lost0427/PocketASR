@@ -467,6 +467,33 @@ void main() {
     expect(engine.requests, isEmpty);
   });
 
+  test(
+    'cancel arriving after the final chunk never returns a success',
+    () async {
+      final engine = _FakeEngine(const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 5),
+          ratio: 1,
+          partialText: 'done',
+        ),
+      ]);
+      var cancel = false;
+
+      // Flag flips during the only chunk's progress; the loop top never sees
+      // it again, so the pre-return re-check is all that stands between a
+      // cancelled job and a persisted "success".
+      await expectLater(
+        _service(engine).transcribe(
+          audioPath: 'ignored.wav',
+          model: const EngineModelSpec(path: 'model.gguf'),
+          onProgress: (_) => cancel = true,
+          isCancelled: () => cancel,
+        ),
+        throwsA(isA<EngineCancelledException>()),
+      );
+    },
+  );
+
   test('energy plan with no speech throws without touching the engine', () async {
     final engine = _ChunkedEngine(const []);
     final silence = AudioBuffer(
@@ -759,6 +786,70 @@ void main() {
       expect(vad.requests, hasLength(1));
       expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
       expect(asr.requests, isEmpty);
+    });
+
+    test('window PCM is allocated by exact sample sums, not microsecond math', () async {
+      // At 16 kHz these spans are samples 1..4 and 5..8 (6 samples total),
+      // but their summed durations 187+187 us convert back to 374*16000~/1e6
+      // = 5 slots: the old microsecond-based allocation threw RangeError
+      // before the engine ever saw the chunk.
+      final asr = _ChunkedEngine([
+        const [
+          TranscribeProgress(
+            elapsed: Duration(milliseconds: 1),
+            ratio: 1,
+            partialText: 'x',
+          ),
+        ],
+      ]);
+      final vad = _VadEngine(
+        const VadPlan([
+          VadSegment(
+            start: Duration(microseconds: 63),
+            end: Duration(microseconds: 250),
+          ),
+          VadSegment(
+            start: Duration(microseconds: 313),
+            end: Duration(microseconds: 500),
+          ),
+        ]),
+      );
+      final audio = AudioBuffer(samples: Float32List(16), sampleRate: 16000);
+
+      await TranscriptionService(
+        engine: asr,
+        vadEngine: vad,
+        source: _BufferSource(audio),
+        preprocessor: const AudioPreprocessor(enabled: false),
+      ).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+        neuralVad: nopad,
+      );
+
+      expect(asr.chunkSamples.single, hasLength(6)); // (4-1) + (8-5)
+    });
+
+    test('previewVad cancelled during planning throws and cleans up', () async {
+      final asr = _ChunkedEngine(const []);
+      var cancel = false;
+      final vad = _VadEngine(speechPlan)..onPlan = () => cancel = true;
+
+      await expectLater(
+        neural(
+          asr,
+          vad,
+          bursts(),
+        ).previewVad(
+          audioPath: 'ignored.wav',
+          neuralVad: _defaultVad,
+          isCancelled: () => cancel,
+        ),
+        throwsA(isA<EngineCancelledException>()),
+      );
+
+      // A cancelled preview returns no windows, and its temp input is gone.
+      expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
     });
 
     test(
