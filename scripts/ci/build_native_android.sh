@@ -32,7 +32,17 @@
 #     static-ggml. Its root CMake supports find_package(ggml) via
 #     -DCRISPASR_USE_SYSTEM_GGML=ON, so we build the repo's OWN pinned ggml
 #     submodule statically first and feed it back: libcrispasr.so links the
-#     static ggml archives and gains no ggml DT_NEEDED. The tree is not
+#     static ggml archives and gains no ggml DT_NEEDED. Package location must
+#     be passed as -Dggml_DIR, NOT -DCMAKE_PREFIX_PATH: the NDK toolchain sets
+#     CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY (CMake's Android-Initialize.cmake
+#     does too), which re-roots every config-mode search path — including
+#     CMAKE_PREFIX_PATH — under the NDK sysroot, so the freshly installed
+#     prefix is never searched and find_package(ggml REQUIRED) fails with
+#     "Could not find a package configuration file provided by ggml" even
+#     though ggml-config.cmake was installed (android/ndk#2048). <pkg>_DIR is
+#     used as-is and is the targeted workaround (the other one, because it
+#     loosens host searching for every package, is
+#     -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH). The tree is not
 #     visibility-hidden (crispasr.h's CRISPASR_API path exists, but the C
 #     API's annotation coverage was not verified; exporting more than needed
 #     is the status quo of the old bundle and safe under RTLD_LOCAL since
@@ -116,7 +126,7 @@ cmake --install "$WORK/ggml-static"
 cmake -S "$WORK/crispasr" -B "$WORK/crispasr-build" "${common_cmake[@]}" \
   -DBUILD_SHARED_LIBS=ON \
   -DCRISPASR_USE_SYSTEM_GGML=ON \
-  -DCMAKE_PREFIX_PATH="$WORK/ggml-static-prefix" \
+  -Dggml_DIR="$WORK/ggml-static-prefix/lib/cmake/ggml" \
   -DCRISPASR_BUILD_TESTS=OFF \
   -DCRISPASR_BUILD_EXAMPLES=OFF \
   -DCRISPASR_BUILD_SERVER=OFF \

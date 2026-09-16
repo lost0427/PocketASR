@@ -71,8 +71,14 @@ Build contract (options verified against the pinned tags' `CMakeLists.txt`):
   cannot make it shared while its ggml is static; instead the repo's own
   pinned ggml submodule is built `-DBUILD_SHARED_LIBS=OFF` and fed back
   through the upstream `-DCRISPASR_USE_SYSTEM_GGML=ON` path — libcrispasr.so
-  links the static ggml archives and carries no ggml `DT_NEEDED`.
-  `-DGGML_OPENMP=OFF`, and `-DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF` for a
+  links the static ggml archives and carries no ggml `DT_NEEDED`. The install
+  prefix is located with `-Dggml_DIR=<prefix>/lib/cmake/ggml`, **not**
+  `-DCMAKE_PREFIX_PATH`: the NDK toolchain sets
+  `CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY` (CMake's own Android-Initialize
+  does too), which re-roots every config-mode search path, so
+  `CMAKE_PREFIX_PATH` is never consulted and `find_package(ggml REQUIRED)`
+  fails despite a correct install (`android/ndk#2048`). `<pkg>_DIR` is used
+  as-is. `-DGGML_OPENMP=OFF`, and `-DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF` for a
   deterministic, network-free link (`.opus`/`.amr` file decoding is not
 available through the CrispASR engine on Android; WAV/MP3/FLAC via miniaudio
 and hardware AAC/MP3 via the Android Media NDK are unaffected).
