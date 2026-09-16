@@ -28,6 +28,9 @@ class _RecordingService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -253,6 +256,9 @@ class _BlockingService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -276,6 +282,9 @@ class _GatedService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {

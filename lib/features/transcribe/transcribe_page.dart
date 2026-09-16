@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
 import '../../engine/metrics.dart';
+import '../../engine/system_metrics.dart';
 import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_preprocessor.dart';
@@ -25,6 +28,7 @@ class TranscribePage extends StatefulWidget {
     this.state,
     this.transcriptRepo,
     this.service,
+    this.metricsSamplerFactory,
   });
 
   /// The engine to report status for; resolved from `AppState.engine` in
@@ -38,6 +42,11 @@ class TranscribePage extends StatefulWidget {
 
   final TranscriptRepo? transcriptRepo;
   final TranscriptionService? service;
+
+  /// Builds the process metrics sampler used only while a run is active.
+  /// Tests inject a sampler with fixed readings; production uses the real
+  /// [/proc] reader, which honestly reports null where it cannot measure.
+  final SystemMetricsSampler Function()? metricsSamplerFactory;
 
   @override
   State<TranscribePage> createState() => _TranscribePageState();
@@ -82,10 +91,25 @@ class _TranscribePageState extends State<TranscribePage> {
   double? _rtf;
   Backend? _runBackend;
 
+  /// Process readings taken only while a run is active; null means "not
+  /// measured", which renders as `—` rather than a made-up number.
+  double? _cpuPercent;
+  int? _memoryBytes;
+
+  /// Periodic sampler driving the CPU/memory tiles during a run.
+  Timer? _metricsTimer;
+  bool _sampling = false;
+
   @override
   void initState() {
     super.initState();
     _capabilities = widget.engine.capabilities();
+  }
+
+  @override
+  void dispose() {
+    _metricsTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -175,7 +199,10 @@ class _TranscribePageState extends State<TranscribePage> {
       _elapsed = null;
       _rtf = null;
       _runBackend = null;
+      _cpuPercent = null;
+      _memoryBytes = null;
     });
+    _startMetricsSampling();
     try {
       final result = await service.transcribe(
         audioPath: _filePath!,
@@ -215,8 +242,40 @@ class _TranscribePageState extends State<TranscribePage> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
+      _metricsTimer?.cancel();
+      _metricsTimer = null;
       state?.engineBusy = false;
       if (mounted) setState(() => _running = false);
+    }
+  }
+
+  /// Samples process CPU/memory once a second while a run is in flight. The
+  /// real sampler needs two readings for a CPU rate and stays null until it
+  /// has them; nothing is estimated. The timer is cancelled in `finally` and in
+  /// [dispose], so sampling never outlives the run or the page.
+  void _startMetricsSampling() {
+    _metricsTimer?.cancel();
+    final sampler = (widget.metricsSamplerFactory ?? SystemMetricsSampler.new)();
+    _metricsTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _sampleMetrics(sampler),
+    );
+  }
+
+  Future<void> _sampleMetrics(SystemMetricsSampler sampler) async {
+    if (_sampling) return; // a slow read must not stack up
+    _sampling = true;
+    try {
+      final metrics = await sampler.sample();
+      if (!mounted) return; // the page went away mid-read
+      setState(() {
+        _cpuPercent = metrics.cpuPercent;
+        _memoryBytes = metrics.memoryBytes;
+      });
+    } catch (_) {
+      // A failed read is not a number: leave the tile at `—`.
+    } finally {
+      _sampling = false;
     }
   }
 
@@ -434,6 +493,8 @@ class _TranscribePageState extends State<TranscribePage> {
                     charsPerSec: _charsPerSec,
                     rtf: _rtf,
                     elapsed: _elapsed,
+                    cpuPercent: _cpuPercent,
+                    memoryBytes: _memoryBytes,
                   ),
                   const SizedBox(height: 28),
                   Row(
@@ -761,20 +822,29 @@ String? _elapsed(Duration? value) {
   return millis < 1000 ? '${millis}ms' : '${(millis / 1000).toStringAsFixed(1)}s';
 }
 
-/// Six metric tiles fed by the live run. CPU and memory have no engine source
-/// yet, and every unknown value stays `—` — the page never invents numbers.
+/// One-decimal MiB for a measured RSS, or null when not measured.
+String? _memory(int? bytes) =>
+    bytes == null ? null : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+/// Six metric tiles fed by the live run. CPU and memory come from the periodic
+/// sampler and stay `—` whenever a reading could not be taken — the page never
+/// invents numbers.
 class _MetricsGrid extends StatelessWidget {
   const _MetricsGrid({
     required this.tokensPerSec,
     required this.charsPerSec,
     required this.rtf,
     required this.elapsed,
+    required this.cpuPercent,
+    required this.memoryBytes,
   });
 
   final double? tokensPerSec;
   final double? charsPerSec;
   final double? rtf;
   final Duration? elapsed;
+  final double? cpuPercent;
+  final int? memoryBytes;
 
   @override
   Widget build(BuildContext context) {
@@ -789,8 +859,12 @@ class _MetricsGrid extends StatelessWidget {
         rtf?.toStringAsFixed(2) ?? unknown,
       ),
       (l10n.metricElapsed, Icons.schedule, _elapsed(elapsed) ?? unknown),
-      (l10n.metricCpu, Icons.memory, unknown),
-      (l10n.metricMemory, Icons.storage, unknown),
+      (
+        l10n.metricCpu,
+        Icons.memory,
+        cpuPercent == null ? unknown : '${cpuPercent!.toStringAsFixed(0)}%',
+      ),
+      (l10n.metricMemory, Icons.storage, _memory(memoryBytes) ?? unknown),
     ];
 
     return GridView.count(

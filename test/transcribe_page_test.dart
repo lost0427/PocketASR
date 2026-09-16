@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,7 @@ import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/data/transcript_repo.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
+import 'package:pocket_asr/engine/system_metrics.dart';
 import 'package:pocket_asr/features/transcribe/transcribe_page.dart';
 import 'package:pocket_asr/features/transcribe/transcription_service.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
@@ -16,6 +19,7 @@ Widget _app({
   AppState? state,
   TranscriptRepo? transcriptRepo,
   TranscriptionService? service,
+  SystemMetricsSampler Function()? metricsSamplerFactory,
 }) => MaterialApp(
   locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -26,12 +30,15 @@ Widget _app({
       state: state,
       transcriptRepo: transcriptRepo,
       service: service,
+      metricsSamplerFactory: metricsSamplerFactory,
     ),
   ),
 );
 
-/// Minimal engine whose capabilities are fixed by the test.
-class _FakeEngine implements AsrEngine {
+/// Minimal engine whose capabilities are fixed by the test. Extends the
+/// unavailable stand-in so it inherits whatever `planVad` signature the engine
+/// interface declares.
+class _FakeEngine extends UnavailableAsrEngine {
   const _FakeEngine(this.caps);
 
   final EngineCapabilities caps;
@@ -51,13 +58,6 @@ class _FakeEngine implements AsrEngine {
   @override
   Stream<TranscribeProgress> transcribe(TranscribeRequest request) =>
       Stream<TranscribeProgress>.empty();
-
-  @override
-  Future<VadPlan> planVad(TranscribeRequest request) async =>
-      const VadPlan.empty();
-
-  @override
-  Future<void> dispose() async {}
 }
 
 const _availableCaps = EngineCapabilities(
@@ -84,6 +84,9 @@ class _ScriptedService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -112,6 +115,48 @@ class _ScriptedService extends TranscriptionService {
 const MethodChannel _selectorChannel = MethodChannel(
   'plugins.flutter.io/file_selector',
 );
+
+/// Sampler seam: records how many times the page actually sampled.
+class _FakeSampler extends SystemMetricsSampler {
+  int calls = 0;
+
+  @override
+  Future<SystemMetrics> sample() async {
+    calls++;
+    return const SystemMetrics(cpuPercent: 37, memoryBytes: 2097152);
+  }
+}
+
+/// Finishes only when [release] completes, so a run can be observed in flight.
+class _SlowService extends TranscriptionService {
+  _SlowService() : super(engine: const _FakeEngine(_availableCaps));
+
+  final release = Completer<void>();
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
+    Object? neuralVad,
+  }) async {
+    await release.future;
+    return TranscriptionJobResult(
+      text: 'hello',
+      elapsed: const Duration(seconds: 1),
+      audioDuration: const Duration(seconds: 1),
+      engine: 'fake',
+      model: model,
+      backend: backend,
+      originalLufs: -16,
+      gainDb: 0,
+    );
+  }
+}
 
 void main() {
   testWidgets('reports the engine as unavailable instead of faking a result', (
@@ -410,5 +455,52 @@ void main() {
     expect(service.lastModel!.family, 'whisper');
     // The busy flag is released once the run finishes.
     expect(state.engineBusy, isFalse);
+  });
+
+  testWidgets('samples CPU and memory only while a run is active', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['meeting.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState()..modelPath = 'model.onnx';
+    addTearDown(state.dispose);
+    final sampler = _FakeSampler();
+    final service = _SlowService();
+
+    await tester.pumpWidget(
+      _app(
+        engine: const _FakeEngine(_availableCaps),
+        state: state,
+        service: service,
+        metricsSamplerFactory: () => sampler,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start transcription'));
+    await tester.pump();
+
+    // A tick of the run's sampler fills the CPU and memory tiles with the
+    // readings the sampler really returned.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(sampler.calls, greaterThanOrEqualTo(1));
+    expect(find.text('37%'), findsOneWidget);
+    expect(find.text('2.0 MB'), findsOneWidget);
+
+    // Ending the run stops the sampling: no further reads happen.
+    service.release.complete();
+    await tester.pumpAndSettle();
+    final callsAtEnd = sampler.calls;
+    await tester.pump(const Duration(seconds: 3));
+    expect(sampler.calls, callsAtEnd);
   });
 }

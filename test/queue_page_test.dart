@@ -26,6 +26,9 @@ class _RecordingService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -250,7 +253,10 @@ Widget _host({
 );
 
 /// Cancellable engine seam: records [cancel] calls without native work.
-class _CancellableFakeEngine implements CancellableAsrEngine {
+/// Extends the unavailable stand-in so it inherits whatever `planVad`
+/// signature the engine interface currently declares.
+class _CancellableFakeEngine extends UnavailableAsrEngine
+    implements CancellableAsrEngine {
   int cancelCalls = 0;
 
   @override
@@ -272,13 +278,6 @@ class _CancellableFakeEngine implements CancellableAsrEngine {
   @override
   Stream<TranscribeProgress> transcribe(TranscribeRequest request) =>
       const Stream<TranscribeProgress>.empty();
-
-  @override
-  Future<VadPlan> planVad(TranscribeRequest request) async =>
-      const VadPlan.empty();
-
-  @override
-  Future<void> dispose() async {}
 }
 
 /// Blocks like a native call and throws once [isCancelled] flips.
@@ -292,6 +291,9 @@ class _BlockingService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    // Object? keeps this override valid under both the pre-VAD and neural-VAD
+    // service signature.
+    Object? neuralVad,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
