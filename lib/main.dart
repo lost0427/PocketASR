@@ -104,7 +104,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.list_alt_outlined,
         selectedNavIcon: Icons.list_alt,
         label: l10n.navQueue,
-        page: QueuePage(engine: engine),
+        page: QueuePage(engine: engine, transcriptRepo: state.transcriptRepo),
       ),
       _Section(
         navIcon: Icons.history,

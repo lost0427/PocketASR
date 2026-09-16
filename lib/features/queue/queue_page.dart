@@ -2,14 +2,16 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../engine/asr_engine.dart';
+import '../../data/transcript_repo.dart';
 import '../transcribe/transcription_service.dart';
 import 'queue_worker.dart';
 import 'transcription_queue.dart';
 
 class QueuePage extends StatefulWidget {
-  const QueuePage({super.key, required this.engine});
+  const QueuePage({super.key, required this.engine, required this.transcriptRepo});
 
   final AsrEngine engine;
+  final TranscriptRepo transcriptRepo;
 
   @override
   State<QueuePage> createState() => _QueuePageState();
@@ -18,6 +20,7 @@ class QueuePage extends StatefulWidget {
 class _QueuePageState extends State<QueuePage> {
   final _queue = TranscriptionQueue();
   QueueWorker? _worker;
+  String? _modelPath;
 
   Future<void> _add() async {
     final files = await openFiles(acceptedTypeGroups: const [
@@ -32,14 +35,24 @@ class _QueuePageState extends State<QueuePage> {
   }
 
   Future<void> _run() async {
+    if (_modelPath == null) return;
     final worker = QueueWorker(
       _queue,
       TranscriptionService(engine: widget.engine),
-      const EngineModelSpec(path: ''),
+      EngineModelSpec(path: _modelPath!),
+      transcriptRepo: widget.transcriptRepo,
     );
     _worker = worker;
     await worker.run();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _pickModel() async {
+    final file = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(label: 'Model', extensions: ['gguf', 'onnx', 'bin']),
+    ]);
+    if (!mounted || file == null) return;
+    setState(() => _modelPath = file.path);
   }
 
   @override
@@ -52,8 +65,16 @@ class _QueuePageState extends State<QueuePage> {
           child: Row(children: [
             Expanded(child: OutlinedButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add audio'))),
             const SizedBox(width: 12),
-            Expanded(child: FilledButton.icon(onPressed: _queue.hasPending && !(_worker?.running ?? false) ? _run : null, icon: const Icon(Icons.play_arrow), label: const Text('Run queue'))),
+            Expanded(child: OutlinedButton.icon(onPressed: _pickModel, icon: const Icon(Icons.model_training_outlined), label: Text(_modelPath == null ? 'Choose model' : 'Model ready'))),
           ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: FilledButton.icon(
+            onPressed: _modelPath != null && _queue.hasPending && !(_worker?.running ?? false) ? _run : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Run queue'),
+          ),
         ),
         Expanded(
           child: jobs.isEmpty
