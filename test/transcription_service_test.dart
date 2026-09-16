@@ -351,6 +351,65 @@ void main() {
     expect(File(engine.requests.first).parent.existsSync(), isFalse);
   });
 
+  test('cancel between chunks errors, skips later chunks, and cleans up', () async {
+    final engine = _ChunkedEngine([
+      const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 100),
+          ratio: 1,
+          partialText: 'a',
+        ),
+      ],
+      const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 100),
+          ratio: 1,
+          partialText: 'b',
+        ),
+      ],
+    ]);
+    var cancel = false;
+
+    // Flag flips during chunk 1's progress; the loop must abort at the
+    // chunk-2 boundary and never send it.
+    await expectLater(
+      _service(engine, _stereoLevels()).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+        chunkSettings: _oneSecondFixed,
+        onProgress: (_) => cancel = true,
+        isCancelled: () => cancel,
+      ),
+      throwsA(
+        isA<EngineCancelledException>().having(
+          (e) => e.message,
+          'message',
+          contains('chunk 2 of 2'),
+        ),
+      ),
+    );
+
+    // No success result was returned, chunk 2 never reached the engine, and
+    // the temp directory is still fully removed.
+    expect(engine.requests, hasLength(1));
+    expect(File(engine.requests.first).parent.existsSync(), isFalse);
+  });
+
+  test('pre-run cancel stops the unchunked job before the engine call', () async {
+    final engine = _ChunkedEngine(const []);
+
+    await expectLater(
+      _service(engine, _stereoLevels()).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+        isCancelled: () => true,
+      ),
+      throwsA(isA<EngineCancelledException>()),
+    );
+
+    expect(engine.requests, isEmpty);
+  });
+
   test('energy plan with no speech throws without touching the engine', () async {
     final engine = _ChunkedEngine(const []);
     final silence = AudioBuffer(

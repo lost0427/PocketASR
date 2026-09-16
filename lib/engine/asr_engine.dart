@@ -209,6 +209,31 @@ abstract class AsrEngine {
   Future<void> dispose();
 }
 
+/// Raised when a running job was cancelled by request.
+///
+/// Cancellation is an error, never an empty success: a cancelled job produced
+/// no trustworthy result and callers must not persist one.
+class EngineCancelledException implements Exception {
+  const EngineCancelledException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'EngineCancelledException: $message';
+}
+
+/// Optional [AsrEngine] capability: abort the current job cooperatively.
+///
+/// Engines that run native code cannot safely hard-kill a call in flight, so
+/// [cancel] stops *subsequent* work immediately and makes the in-flight call
+/// surface [EngineCancelledException] once the native operation returns.
+/// Callers must treat that window ("cancelled" is not "stopped instantly") as
+/// expected latency, not a bug.
+abstract interface class CancellableAsrEngine implements AsrEngine {
+  /// Requests cancellation of the current job. Idempotent.
+  Future<void> cancel();
+}
+
 /// Raised whenever an operation needs the missing native library.
 ///
 /// Deliberately an error and not an empty [TranscriptionResult]: a caller that

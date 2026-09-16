@@ -66,6 +66,15 @@ class TranscriptionService {
   /// request with the whole file. [onProgress] is optional and never changes
   /// the returned result. A failing or silent engine throws
   /// [EngineUnavailableException]; no placeholder text is ever returned.
+  ///
+  /// [isCancelled] is polled before each chunk (and before the single request
+  /// when unchunked): when it turns true, the job throws
+  /// [EngineCancelledException] at the next boundary instead of returning a
+  /// partial success. In-flight native work cannot be hard-killed, so
+  /// cancellation is cooperative and takes effect between chunks — pair it
+  /// with [CancellableAsrEngine.cancel] so the engine refuses later chunks
+  /// even without this poll. The temp directory is cleaned in `finally` on
+  /// every exit path, cancellation included.
   Future<TranscriptionJobResult> transcribe({
     required String audioPath,
     required EngineModelSpec model,
@@ -73,6 +82,7 @@ class TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final sourceAudio = await _source.read(audioPath);
     final processed = _preprocessor.process(sourceAudio);
@@ -101,6 +111,13 @@ class TranscriptionService {
       var elapsed = Duration.zero;
       int? tokensSoFar = 0;
       for (var i = 0; i < chunks.length; i++) {
+        if (isCancelled?.call() ?? false) {
+          throw EngineCancelledException(
+            'Cancelled before chunk ${i + 1} of ${chunks.length}; '
+            '${parts.length} chunk(s) were transcribed but discarded — '
+            'a cancelled job returns no text.',
+          );
+        }
         final chunk = chunks[i];
         final chunkUs = math.max(1, chunk.duration.inMicroseconds);
         final slice = Float32List.sublistView(

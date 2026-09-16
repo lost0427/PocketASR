@@ -5,6 +5,7 @@ import 'package:pocket_asr/engine/crisp_embedder.dart';
 import 'package:pocket_asr/engine/crispasr_engine.dart';
 import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/engine/engine_registry.dart';
+import 'package:pocket_asr/engine/native_worker.dart';
 import 'package:pocket_asr/engine/sherpa_engine.dart';
 
 /// Adapter wiring tests. These must not require a real model or native library:
@@ -21,8 +22,16 @@ void main() {
         containsAll(['unavailable', 'crispasr', 'sherpa']),
       );
       expect(registry.createAsr('unavailable'), isA<UnavailableAsrEngine>());
-      expect(registry.createAsr('crispasr'), isA<CrispAsrEngine>());
-      expect(registry.createAsr('sherpa'), isA<SherpaEngine>());
+      // Native engines are worker facades: the real adapter (and its native
+      // session) is built inside a private isolate, never in the root one.
+      expect(
+        registry.createAsr('crispasr'),
+        isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'crispasr'),
+      );
+      expect(
+        registry.createAsr('sherpa'),
+        isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa'),
+      );
     });
 
     test('builds the deterministic embedder and rejects unknown ids', () {
@@ -51,7 +60,7 @@ void main() {
       addTearDown(state.dispose);
 
       expect(state.engineId, 'sherpa');
-      expect(state.engine, isA<SherpaEngine>());
+      expect(state.engine, isA<WorkerAsrEngine>());
     });
 
     test('rebuilds the engine when the id changes, not per access', () {

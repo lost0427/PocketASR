@@ -7,9 +7,8 @@
 library;
 
 import 'asr_engine.dart';
-import 'crispasr_engine.dart';
 import 'embedder.dart';
-import 'sherpa_engine.dart';
+import 'native_worker.dart';
 
 /// Builds one [AsrEngine] instance.
 typedef AsrEngineBuilder = AsrEngine Function();
@@ -30,8 +29,12 @@ class EngineRegistry {
 
   static final Map<String, AsrEngineBuilder> _builtinAsr = {
     'unavailable': () => const UnavailableAsrEngine(),
-    'crispasr': () => CrispAsrEngine(),
-    'sherpa': () => SherpaEngine(),
+    // The native adapters run on a dedicated worker isolate: the real
+    // CrispAsrEngine/SherpaEngine (and their native sessions) are constructed
+    // inside the worker, never here. Callers needing custom thread counts pass
+    // an `asrBuilders` override with `WorkerAsrEngine.sherpa(threads: n)`.
+    'crispasr': () => WorkerAsrEngine.crispAsr(),
+    'sherpa': () => WorkerAsrEngine.sherpa(),
   };
 
   static final Map<String, EmbedderBuilder> _builtinEmbedders = {

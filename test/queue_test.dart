@@ -25,6 +25,7 @@ class _RecordingService extends TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     models.add(model);
     lastBackend = backend;

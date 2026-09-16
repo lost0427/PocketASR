@@ -85,6 +85,7 @@ class _ScriptedService extends TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     lastModel = model;
     lastBackend = backend;
