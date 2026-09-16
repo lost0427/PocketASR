@@ -213,6 +213,52 @@ class AppLocalizationsEn extends AppLocalizations {
       'Every transcript is stored locally, so you can search it, copy it again, or restore it from the trash.';
 
   @override
+  String get historySearchHint => 'Search transcripts';
+
+  @override
+  String get historyScopeHistory => 'History';
+
+  @override
+  String get historyScopeTrash => 'Trash';
+
+  @override
+  String get historyEmpty => 'No transcripts';
+
+  @override
+  String get historyTrashEmpty => 'Trash is empty';
+
+  @override
+  String get historyCopy => 'Copy';
+
+  @override
+  String get historyCopied => 'Copied to clipboard';
+
+  @override
+  String get historyMoveToTrash => 'Move to trash';
+
+  @override
+  String get historyRestore => 'Restore';
+
+  @override
+  String get historyDeletePermanently => 'Delete permanently';
+
+  @override
+  String get historyDeleteConfirmTitle => 'Delete permanently?';
+
+  @override
+  String get historyDeleteConfirmBody =>
+      'This transcript will be erased from this device and cannot be recovered.';
+
+  @override
+  String get historyDetailTitle => 'Transcript';
+
+  @override
+  String get historyDetailCreated => 'Created';
+
+  @override
+  String get historyDetailAudio => 'Audio';
+
+  @override
   String get modelsTitle => 'Models';
 
   @override

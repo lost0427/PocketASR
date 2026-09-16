@@ -207,6 +207,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyBody => '每条转录都保存在本地，可以搜索、再次复制，也能从回收站恢复。';
 
   @override
+  String get historySearchHint => '搜索转录记录';
+
+  @override
+  String get historyScopeHistory => '历史';
+
+  @override
+  String get historyScopeTrash => '回收站';
+
+  @override
+  String get historyEmpty => '暂无转录记录';
+
+  @override
+  String get historyTrashEmpty => '回收站为空';
+
+  @override
+  String get historyCopy => '复制';
+
+  @override
+  String get historyCopied => '已复制到剪贴板';
+
+  @override
+  String get historyMoveToTrash => '移入回收站';
+
+  @override
+  String get historyRestore => '恢复';
+
+  @override
+  String get historyDeletePermanently => '永久删除';
+
+  @override
+  String get historyDeleteConfirmTitle => '永久删除？';
+
+  @override
+  String get historyDeleteConfirmBody => '该转录将从本机彻底删除，无法恢复。';
+
+  @override
+  String get historyDetailTitle => '转录详情';
+
+  @override
+  String get historyDetailCreated => '创建时间';
+
+  @override
+  String get historyDetailAudio => '音频';
+
+  @override
   String get modelsTitle => '模型';
 
   @override

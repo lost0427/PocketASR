@@ -488,6 +488,96 @@ abstract class AppLocalizations {
   /// **'Every transcript is stored locally, so you can search it, copy it again, or restore it from the trash.'**
   String get historyBody;
 
+  /// No description provided for @historySearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search transcripts'**
+  String get historySearchHint;
+
+  /// No description provided for @historyScopeHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get historyScopeHistory;
+
+  /// No description provided for @historyScopeTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Trash'**
+  String get historyScopeTrash;
+
+  /// No description provided for @historyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No transcripts'**
+  String get historyEmpty;
+
+  /// No description provided for @historyTrashEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Trash is empty'**
+  String get historyTrashEmpty;
+
+  /// No description provided for @historyCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get historyCopy;
+
+  /// No description provided for @historyCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard'**
+  String get historyCopied;
+
+  /// No description provided for @historyMoveToTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to trash'**
+  String get historyMoveToTrash;
+
+  /// No description provided for @historyRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get historyRestore;
+
+  /// No description provided for @historyDeletePermanently.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently'**
+  String get historyDeletePermanently;
+
+  /// No description provided for @historyDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently?'**
+  String get historyDeleteConfirmTitle;
+
+  /// No description provided for @historyDeleteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This transcript will be erased from this device and cannot be recovered.'**
+  String get historyDeleteConfirmBody;
+
+  /// No description provided for @historyDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript'**
+  String get historyDetailTitle;
+
+  /// No description provided for @historyDetailCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get historyDetailCreated;
+
+  /// No description provided for @historyDetailAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get historyDetailAudio;
+
   /// No description provided for @modelsTitle.
   ///
   /// In en, this message translates to:
