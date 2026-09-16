@@ -119,7 +119,7 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.layers_outlined,
         selectedNavIcon: Icons.layers,
         label: l10n.navModels,
-        page: const ModelsPage(),
+        page: ModelsPage(state: state),
       ),
       _Section(
         navIcon: Icons.settings_outlined,

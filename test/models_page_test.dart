@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/engine/model_downloader.dart';
 import 'package:pocket_asr/features/models/models_page.dart';
@@ -21,12 +22,43 @@ void main() {
   Widget host({
     required List<ModelEntry> entries,
     ModelDownloadRunner? download,
+    AppState? state,
   }) => MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
-      body: ModelsPage(entries: entries, store: store, download: download),
+      body: ModelsPage(
+        entries: entries,
+        store: store,
+        download: download,
+        state: state,
+      ),
     ),
+  );
+
+  /// Puts every file of [entry] on disk with its declared size.
+  void download(ModelEntry entry) {
+    for (final file in entry.bundleFiles) {
+      final target = File(store.pathToFile(entry, file));
+      target.parent.createSync(recursive: true);
+      target.writeAsBytesSync(List.filled(file.sizeBytes ?? 1, 0));
+    }
+  }
+
+  const whisper = ModelEntry(
+    id: 'whisper',
+    displayName: 'Whisper Base',
+    fileName: 'unused',
+    engine: 'sherpa',
+    family: 'whisper',
+    quant: 'int8',
+    languages: ['en', 'zh'],
+    license: 'MIT',
+    files: [
+      ModelFile(fileName: 'enc.onnx', role: 'encoder', sizeBytes: 2),
+      ModelFile(fileName: 'dec.onnx', role: 'decoder', sizeBytes: 2),
+      ModelFile(fileName: 'tok.txt', role: 'tokens', sizeBytes: 2),
+    ],
   );
 
   testWidgets('offers download only when the entry carries a URL', (
@@ -135,5 +167,123 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.text('Cancel'), findsNothing);
     expect(find.text('Not downloaded'), findsOneWidget);
+  });
+
+  testWidgets('a downloaded ASR bundle is adopted with its full spec', (
+    tester,
+  ) async {
+    download(whisper);
+    final state = AppState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(host(entries: const [whisper], state: state));
+    await tester.pumpAndSettle();
+
+    // Engine, languages and license come from the allowlist.
+    expect(find.textContaining('sherpa'), findsOneWidget);
+    expect(find.textContaining('en/zh'), findsOneWidget);
+    expect(find.text('MIT'), findsOneWidget);
+
+    await tester.tap(find.text('Use'));
+    await tester.pumpAndSettle();
+
+    final spec = state.modelSpec!;
+    expect(spec.tokensPath, store.pathToFile(whisper, whisper.files[2]));
+    expect(spec.encoderPath, store.pathToFile(whisper, whisper.files[0]));
+    expect(spec.decoderPath, store.pathToFile(whisper, whisper.files[1]));
+    expect(state.engineId, 'sherpa');
+    expect(state.modelFamily, 'whisper');
+    expect(state.modelQuant, 'int8');
+    // A bundle with its decoder is not treated as unsupported.
+    expect(state.selectionNeedsMissingCompanion, isFalse);
+    expect(find.text('In use'), findsOneWidget);
+  });
+
+  testWidgets('embedding bundles are listed apart and cannot be used as ASR', (
+    tester,
+  ) async {
+    const asr = ModelEntry(
+      id: 'asr',
+      displayName: 'Speech',
+      fileName: 'a.onnx',
+    );
+    const embedding = ModelEntry(
+      id: 'embed',
+      displayName: 'Embedding',
+      fileName: 'e.gguf',
+      engine: 'crispembed',
+      type: 'embedding',
+    );
+    download(asr);
+    download(embedding);
+    final state = AppState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      host(entries: const [asr, embedding], state: state),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Speech models'), findsOneWidget);
+    expect(find.text('Embedding models'), findsOneWidget);
+    // Only the ASR entry can be adopted.
+    expect(find.text('Use'), findsOneWidget);
+
+    await tester.tap(find.text('Use'));
+    await tester.pumpAndSettle();
+    expect(state.modelPath, store.pathFor(asr));
+    expect(state.modelPath, isNot(store.pathFor(embedding)));
+  });
+
+  testWidgets('deleting the selected bundle clears the selection only', (
+    tester,
+  ) async {
+    const a = ModelEntry(id: 'a', displayName: 'Bundle A', fileName: 'a.onnx');
+    const b = ModelEntry(id: 'b', displayName: 'Bundle B', fileName: 'b.onnx');
+    download(a);
+    download(b);
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.selectModel(spec: store.specFor(a), engineId: 'sherpa');
+    expect(state.modelPath, store.pathFor(a));
+
+    await tester.pumpWidget(host(entries: const [a, b], state: state));
+    await tester.pumpAndSettle();
+    expect(find.text('In use'), findsOneWidget);
+
+    // The first tile is Bundle A; its delete button opens the confirm dialog.
+    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(state.modelPath, isNull);
+    expect(store.isDownloaded(a), isFalse);
+    // The other downloaded model is untouched.
+    expect(store.isDownloaded(b), isTrue);
+    expect(find.text('In use'), findsNothing);
+  });
+
+  testWidgets('the Use button is disabled while a run is active', (
+    tester,
+  ) async {
+    download(whisper);
+    final state = AppState()..engineBusy = true;
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(host(entries: const [whisper], state: state));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('A transcription is running. Stop it before switching models.'),
+      findsOneWidget,
+    );
+    final use = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Use'),
+    );
+    expect(use.onPressed, isNull);
   });
 }

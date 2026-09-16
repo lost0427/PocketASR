@@ -107,11 +107,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeChooseModel => '选择模型文件';
 
   @override
+  String get transcribeChangeModel => '更换模型文件';
+
+  @override
   String get transcribeModelRequired => '开始前请先选择模型文件。';
 
   @override
   String get modelNeedsDecoder =>
       'Whisper 需要单独的 decoder 文件，而本构建只接受单个模型文件，因此当前选择不受支持。';
+
+  @override
+  String get modelSelectionMissing => '上次选择的模型文件已不在本机，请重新选择。';
 
   @override
   String get metricTokensPerSec => 'tokens/s';
@@ -147,7 +153,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get queueChooseModel => '选择模型';
 
   @override
-  String get queueModelReady => '模型已就绪';
+  String get queueChangeModel => '更换模型';
 
   @override
   String get queueRun => '运行队列';
@@ -224,6 +230,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelsNoModels => '没有可用模型';
 
   @override
+  String get modelsAsrSection => '语音模型';
+
+  @override
+  String get modelsEmbeddingSection => '向量模型';
+
+  @override
+  String get modelsEmbeddingNote => '向量模型暂不能用于转录，语义检索后续接入。';
+
+  @override
+  String get modelsUse => '使用';
+
+  @override
+  String get modelsInUse => '使用中';
+
+  @override
+  String get modelsBusyNote => '正在转录，停止后才能切换模型。';
+
+  @override
   String get settingsTitle => '设置';
 
   @override
@@ -252,6 +276,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsModel => '模型';
+
+  @override
+  String get settingsActiveModel => '当前模型';
+
+  @override
+  String get settingsActiveModelNone => '未选择';
+
+  @override
+  String get settingsActiveModelManual => '手动选择的文件；家族与量化档以下方控件为准。';
 
   @override
   String get settingsModelFamily => '模型家族';

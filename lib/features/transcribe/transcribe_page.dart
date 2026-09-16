@@ -52,8 +52,18 @@ class _TranscribePageState extends State<TranscribePage> {
   /// Model path used only when no [AppState] is injected.
   String? _localModelPath;
 
+  /// The full model spec shared with the queue page, companions included; the
+  /// local path is only the no-AppState test seam. Never rebuilt from a path
+  /// here, so a whisper bundle keeps its encoder/decoder.
+  EngineModelSpec? get _modelSpec {
+    final state = widget.state;
+    if (state != null) return state.modelSpec;
+    final path = _localModelPath;
+    return path == null ? null : EngineModelSpec(path: path);
+  }
+
   /// Shared, persisted model path; a pick in either page updates the same value.
-  String? get _modelPath => widget.state?.modelPath ?? _localModelPath;
+  String? get _modelPath => _modelSpec?.path;
 
   /// Rolling tokens/s across engine-reported true token counts. Its `tokens`
   /// also carries the latest cumulative token count for the run.
@@ -135,8 +145,8 @@ class _TranscribePageState extends State<TranscribePage> {
   Future<void> _start() async {
     final l10n = AppLocalizations.of(context);
     final state = widget.state;
-    final modelPath = _modelPath;
-    if (_filePath == null || modelPath == null) {
+    final model = _modelSpec;
+    if (_filePath == null || model == null) {
       _notify(l10n.transcribeModelRequired);
       return;
     }
@@ -152,6 +162,7 @@ class _TranscribePageState extends State<TranscribePage> {
       ),
     );
     _tokenRates.reset();
+    state?.engineBusy = true; // the Models page must not swap this instance
     setState(() {
       _running = true;
       _error = null;
@@ -167,11 +178,7 @@ class _TranscribePageState extends State<TranscribePage> {
     try {
       final result = await service.transcribe(
         audioPath: _filePath!,
-        model: EngineModelSpec(
-          path: modelPath,
-          family: state?.modelFamily,
-          quant: state?.modelQuant,
-        ),
+        model: model,
         backend: state?.backend ?? Backend.cpu,
         chunkSettings: state?.chunkSettings,
         onProgress: _onProgress,
@@ -207,6 +214,7 @@ class _TranscribePageState extends State<TranscribePage> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
+      state?.engineBusy = false;
       if (mounted) setState(() => _running = false);
     }
   }
@@ -344,13 +352,24 @@ class _TranscribePageState extends State<TranscribePage> {
                   OutlinedButton.icon(
                     onPressed: running ? null : _pickModel,
                     icon: const Icon(Icons.model_training_outlined),
-                    label: Text(l10n.transcribeChooseModel),
+                    label: Text(
+                      modelPath == null
+                          ? l10n.transcribeChooseModel
+                          : l10n.transcribeChangeModel,
+                    ),
                   ),
                   if (needsDecoder) ...[
                     const SizedBox(height: 12),
                     _Hint(
                       icon: Icons.warning_amber_rounded,
                       text: l10n.modelNeedsDecoder,
+                      color: scheme.error,
+                    ),
+                  ] else if (widget.state?.modelSelectionMissing ?? false) ...[
+                    const SizedBox(height: 12),
+                    _Hint(
+                      icon: Icons.warning_amber_rounded,
+                      text: l10n.modelSelectionMissing,
                       color: scheme.error,
                     ),
                   ] else if (modelPath == null) ...[

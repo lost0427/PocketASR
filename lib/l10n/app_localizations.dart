@@ -290,6 +290,12 @@ abstract class AppLocalizations {
   /// **'Choose model file'**
   String get transcribeChooseModel;
 
+  /// No description provided for @transcribeChangeModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Change model file'**
+  String get transcribeChangeModel;
+
   /// No description provided for @transcribeModelRequired.
   ///
   /// In en, this message translates to:
@@ -301,6 +307,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.'**
   String get modelNeedsDecoder;
+
+  /// No description provided for @modelSelectionMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The model selected last time is no longer on this device. Choose it again.'**
+  String get modelSelectionMissing;
 
   /// No description provided for @metricTokensPerSec.
   ///
@@ -368,11 +380,11 @@ abstract class AppLocalizations {
   /// **'Choose model'**
   String get queueChooseModel;
 
-  /// No description provided for @queueModelReady.
+  /// No description provided for @queueChangeModel.
   ///
   /// In en, this message translates to:
-  /// **'Model ready'**
-  String get queueModelReady;
+  /// **'Change model'**
+  String get queueChangeModel;
 
   /// No description provided for @queueRun.
   ///
@@ -518,6 +530,42 @@ abstract class AppLocalizations {
   /// **'No models available'**
   String get modelsNoModels;
 
+  /// No description provided for @modelsAsrSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech models'**
+  String get modelsAsrSection;
+
+  /// No description provided for @modelsEmbeddingSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedding models'**
+  String get modelsEmbeddingSection;
+
+  /// No description provided for @modelsEmbeddingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedding models cannot be used for transcription yet; semantic search lands later.'**
+  String get modelsEmbeddingNote;
+
+  /// No description provided for @modelsUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use'**
+  String get modelsUse;
+
+  /// No description provided for @modelsInUse.
+  ///
+  /// In en, this message translates to:
+  /// **'In use'**
+  String get modelsInUse;
+
+  /// No description provided for @modelsBusyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A transcription is running. Stop it before switching models.'**
+  String get modelsBusyNote;
+
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:
@@ -577,6 +625,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Model'**
   String get settingsModel;
+
+  /// No description provided for @settingsActiveModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Active model'**
+  String get settingsActiveModel;
+
+  /// No description provided for @settingsActiveModelNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None selected'**
+  String get settingsActiveModelNone;
+
+  /// No description provided for @settingsActiveModelManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Hand-picked file; family and quantization come from the controls below.'**
+  String get settingsActiveModelManual;
 
   /// No description provided for @settingsModelFamily.
   ///

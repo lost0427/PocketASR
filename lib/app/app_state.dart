@@ -1,9 +1,9 @@
-import 'dart:io' show Platform;
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../core/audio/chunk_planner.dart';
-import '../engine/asr_engine.dart' show AsrEngine, Backend;
+import '../engine/asr_engine.dart' show AsrEngine, Backend, EngineModelSpec;
 import '../engine/engine_registry.dart';
 import '../data/db.dart';
 import '../data/search_repo.dart';
@@ -34,7 +34,8 @@ class AppState extends ChangeNotifier {
     _locale = language == null || language.isEmpty ? null : Locale(language);
     _modelFamily = database.getSetting('model_family') ?? _modelFamily;
     _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
-    _modelPath = _nonEmpty(database.getSetting('model_path'));
+    _engineId = database.getSetting('engine_id') ?? _engineId;
+    _restoreSelection();
     _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
     _loudnessTargetLufs = double.tryParse(database.getSetting('loudness_target') ?? '') ?? _loudnessTargetLufs;
     _chunkMode = _chunkModeFrom(database.getSetting('chunk_mode'));
@@ -112,7 +113,10 @@ class AppState extends ChangeNotifier {
   set engineId(String value) {
     if (value == _engineId) return;
     _engineId = value;
+    final previous = _engine;
     _engine = null; // rebuild lazily for the new id
+    _save('engine_id', value);
+    previous?.dispose(); // release the old adapter's native session
     notifyListeners();
   }
 
@@ -171,13 +175,154 @@ class AppState extends ChangeNotifier {
   /// Shared so a pick in one page is the same model in the other, and persisted
   /// so it survives a restart. `null` (or empty) means no model is selected and
   /// nothing may start — the pages disable Start rather than guess a path.
-  String? _modelPath;
-  String? get modelPath => _modelPath;
+  ///
+  /// This is only the *primary* file. The full selection — companions included
+  /// — is [modelSpec], and that is what the pages hand engines.
+  String? get modelPath => _selectedSpec?.path;
+
+  /// Sets a hand-picked model file. Replaces any bundle selection with a
+  /// path-only spec and points the engine at the format's adapter, so a GGUF is
+  /// never silently fed to a sherpa adapter (or vice versa).
   set modelPath(String? value) {
     final path = _nonEmpty(value);
-    if (path == _modelPath) return;
-    _modelPath = path;
-    _save('model_path', path ?? '');
+    if (path == null) {
+      clearModelSelection();
+      return;
+    }
+    _selectedSpec = EngineModelSpec(path: path);
+    _manualSelection = true;
+    _modelSelectionMissing = false;
+    _persistSelection();
+    engineId = engineIdForModelFile(path); // releases the previous instance
+    notifyListeners();
+  }
+
+  EngineModelSpec? _selectedSpec;
+  bool _manualSelection = false;
+  bool _modelSelectionMissing = false;
+
+  /// The spec the transcribe and queue flows load, or null when nothing is
+  /// selected. A catalog bundle keeps its tokens/encoder/decoder here; a
+  /// hand-picked file resolves family/quant from the Settings controls.
+  EngineModelSpec? get modelSpec {
+    final spec = _selectedSpec;
+    if (spec == null) return null;
+    if (!_manualSelection) return spec;
+    return EngineModelSpec(
+      path: spec.path,
+      family: _modelFamily,
+      quant: _modelQuant,
+    );
+  }
+
+  /// True when the persisted selection could not be restored because a file it
+  /// named is gone; the selection is cleared and the UI says so.
+  bool get modelSelectionMissing => _modelSelectionMissing;
+
+  /// True when the selection is a hand-picked file rather than a catalog
+  /// bundle, so family/quant come from the Settings controls.
+  bool get modelSelectionIsManual => _manualSelection && _selectedSpec != null;
+
+  /// Selects a catalog bundle in one step: engine, family, quant and the full
+  /// spec (companions included), all persisted. Refused while a run is active
+  /// so the loaded instance is not swapped out from under it.
+  void selectModel({
+    required EngineModelSpec spec,
+    required String engineId,
+    String? family,
+    String? quant,
+  }) {
+    if (_engineBusy) return;
+    _selectedSpec = spec;
+    _manualSelection = false;
+    _modelSelectionMissing = false;
+    if (family != null && family.isNotEmpty && family != _modelFamily) {
+      _modelFamily = family;
+      _save('model_family', family);
+    }
+    if (quant != null && quant.isNotEmpty && quant != _modelQuant) {
+      _modelQuant = quant;
+      _save('model_quant', quant);
+    }
+    _persistSelection();
+    this.engineId = engineId; // disposes the previous engine instance
+    notifyListeners();
+  }
+
+  /// Forgets the selection — e.g. its bundle was deleted — and notifies the
+  /// pages so they fall back to "no model". Other models are left untouched.
+  void clearModelSelection() {
+    if (_selectedSpec == null && !_modelSelectionMissing) return;
+    _selectedSpec = null;
+    _manualSelection = false;
+    _modelSelectionMissing = false;
+    _save('model_path', '');
+    _save('model_tokens', '');
+    _save('model_encoder', '');
+    _save('model_decoder', '');
+    _save('model_manual', '');
+    notifyListeners();
+  }
+
+  void _persistSelection() {
+    final spec = _selectedSpec!;
+    _save('model_path', spec.path);
+    _save('model_tokens', spec.tokensPath ?? '');
+    _save('model_encoder', spec.encoderPath ?? '');
+    _save('model_decoder', spec.decoderPath ?? '');
+    _save('model_manual', _manualSelection.toString());
+  }
+
+  void _restoreSelection() {
+    final primary = _nonEmpty(database.getSetting('model_path'));
+    if (primary == null) return;
+    final manual = database.getSetting('model_manual') == 'true';
+    final spec = EngineModelSpec(
+      path: primary,
+      family: manual ? null : _modelFamily,
+      quant: manual ? null : _modelQuant,
+      tokensPath: _nonEmpty(database.getSetting('model_tokens')),
+      encoderPath: _nonEmpty(database.getSetting('model_encoder')),
+      decoderPath: _nonEmpty(database.getSetting('model_decoder')),
+    );
+    if (_specFilesExist(spec)) {
+      _selectedSpec = spec;
+      _manualSelection = manual;
+    } else {
+      // A file (or companion) vanished: clear the selection and let the UI
+      // say so instead of handing an engine a path that no longer exists.
+      _modelSelectionMissing = true;
+    }
+  }
+
+  /// True when every file the spec names is still on disk.
+  static bool _specFilesExist(EngineModelSpec spec) {
+    for (final path in [
+      spec.path,
+      spec.tokensPath,
+      spec.encoderPath,
+      spec.decoderPath,
+    ]) {
+      if (path != null && path.isNotEmpty && !File(path).existsSync()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Best-effort engine for a hand-picked file: `.gguf` is CrispASR's format,
+  /// `.onnx`/`.bin` is sherpa-onnx's. Naming the engine here keeps a hand-picked
+  /// file out of the adapter that cannot read its format.
+  static String engineIdForModelFile(String path) =>
+      path.toLowerCase().endsWith('.gguf') ? 'crispasr' : 'sherpa';
+
+  /// True while a transcription owns the loaded engine. The Models page reads
+  /// this to refuse swapping the in-use model mid-run.
+  bool _engineBusy = false;
+  bool get engineBusy => _engineBusy;
+  set engineBusy(bool value) {
+    if (value == _engineBusy) return;
+    _engineBusy = value;
     notifyListeners();
   }
 
@@ -255,12 +400,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// True when the selected engine cannot load the selected family from the one
-  /// path the app stores, because it needs a companion file this build never
-  /// ships: sherpa-onnx whisper needs a separate decoder ONNX. The pages show
-  /// "not supported" and refuse to start instead of failing deep in the engine.
-  bool get selectionNeedsMissingCompanion =>
-      engineId == 'sherpa' && modelFamily == 'whisper';
+  /// True when the selected engine cannot load the selected family, because it
+  /// needs a companion file the selection does not carry: a hand-picked whisper
+  /// encoder with no decoder. A downloaded whisper *bundle* has its decoder, so
+  /// it is not blocked. The pages show "not supported" and refuse to start
+  /// instead of failing deep in the engine.
+  bool get selectionNeedsMissingCompanion {
+    final spec = modelSpec;
+    return engineId == 'sherpa' &&
+        spec != null &&
+        (spec.family ?? '') == 'whisper' &&
+        (spec.decoderPath == null || spec.decoderPath!.isEmpty);
+  }
 
   static String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;

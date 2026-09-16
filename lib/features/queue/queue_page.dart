@@ -20,6 +20,7 @@ class QueuePage extends StatefulWidget {
     required this.engine,
     required this.transcriptRepo,
     this.state,
+    this.service,
   });
 
   final AsrEngine engine;
@@ -27,6 +28,9 @@ class QueuePage extends StatefulWidget {
 
   /// App-wide settings shared with the transcribe page. Null only in tests.
   final AppState? state;
+
+  /// Service seam for tests; production builds one from [engine].
+  final TranscriptionService? service;
 
   @override
   State<QueuePage> createState() => _QueuePageState();
@@ -39,8 +43,17 @@ class _QueuePageState extends State<QueuePage> {
   /// Model path used only when no [AppState] is injected.
   String? _localModelPath;
 
+  /// The full model spec shared with the transcribe page, companions included;
+  /// the local path is only the no-AppState test seam.
+  EngineModelSpec? get _modelSpec {
+    final state = widget.state;
+    if (state != null) return state.modelSpec;
+    final path = _localModelPath;
+    return path == null ? null : EngineModelSpec(path: path);
+  }
+
   /// Shared, persisted model path; a pick in either page updates the same value.
-  String? get _modelPath => widget.state?.modelPath ?? _localModelPath;
+  String? get _modelPath => _modelSpec?.path;
 
   bool get _running => _worker?.running ?? false;
 
@@ -68,25 +81,26 @@ class _QueuePageState extends State<QueuePage> {
 
   Future<void> _run() async {
     if (_running) return; // one worker at a time
-    final modelPath = _modelPath;
-    if (modelPath == null || _needsDecoder) return;
+    final model = _modelSpec;
+    if (model == null || _needsDecoder) return;
     final state = widget.state;
     final worker = QueueWorker(
       _queue,
-      TranscriptionService(engine: widget.engine),
-      EngineModelSpec(
-        path: modelPath,
-        family: state?.modelFamily,
-        quant: state?.modelQuant,
-      ),
+      widget.service ?? TranscriptionService(engine: widget.engine),
+      model,
       transcriptRepo: widget.transcriptRepo,
       chunkSettings: state?.chunkSettings,
       backend: state?.backend ?? Backend.cpu,
     );
     _worker = worker;
+    state?.engineBusy = true; // the Models page must not swap this instance
     setState(() {}); // disable the controls that would change this run
-    await worker.run();
-    if (mounted) setState(() {});
+    try {
+      await worker.run();
+    } finally {
+      state?.engineBusy = false;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _pickModel() async {
@@ -145,7 +159,7 @@ class _QueuePageState extends State<QueuePage> {
                   label: Text(
                     modelPath == null
                         ? l10n.queueChooseModel
-                        : l10n.queueModelReady,
+                        : l10n.queueChangeModel,
                   ),
                 ),
               ),
@@ -158,6 +172,15 @@ class _QueuePageState extends State<QueuePage> {
             child: _Note(
               icon: Icons.warning_amber_rounded,
               text: l10n.modelNeedsDecoder,
+              color: scheme.error,
+            ),
+          )
+        else if (widget.state?.modelSelectionMissing ?? false)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.modelSelectionMissing,
               color: scheme.error,
             ),
           )

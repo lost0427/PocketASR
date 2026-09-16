@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../app/app_state.dart';
 import '../../engine/model_catalog.dart';
 import '../../engine/model_downloader.dart';
 import '../../l10n/app_localizations.dart';
@@ -26,7 +27,13 @@ typedef ModelDownloadRunner =
 /// cannot work. [entries], [store] and [download] are injection seams for
 /// tests, which keep the page off the network and the platform channel.
 class ModelsPage extends StatefulWidget {
-  const ModelsPage({super.key, this.entries, this.store, this.download});
+  const ModelsPage({
+    super.key,
+    this.entries,
+    this.store,
+    this.download,
+    this.state,
+  });
 
   /// Pre-loaded catalog; when null the page reads [modelAllowlistAsset].
   final List<ModelEntry>? entries;
@@ -37,6 +44,11 @@ class ModelsPage extends StatefulWidget {
 
   /// Download implementation; when null the page builds a [ModelDownloader].
   final ModelDownloadRunner? download;
+
+  /// App-wide selection shared with the transcribe and queue pages. Picking a
+  /// bundle here is what those pages then load, so it must be the same object.
+  /// Null only in tests that render the list without a selection.
+  final AppState? state;
 
   @override
   State<ModelsPage> createState() => _ModelsPageState();
@@ -139,11 +151,41 @@ class _ModelsPageState extends State<ModelsPage> {
     if (confirmed != true) return;
 
     await store.delete(entry);
+    // Deleting the selected bundle leaves nothing to run: clear just that
+    // selection (other models keep their files) and let the pages fall back.
+    final state = widget.state;
+    if (state != null && state.modelSpec?.path == store.pathFor(entry)) {
+      state.clearModelSelection();
+    }
     if (mounted) setState(() {});
+  }
+
+  /// Adopts a downloaded bundle as the model the transcribe and queue flows
+  /// load: one call carries engine, family, quant and the full spec, so the
+  /// companions this entry ships reach the engine instead of being dropped.
+  void _use(ModelEntry entry, ModelStore store, AppState state) {
+    if (state.engineBusy) return; // a run owns the loaded instance
+    state.selectModel(
+      spec: store.specFor(entry),
+      engineId: entry.engine ?? state.engineId,
+      family: entry.family,
+      quant: entry.quant,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final content = _buildContent(context);
+    if (state == null) return content;
+    // Rebuild on selection/busy changes even when no ancestor listens.
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
     return FutureBuilder<List<ModelEntry>>(
@@ -190,30 +232,84 @@ class _ModelsPageState extends State<ModelsPage> {
     ModelStore? store,
   ) {
     final runner = _runnerFor(store);
+    final state = widget.state;
+    final scheme = Theme.of(context).colorScheme;
+    final asr = [for (final e in entries) if (e.type != 'embedding') e];
+    final embedding = [for (final e in entries) if (e.type == 'embedding') e];
+
+    Widget tile(ModelEntry entry, {required bool selectable}) {
+      final canSelect =
+          selectable && store != null && state != null && store.isDownloaded(entry);
+      final selected =
+          state != null &&
+          store != null &&
+          store.isDownloaded(entry) &&
+          state.modelSpec?.path == store.pathFor(entry);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _ModelTile(
+          entry: entry,
+          store: store,
+          job: _jobs[entry.id],
+          downloadable: entry.url != null && entry.url!.isNotEmpty,
+          canStart: store != null && runner != null,
+          selectable: canSelect,
+          selected: selected,
+          busy: state?.engineBusy ?? false,
+          onUse: canSelect ? () => _use(entry, store, state) : null,
+          onDownload: (store == null || runner == null)
+              ? null
+              : () => _startDownload(entry, store, runner),
+          onCancel: () => _cancelDownload(entry),
+          onDelete: store == null ? null : () => _delete(entry, store),
+        ),
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
+        if (state?.modelSelectionMissing ?? false) ...[
+          _Notice(
+            icon: Icons.warning_amber_rounded,
+            text: l10n.modelSelectionMissing,
+            color: scheme.error,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (state?.engineBusy ?? false) ...[
+          _Notice(
+            icon: Icons.sync,
+            text: l10n.modelsBusyNote,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+        ],
         _UsageCard(
           label: l10n.modelsTotalUsage,
           value: store == null
               ? l10n.metricUnavailable
               : _formatBytes(store.diskUsageBytes(entries)),
         ),
-        const SizedBox(height: 16),
-        for (final entry in entries) ...[
-          _ModelTile(
-            entry: entry,
-            store: store,
-            job: _jobs[entry.id],
-            downloadable: entry.url != null && entry.url!.isNotEmpty,
-            canStart: store != null && runner != null,
-            onDownload: (store == null || runner == null)
-                ? null
-                : () => _startDownload(entry, store, runner),
-            onCancel: () => _cancelDownload(entry),
-            onDelete: store == null ? null : () => _delete(entry, store),
+        if (asr.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _SectionLabel(l10n.modelsAsrSection),
+          const SizedBox(height: 12),
+          for (final entry in asr) tile(entry, selectable: true),
+        ],
+        if (embedding.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _SectionLabel(l10n.modelsEmbeddingSection),
+          const SizedBox(height: 6),
+          Text(
+            l10n.modelsEmbeddingNote,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 12),
+          for (final entry in embedding) tile(entry, selectable: false),
         ],
       ],
     );
@@ -228,6 +324,60 @@ class _DownloadJob {
   String? error;
 
   bool get isActive => error == null;
+}
+
+/// One-line note above the list: a selection file is gone, or a run is active.
+class _Notice extends StatelessWidget {
+  const _Notice({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: color,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Section heading matching the transcribe/settings labels.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.labelLarge?.copyWith(
+        color: theme.colorScheme.primary,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.4,
+      ),
+    );
+  }
 }
 
 /// Total disk space the downloaded models take.
@@ -288,6 +438,10 @@ class _ModelTile extends StatelessWidget {
     required this.job,
     required this.downloadable,
     required this.canStart,
+    required this.selectable,
+    required this.selected,
+    required this.busy,
+    required this.onUse,
     required this.onDownload,
     required this.onCancel,
     required this.onDelete,
@@ -306,6 +460,16 @@ class _ModelTile extends StatelessWidget {
   /// True when a store and runner exist to actually perform the download.
   final bool canStart;
 
+  /// True when this entry is a downloaded ASR bundle that can be adopted.
+  final bool selectable;
+
+  /// True when this entry is the model the transcribe/queue flows will load.
+  final bool selected;
+
+  /// True while a run owns the loaded instance; selecting is refused then.
+  final bool busy;
+
+  final VoidCallback? onUse;
   final VoidCallback? onDownload;
   final VoidCallback onCancel;
   final VoidCallback? onDelete;
@@ -320,11 +484,14 @@ class _ModelTile extends StatelessWidget {
     final active = job != null && job!.isActive;
 
     // Downloaded entries show what is really on disk; the rest show the
-    // catalog's declared size when it has one, and omit it otherwise.
+    // catalog's declared size when it has one, and omit it otherwise. Engine,
+    // languages and license come straight from the allowlist.
     final size = downloaded ? store!.diskUsageBytes([entry]) : entry.sizeBytes;
     final details = [
+      if (entry.engine != null) entry.engine!,
       if (entry.family != null) entry.family!,
       if (entry.quant != null) entry.quant!,
+      if (entry.languages.isNotEmpty) entry.languages.join('/'),
       if (size != null) _formatBytes(size),
     ];
 
@@ -334,11 +501,6 @@ class _ModelTile extends StatelessWidget {
       active: active,
       downloadable: downloadable,
     );
-    // Downloaded entries can be deleted; entries the allowlist gives no URL
-    // never get a download button, no matter what the runner could do.
-    final action = downloaded
-        ? onDelete
-        : (downloadable ? onDownload : null);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -375,6 +537,15 @@ class _ModelTile extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         details.join(' · '),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (entry.license != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        entry.license!,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -421,21 +592,41 @@ class _ModelTile extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
             ),
           ],
-          if (!active && action != null) ...[
+          if (!active && (selectable || downloaded || downloadable)) ...[
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: downloaded
-                  ? OutlinedButton.icon(
-                      onPressed: action,
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      label: Text(l10n.modelsDelete),
-                    )
-                  : FilledButton.tonalIcon(
-                      onPressed: action,
-                      icon: const Icon(Icons.download_outlined, size: 18),
-                      label: Text(l10n.modelsDownload),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (selectable) ...[
+                  FilledButton.tonalIcon(
+                    onPressed: (selected || busy || onUse == null)
+                        ? null
+                        : onUse,
+                    icon: Icon(
+                      selected ? Icons.check_circle_outline : Icons.play_circle_outline,
+                      size: 18,
                     ),
+                    label: Text(
+                      selected ? l10n.modelsInUse : l10n.modelsUse,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                // Downloaded entries can be deleted; entries the allowlist
+                // gives no URL never get a download button.
+                if (downloaded && onDelete != null)
+                  OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text(l10n.modelsDelete),
+                  )
+                else if (!downloaded && downloadable && onDownload != null)
+                  FilledButton.tonalIcon(
+                    onPressed: onDownload,
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: Text(l10n.modelsDownload),
+                  ),
+              ],
             ),
           ],
         ],

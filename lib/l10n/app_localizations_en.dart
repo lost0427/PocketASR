@@ -109,11 +109,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeChooseModel => 'Choose model file';
 
   @override
+  String get transcribeChangeModel => 'Change model file';
+
+  @override
   String get transcribeModelRequired => 'Choose a model file before starting.';
 
   @override
   String get modelNeedsDecoder =>
       'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.';
+
+  @override
+  String get modelSelectionMissing =>
+      'The model selected last time is no longer on this device. Choose it again.';
 
   @override
   String get metricTokensPerSec => 'tokens/s';
@@ -150,7 +157,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueChooseModel => 'Choose model';
 
   @override
-  String get queueModelReady => 'Model ready';
+  String get queueChangeModel => 'Change model';
 
   @override
   String get queueRun => 'Run queue';
@@ -229,6 +236,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelsNoModels => 'No models available';
 
   @override
+  String get modelsAsrSection => 'Speech models';
+
+  @override
+  String get modelsEmbeddingSection => 'Embedding models';
+
+  @override
+  String get modelsEmbeddingNote =>
+      'Embedding models cannot be used for transcription yet; semantic search lands later.';
+
+  @override
+  String get modelsUse => 'Use';
+
+  @override
+  String get modelsInUse => 'In use';
+
+  @override
+  String get modelsBusyNote =>
+      'A transcription is running. Stop it before switching models.';
+
+  @override
   String get settingsTitle => 'Settings';
 
   @override
@@ -257,6 +284,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsModel => 'Model';
+
+  @override
+  String get settingsActiveModel => 'Active model';
+
+  @override
+  String get settingsActiveModelNone => 'None selected';
+
+  @override
+  String get settingsActiveModelManual =>
+      'Hand-picked file; family and quantization come from the controls below.';
 
   @override
   String get settingsModelFamily => 'Model family';

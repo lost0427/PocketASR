@@ -15,8 +15,10 @@ const List<String> settingsModelFamilies = <String>[
   'parakeet',
 ];
 
-/// Quantization tags the catalog exposes (plan D17).
-const List<String> settingsQuants = <String>['q8_0', 'q4_k', 'q6_k'];
+/// Quantization tags the catalog exposes (plan D17). `int8` is here because the
+/// curated sherpa bundles ship int8, and a selected bundle writes its quant
+/// into [AppState.modelQuant].
+const List<String> settingsQuants = <String>['q8_0', 'q4_k', 'q6_k', 'int8'];
 
 /// Target loudness values in LUFS (plan Phase 3).
 const List<double> settingsLoudnessTargets = <double>[-16, -14, -23];
@@ -169,10 +171,36 @@ class _ModelControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final spec = state.modelSpec;
+    final selectedName = spec == null
+        ? l10n.settingsActiveModelNone
+        : spec.path.split(RegExp(r'[\\/]')).last;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _ControlLabel(l10n.settingsActiveModel),
+        const SizedBox(height: 6),
+        Text(selectedName, style: theme.textTheme.bodyMedium),
+        if (state.modelSelectionMissing) ...[
+          const SizedBox(height: 4),
+          Text(
+            l10n.modelSelectionMissing,
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+          ),
+        ] else if (state.modelSelectionIsManual) ...[
+          const SizedBox(height: 4),
+          Text(
+            l10n.settingsActiveModelManual,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
         _ControlLabel(l10n.settingsModelFamily),
         const SizedBox(height: 10),
         Wrap(

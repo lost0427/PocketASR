@@ -349,4 +349,65 @@ void main() {
     );
     expect(start.onPressed, isNull);
   });
+
+  testWidgets('a whisper bundle with its decoder starts and keeps the spec', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['meeting.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.selectModel(
+      spec: const EngineModelSpec(
+        path: 'enc.onnx',
+        family: 'whisper',
+        tokensPath: 'tok.txt',
+        encoderPath: 'enc.onnx',
+        decoderPath: 'dec.onnx',
+      ),
+      engineId: 'sherpa',
+      family: 'whisper',
+      quant: 'int8',
+    );
+
+    final service = _ScriptedService(const [
+      TranscribeProgress(
+        elapsed: Duration(seconds: 1),
+        ratio: 1,
+        partialText: 'hi',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _app(
+        engine: const _FakeEngine(_availableCaps),
+        state: state,
+        service: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+
+    // The bundle carries its decoder, so it is not blocked.
+    expect(find.textContaining('needs a separate decoder'), findsNothing);
+
+    await tester.tap(find.text('Start transcription'));
+    await tester.pumpAndSettle();
+
+    // The page handed the engine the same companion-complete spec.
+    expect(service.lastModel!.decoderPath, 'dec.onnx');
+    expect(service.lastModel!.tokensPath, 'tok.txt');
+    expect(service.lastModel!.encoderPath, 'enc.onnx');
+    expect(service.lastModel!.family, 'whisper');
+    // The busy flag is released once the run finishes.
+    expect(state.engineBusy, isFalse);
+  });
 }
