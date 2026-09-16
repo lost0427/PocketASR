@@ -113,7 +113,11 @@ class _HomeShellState extends State<HomeShell> {
         navIcon: Icons.history,
         selectedNavIcon: Icons.history,
         label: l10n.navHistory,
-        page: HistoryPage(repo: state.transcriptRepo, search: state.searchRepo),
+        page: HistoryPage(
+          repo: state.transcriptRepo,
+          search: state.searchRepo,
+          indexer: state.indexer,
+        ),
       ),
       _Section(
         navIcon: Icons.layers_outlined,

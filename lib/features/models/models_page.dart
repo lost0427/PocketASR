@@ -237,14 +237,20 @@ class _ModelsPageState extends State<ModelsPage> {
     final asr = [for (final e in entries) if (e.type != 'embedding') e];
     final embedding = [for (final e in entries) if (e.type == 'embedding') e];
 
-    Widget tile(ModelEntry entry, {required bool selectable}) {
+    Widget tile(
+      ModelEntry entry, {
+      required bool selectable,
+      bool embedding = false,
+    }) {
       final canSelect =
           selectable && store != null && state != null && store.isDownloaded(entry);
       final selected =
           state != null &&
           store != null &&
           store.isDownloaded(entry) &&
-          state.modelSpec?.path == store.pathFor(entry);
+          (embedding
+              ? state.embeddingPath == store.pathFor(entry)
+              : state.modelSpec?.path == store.pathFor(entry));
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: _ModelTile(
@@ -256,7 +262,15 @@ class _ModelsPageState extends State<ModelsPage> {
           selectable: canSelect,
           selected: selected,
           busy: state?.engineBusy ?? false,
-          onUse: canSelect ? () => _use(entry, store, state) : null,
+          onUse: canSelect
+              ? () {
+                  if (embedding) {
+                    state.selectEmbedding(path: store.pathFor(entry));
+                  } else {
+                    _use(entry, store, state);
+                  }
+                }
+              : null,
           onDownload: (store == null || runner == null)
               ? null
               : () => _startDownload(entry, store, runner),
@@ -285,6 +299,15 @@ class _ModelsPageState extends State<ModelsPage> {
           ),
           const SizedBox(height: 12),
         ],
+        if ((state?.embeddingPath ?? '').isNotEmpty &&
+            !(state?.embeddingReady ?? false)) ...[
+          _Notice(
+            icon: Icons.warning_amber_rounded,
+            text: '${l10n.modelsEmbeddingError} ${state!.embeddingError ?? ''}',
+            color: scheme.error,
+          ),
+          const SizedBox(height: 12),
+        ],
         _UsageCard(
           label: l10n.modelsTotalUsage,
           value: store == null
@@ -309,7 +332,7 @@ class _ModelsPageState extends State<ModelsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          for (final entry in embedding) tile(entry, selectable: false),
+          for (final entry in embedding) tile(entry, selectable: true, embedding: true),
         ],
       ],
     );

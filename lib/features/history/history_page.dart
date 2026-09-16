@@ -2,20 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/search_repo.dart';
+import '../../data/semantic_indexer.dart';
 import '../../data/transcript_repo.dart';
 import '../../l10n/app_localizations.dart';
 
-/// History tab: local transcripts, literal search, and the trash flow.
+/// How the query is matched. Semantic and hybrid need a loaded [embedder].
+enum SearchMode { literal, semantic, hybrid }
+
+/// History tab: local transcripts, search, and the trash flow.
 ///
 /// Listens to [TranscriptRepo]'s ChangeNotifier, so a transcript saved by the
 /// transcribe or queue page appears here without a manual refresh. The trash
 /// scope searches the trash *alone* ([SearchRepo.searchLiteral] `onlyTrash`),
 /// and permanent deletion is confirmed before a row is erased.
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key, required this.repo, required this.search});
+  const HistoryPage({
+    super.key,
+    required this.repo,
+    required this.search,
+    this.indexer,
+  });
 
   final TranscriptRepo repo;
   final SearchRepo search;
+
+  /// The semantic indexer, when an embedding model is loaded. Drives the
+  /// indexing status row and its retry/rebuild actions.
+  final SemanticIndexer? indexer;
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -24,7 +37,10 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   final _query = TextEditingController();
   bool _trash = false;
+  SearchMode _mode = SearchMode.literal;
   List<Transcript> _rows = const [];
+
+  bool get _hasEmbedder => widget.search.embedder != null;
 
   @override
   void initState() {
@@ -41,6 +57,12 @@ class _HistoryPageState extends State<HistoryPage> {
     if (!identical(widget.repo, oldWidget.repo)) {
       oldWidget.repo.removeListener(_onRepoChanged);
       widget.repo.addListener(_onRepoChanged);
+      _reload();
+    } else if (!identical(widget.search, oldWidget.search)) {
+      // The embedder changed: a semantic/hybrid mode may no longer be valid.
+      if (!_hasEmbedder && _mode != SearchMode.literal) {
+        _mode = SearchMode.literal;
+      }
       _reload();
     }
   }
@@ -59,11 +81,77 @@ class _HistoryPageState extends State<HistoryPage> {
 
   void _reload() {
     final query = _query.text.trim();
+    final mode = _hasEmbedder ? _mode : SearchMode.literal;
     setState(() {
-      _rows = query.isEmpty
-          ? (_trash ? widget.repo.listTrash() : widget.repo.list())
-          : widget.search.searchLiteral(query, onlyTrash: _trash);
+      if (query.isEmpty) {
+        _rows = _trash ? widget.repo.listTrash() : widget.repo.list();
+        return;
+      }
+      _rows = switch (mode) {
+        SearchMode.literal =>
+          widget.search.searchLiteral(query, onlyTrash: _trash),
+        SearchMode.semantic =>
+          widget.search.searchSemantic(query, onlyTrash: _trash),
+        SearchMode.hybrid =>
+          widget.search.searchHybrid(query, onlyTrash: _trash),
+      };
     });
+  }
+
+  /// Compact status row for the semantic indexer: a live phase, its error, and
+  /// the retry/rebuild actions. Nothing here invents progress.
+  Widget _indexStatus(AppLocalizations l10n) {
+    final indexer = widget.indexer!;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return ValueListenableBuilder<SemanticIndexPhase>(
+      valueListenable: indexer.phase,
+      builder: (context, phase, _) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              if (phase == SemanticIndexPhase.running) ...[
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.historyIndexing,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ] else if (phase == SemanticIndexPhase.failed) ...[
+                Icon(Icons.error_outline, size: 16, color: scheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${l10n.historyIndexFailed}: ${indexer.lastError ?? ''}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.error,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: indexer.indexPending,
+                  child: Text(l10n.historyIndexRetry),
+                ),
+              ],
+              const Spacer(),
+              TextButton(
+                onPressed: indexer.rebuild,
+                child: Text(l10n.historyIndexRebuild),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _copy(Transcript row) async {
@@ -158,29 +246,73 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(
-                    value: false,
-                    label: Text(l10n.historyScopeHistory),
+              Row(
+                children: [
+                  SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(
+                        value: false,
+                        label: Text(l10n.historyScopeHistory),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        label: Text(l10n.historyScopeTrash),
+                      ),
+                    ],
+                    selected: {_trash},
+                    onSelectionChanged: (selection) {
+                      setState(() => _trash = selection.first);
+                      _reload();
+                    },
                   ),
-                  ButtonSegment(
-                    value: true,
-                    label: Text(l10n.historyScopeTrash),
+                  const Spacer(),
+                  Text('${_rows.length}', style: theme.textTheme.labelMedium),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  SegmentedButton<SearchMode>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(
+                        value: SearchMode.literal,
+                        label: Text(l10n.historySearchLiteral),
+                      ),
+                      ButtonSegment(
+                        value: SearchMode.semantic,
+                        enabled: _hasEmbedder,
+                        label: Text(l10n.historySearchSemantic),
+                      ),
+                      ButtonSegment(
+                        value: SearchMode.hybrid,
+                        enabled: _hasEmbedder,
+                        label: Text(l10n.historySearchHybrid),
+                      ),
+                    ],
+                    selected: {_mode},
+                    onSelectionChanged: (selection) {
+                      setState(() => _mode = selection.first);
+                      _reload();
+                    },
                   ),
                 ],
-                selected: {_trash},
-                onSelectionChanged: (selection) {
-                  setState(() => _trash = selection.first);
-                  _reload();
-                },
               ),
-              const Spacer(),
-              Text('${_rows.length}',
-                  style: theme.textTheme.labelMedium),
+              if (!_hasEmbedder)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    l10n.historySearchSemanticOff,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              if (widget.indexer != null) _indexStatus(l10n),
             ],
           ),
         ),

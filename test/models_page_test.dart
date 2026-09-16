@@ -199,7 +199,7 @@ void main() {
     expect(find.text('In use'), findsOneWidget);
   });
 
-  testWidgets('embedding bundles are listed apart and cannot be used as ASR', (
+  testWidgets('embedding bundles are selected for search, not transcription', (
     tester,
   ) async {
     const asr = ModelEntry(
@@ -226,13 +226,27 @@ void main() {
 
     expect(find.text('Speech models'), findsOneWidget);
     expect(find.text('Embedding models'), findsOneWidget);
-    // Only the ASR entry can be adopted.
-    expect(find.text('Use'), findsOneWidget);
+    // Both kinds can be adopted now: ASR for transcription, embedding for
+    // semantic search.
+    expect(find.text('Use'), findsNWidgets(2));
 
+    // The embedding bundle becomes the semantic model, never the ASR model.
+    await tester.tap(find.text('Use').last);
+    await tester.pumpAndSettle();
+    expect(state.embeddingPath, store.pathFor(embedding));
+    expect(state.modelPath, isNull);
+    // This build has no native CrispEmbed library: the page says so rather
+    // than silently falling back to the deterministic test embedder.
+    expect(state.embeddingReady, isFalse);
+    expect(
+      find.textContaining('Could not load the embedding model'),
+      findsOneWidget,
+    );
+
+    // The ASR bundle still selects for transcription.
     await tester.tap(find.text('Use'));
     await tester.pumpAndSettle();
     expect(state.modelPath, store.pathFor(asr));
-    expect(state.modelPath, isNot(store.pathFor(embedding)));
   });
 
   testWidgets('deleting the selected bundle clears the selection only', (

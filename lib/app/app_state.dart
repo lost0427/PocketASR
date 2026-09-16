@@ -1,13 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../core/audio/chunk_planner.dart';
 import '../engine/asr_engine.dart' show AsrEngine, Backend, EngineModelSpec;
+import '../engine/crisp_embedder.dart';
+import '../engine/embedder.dart';
 import '../engine/engine_registry.dart';
 import '../data/db.dart';
 import '../data/search_repo.dart';
+import '../data/semantic_indexer.dart';
 import '../data/transcript_repo.dart';
+
+/// Builds the [Embedder] for a selected embedding model path. Production uses
+/// [CrispEmbedder]; tests inject a fake so no native library is needed. A
+/// failure must throw [EmbedderUnavailableException] — never fall back to
+/// [DeterministicEmbedder], which would fake semantic meaning.
+typedef EmbedderFactory = Embedder Function(String modelPath);
 
 /// App-wide settings.
 ///
@@ -17,13 +27,27 @@ import '../data/transcript_repo.dart';
 /// except [threads] is stored in the sqlite `settings` table and restored on
 /// start; anything unparseable or out of range falls back to the default.
 class AppState extends ChangeNotifier {
-  AppState({AppDatabase? database}) : database = database ?? AppDatabase.open() {
+  AppState({
+    AppDatabase? database,
+    EmbedderFactory? embedderFactory,
+  }) : database = database ?? AppDatabase.open(),
+       _embedderFactory = embedderFactory ?? _crispEmbedder {
     _loadSettings();
   }
 
+  static Embedder _crispEmbedder(String modelPath) =>
+      CrispEmbedder(modelPath: modelPath);
+
   final AppDatabase database;
+  final EmbedderFactory _embedderFactory;
   late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
-  late final SearchRepo searchRepo = SearchRepo(database);
+
+  SearchRepo? _searchRepo;
+
+  /// Read-side search over stored transcripts. Rebuilt when an embedding model
+  /// is selected (or cleared), so its [Embedder] is always the live one.
+  SearchRepo get searchRepo =>
+      _searchRepo ??= SearchRepo(database, embedder: _embedder);
 
   void _loadSettings() {
     final mode = database.getSetting('theme_mode');
@@ -57,6 +81,7 @@ class AppState extends ChangeNotifier {
       maxSpeechPadMs,
       defaultChunkSettings.speechPadMs,
     );
+    _restoreEmbedding();
   }
 
   void _save(String key, String value) => database.setSetting(key, value);
@@ -441,6 +466,105 @@ class AppState extends ChangeNotifier {
   static String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;
 
+  // ---------------------------------------------------------------------------
+  // Semantic search (embedding model + indexer)
+  // ---------------------------------------------------------------------------
+
+  Embedder? _embedder;
+  SemanticIndexer? _indexer;
+  String? _embeddingPath;
+  String? _embeddingError;
+
+  /// The live embedding model, or null when none is selected/loaded.
+  Embedder? get embedder => _embedder;
+
+  /// The persisted embedding model path, even when the model could not be
+  /// loaded on this build (the Models page shows it and explains why).
+  String? get embeddingPath => _embeddingPath;
+
+  /// True when a selected embedding model is really loaded and searchable.
+  bool get embeddingReady => _embedder != null;
+
+  /// Why the selected embedding model could not be loaded, or null.
+  String? get embeddingError => _embeddingError;
+
+  /// The write-side semantic indexer, or null until a model is loaded. History
+  /// binds to its phase for status/retry/rebuild.
+  SemanticIndexer? get indexer => _indexer;
+
+  /// Selects a downloaded embedding bundle as the semantic model and persists
+  /// the choice. Construction failure (missing native library/model) is kept as
+  /// [embeddingError] and never replaced with the deterministic test embedder.
+  void selectEmbedding({required String path}) {
+    if (!_disposed) {
+      _embeddingPath = path;
+      _save('embedding_path', path);
+      _rebuildEmbedding();
+      notifyListeners();
+    }
+  }
+
+  /// Forgets the embedding model: search falls back to literal only.
+  void clearEmbedding() {
+    if (_disposed) return;
+    _embeddingPath = null;
+    _save('embedding_path', '');
+    _rebuildEmbedding();
+    notifyListeners();
+  }
+
+  /// Backfills vectors for every live transcript this model has no vector for.
+  Future<void> indexPending() async => _indexer?.indexPending();
+
+  /// Re-indexes this model from scratch.
+  Future<void> rebuildIndex() async => _indexer?.rebuild();
+
+  void _restoreEmbedding() {
+    final path = _nonEmpty(database.getSetting('embedding_path'));
+    if (path == null) return;
+    _embeddingPath = path;
+    _rebuildEmbedding();
+  }
+
+  /// Drops the current embedder/indexer and rebuilds them from
+  /// [_embeddingPath]. Any construction failure is state, not a fallback.
+  void _rebuildEmbedding() {
+    transcriptRepo.removeListener(_onTranscriptChanged);
+    _indexer?.dispose();
+    _indexer = null;
+    _embedder?.dispose();
+    _embedder = null;
+    _searchRepo = null; // rebuilt lazily with the new embedder
+    _embeddingError = null;
+
+    final path = _embeddingPath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final embedder = _embedderFactory(path);
+      _embedder = embedder;
+      final indexer = SemanticIndexer(database, embedder: embedder);
+      _indexer = indexer;
+      // Every repo mutation (a new transcript, a restore) triggers a pending
+      // pass; indexPending is idempotent, so a spurious run costs one SELECT.
+      transcriptRepo.addListener(_onTranscriptChanged);
+      _searchRepo = SearchRepo(database, embedder: embedder);
+      // Backfill rows that were stored before the model was chosen.
+      unawaited(indexer.indexPending());
+    } on Object catch (error) {
+      _embeddingError = error.toString();
+    }
+  }
+
+  /// Bridges [TranscriptRepo]'s notification to a pending indexing pass,
+  /// ignoring anything after [dispose].
+  void _onTranscriptChanged() {
+    if (_disposed) return;
+    final indexer = _indexer;
+    if (indexer != null) unawaited(indexer.indexPending());
+  }
+
+  bool _disposed = false;
+
   static ChunkMode _chunkModeFrom(String? raw) => ChunkMode.values.any(
     (mode) => mode.name == raw,
   )
@@ -473,6 +597,14 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    transcriptRepo.removeListener(_onTranscriptChanged);
+    // ponytail: an indexing job still in flight can touch the closed database
+    // and then a disposed phase notifier; teardown only, the job's error is
+    // already swallowed by SemanticIndexer._enqueue. Add a cancel hook there
+    // if a mid-teardown index run ever becomes visible.
+    _indexer?.dispose();
+    _embedder?.dispose();
     _engine?.dispose();
     database.close();
     super.dispose();

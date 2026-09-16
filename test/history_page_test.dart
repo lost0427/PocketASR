@@ -1,11 +1,40 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/data/search_repo.dart';
+import 'package:pocket_asr/data/semantic_indexer.dart';
 import 'package:pocket_asr/data/transcript_repo.dart';
+import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/features/history/history_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
+
+/// Records the query texts it is asked to embed; no native library needed.
+class _QueryEmbedder implements Embedder {
+  @override
+  final String id = 'fake-embedder';
+  @override
+  final int dim = 2;
+
+  final List<String> queries = [];
+
+  @override
+  Float32List embed(String text) => Float32List.fromList([1, 0]);
+
+  @override
+  Float32List embedDocument(String text) => Float32List.fromList([1, 0]);
+
+  @override
+  Float32List embedQuery(String text) {
+    queries.add(text);
+    return Float32List.fromList([1, 0]);
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
 
 void main() {
   late AppDatabase db;
@@ -23,12 +52,22 @@ void main() {
     db.close();
   });
 
-  Future<void> pumpHistory(WidgetTester tester) async {
+  Future<void> pumpHistory(
+    WidgetTester tester, {
+    SearchRepo? searchRepo,
+    SemanticIndexer? indexer,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: HistoryPage(repo: repo, search: search)),
+        home: Scaffold(
+          body: HistoryPage(
+            repo: repo,
+            search: searchRepo ?? search,
+            indexer: indexer,
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -161,5 +200,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Trash is empty'), findsOneWidget);
     expect(repo.list(), hasLength(1));
+  });
+
+  testWidgets('semantic mode really embeds the query through the repo', (
+    tester,
+  ) async {
+    final embedder = _QueryEmbedder();
+    final indexer = SemanticIndexer(db, embedder: embedder);
+    addTearDown(indexer.dispose);
+    final semanticSearch = SearchRepo(db, embedder: embedder);
+
+    repo.insert(title: 'WiFi', text: 'connect to the wifi network');
+    // Indexing yields on a real timer, which the widget-test clock does not
+    // advance; run it outside the fake-async zone.
+    await tester.runAsync(() => indexer.indexPending());
+    await pumpHistory(
+      tester,
+      searchRepo: semanticSearch,
+      indexer: indexer,
+    );
+
+    // The indexing status row offers a rebuild seam.
+    expect(find.text('Rebuild index'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'wifi network');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Semantic'));
+    await tester.pumpAndSettle();
+
+    expect(embedder.queries, ['wifi network']); // the real search seam
+    expect(find.text('WiFi'), findsOneWidget);
+  });
+
+  testWidgets('semantic modes are disabled and explained without an embedder', (
+    tester,
+  ) async {
+    await pumpHistory(tester);
+
+    expect(
+      find.text('Select a downloaded embedding model to enable semantic search.'),
+      findsOneWidget,
+    );
+    // Literal-only still works; the semantic segment cannot be selected.
+    expect(find.text('Literal'), findsOneWidget);
+    expect(find.text('Rebuild index'), findsNothing);
   });
 }

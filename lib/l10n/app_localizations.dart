@@ -578,6 +578,54 @@ abstract class AppLocalizations {
   /// **'Audio'**
   String get historyDetailAudio;
 
+  /// No description provided for @historySearchLiteral.
+  ///
+  /// In en, this message translates to:
+  /// **'Literal'**
+  String get historySearchLiteral;
+
+  /// No description provided for @historySearchSemantic.
+  ///
+  /// In en, this message translates to:
+  /// **'Semantic'**
+  String get historySearchSemantic;
+
+  /// No description provided for @historySearchHybrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Hybrid'**
+  String get historySearchHybrid;
+
+  /// No description provided for @historySearchSemanticOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a downloaded embedding model to enable semantic search.'**
+  String get historySearchSemanticOff;
+
+  /// No description provided for @historyIndexing.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexing transcripts…'**
+  String get historyIndexing;
+
+  /// No description provided for @historyIndexFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexing failed'**
+  String get historyIndexFailed;
+
+  /// No description provided for @historyIndexRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get historyIndexRetry;
+
+  /// No description provided for @historyIndexRebuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Rebuild index'**
+  String get historyIndexRebuild;
+
   /// No description provided for @modelsTitle.
   ///
   /// In en, this message translates to:
@@ -677,8 +725,14 @@ abstract class AppLocalizations {
   /// No description provided for @modelsEmbeddingNote.
   ///
   /// In en, this message translates to:
-  /// **'Embedding models cannot be used for transcription yet; semantic search lands later.'**
+  /// **'Embedding models power semantic search in History. They cannot transcribe audio.'**
   String get modelsEmbeddingNote;
+
+  /// No description provided for @modelsEmbeddingError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the embedding model:'**
+  String get modelsEmbeddingError;
 
   /// No description provided for @modelsUse.
   ///

@@ -259,6 +259,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyDetailAudio => 'Audio';
 
   @override
+  String get historySearchLiteral => 'Literal';
+
+  @override
+  String get historySearchSemantic => 'Semantic';
+
+  @override
+  String get historySearchHybrid => 'Hybrid';
+
+  @override
+  String get historySearchSemanticOff =>
+      'Select a downloaded embedding model to enable semantic search.';
+
+  @override
+  String get historyIndexing => 'Indexing transcripts…';
+
+  @override
+  String get historyIndexFailed => 'Indexing failed';
+
+  @override
+  String get historyIndexRetry => 'Retry';
+
+  @override
+  String get historyIndexRebuild => 'Rebuild index';
+
+  @override
   String get modelsTitle => 'Models';
 
   @override
@@ -311,7 +336,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modelsEmbeddingNote =>
-      'Embedding models cannot be used for transcription yet; semantic search lands later.';
+      'Embedding models power semantic search in History. They cannot transcribe audio.';
+
+  @override
+  String get modelsEmbeddingError => 'Could not load the embedding model:';
 
   @override
   String get modelsUse => 'Use';

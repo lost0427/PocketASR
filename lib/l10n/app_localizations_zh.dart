@@ -252,6 +252,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyDetailAudio => '音频';
 
   @override
+  String get historySearchLiteral => '字面';
+
+  @override
+  String get historySearchSemantic => '语义';
+
+  @override
+  String get historySearchHybrid => '混合';
+
+  @override
+  String get historySearchSemanticOff => '选择已下载的向量模型后即可使用语义检索。';
+
+  @override
+  String get historyIndexing => '正在建立索引…';
+
+  @override
+  String get historyIndexFailed => '索引失败';
+
+  @override
+  String get historyIndexRetry => '重试';
+
+  @override
+  String get historyIndexRebuild => '重建索引';
+
+  @override
   String get modelsTitle => '模型';
 
   @override
@@ -302,7 +326,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelsEmbeddingSection => '向量模型';
 
   @override
-  String get modelsEmbeddingNote => '向量模型暂不能用于转录，语义检索后续接入。';
+  String get modelsEmbeddingNote => '向量模型用于历史页的语义检索，不能用于转录。';
+
+  @override
+  String get modelsEmbeddingError => '无法加载向量模型：';
 
   @override
   String get modelsUse => '使用';
