@@ -113,19 +113,41 @@ class AppState extends ChangeNotifier {
   set engineId(String value) {
     if (value == _engineId) return;
     _engineId = value;
-    final previous = _engine;
-    _engine = null; // rebuild lazily for the new id
+    _invalidateEngine(); // rebuild lazily for the new id
     _save('engine_id', value);
-    previous?.dispose(); // release the old adapter's native session
     notifyListeners();
   }
 
   AsrEngine? _engine;
 
-  /// The selected [AsrEngine], built once per [engineId] so native probes are
-  /// not repeated on every widget rebuild. Whether it can actually run is a
-  /// runtime fact the UI reads from `engine.capabilities()`.
-  AsrEngine get engine => _engine ??= engineRegistry.createAsr(_engineId);
+  /// True when a settings change (thread count) invalidated [_engine] while a
+  /// run still owned it; the next access rebuilds once the run has ended.
+  bool _engineNeedsRebuild = false;
+
+  /// The selected [AsrEngine], built once per [engineId]/thread count so native
+  /// probes are not repeated on every widget rebuild. Whether it can actually
+  /// run is a runtime fact the UI reads from `engine.capabilities()`.
+  AsrEngine get engine {
+    if (_engine != null && _engineNeedsRebuild && !_engineBusy) {
+      _engine!.dispose();
+      _engine = null;
+      _engineNeedsRebuild = false;
+    }
+    return _engine ??= engineRegistry.createAsr(_engineId, threads: _threads);
+  }
+
+  /// Drops the cached engine so [engine] rebuilds with fresh settings. While a
+  /// run owns the instance the swap waits for [engineBusy] to clear; the native
+  /// session in use is never disposed out from under the worker.
+  void _invalidateEngine() {
+    if (_engineBusy) {
+      _engineNeedsRebuild = true;
+    } else {
+      _engine?.dispose();
+      _engine = null;
+      _engineNeedsRebuild = false;
+    }
+  }
 
   /// Compute backend. Fixed to CPU for the first release (decision D17); kept
   /// as state so a picker can be added later without touching callers.
@@ -137,13 +159,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Worker threads for the CPU path. Defaults to half the cores.
+  /// Worker threads for the CPU path. Defaults to half the cores. Changing it
+  /// rebuilds the worker-backed engine with the new count (through the existing
+  /// [WorkerAsrEngine] factories) once no run owns the current instance.
   int _threads = _defaultThreads();
   int get threads => _threads;
   set threads(int value) {
     final capped = value < 1 ? 1 : (value > maxThreads ? maxThreads : value);
     if (capped == _threads) return;
     _threads = capped;
+    _invalidateEngine();
     notifyListeners();
   }
 

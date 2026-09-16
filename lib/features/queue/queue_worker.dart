@@ -4,6 +4,13 @@ import '../../data/transcript_repo.dart';
 import '../transcribe/transcription_service.dart';
 import 'transcription_queue.dart';
 
+/// Runs a [TranscriptionQueue] through one service, one job at a time.
+///
+/// Cancellation is cooperative and owned by the page that started the run: it
+/// flips the job to [TranscriptionJobStatus.cancelling] and, when the engine is
+/// a [CancellableAsrEngine], asks it to `cancel()`. This worker only polls
+/// [isCancelling] through the service so the abort lands at the next chunk
+/// boundary, and it never persists a cancelled job's text.
 class QueueWorker {
   QueueWorker(
     this.queue,
@@ -31,16 +38,27 @@ class QueueWorker {
     if (_running) return;
     _running = true;
     try {
-      while (queue.hasPending) {
+      // Claim until nothing is pending: a job cancelled while queued is never
+      // claimed, and a job cancelled mid-run is drained as cancelled.
+      while (true) {
         final job = queue.claimNext();
         if (job == null) break;
+        final id = job.id;
         try {
           final result = await service.transcribe(
             audioPath: job.audioPath,
             model: model,
             backend: backend,
             chunkSettings: chunkSettings,
+            isCancelled: () => queue.isCancelling(id),
           );
+          // A cancel that landed after the engine returned: discard the text
+          // (a cancelled job must not be persisted as a success) and report it
+          // as cancelled.
+          if (queue.isCancelling(id)) {
+            queue.markCancelled(id);
+            continue;
+          }
           transcriptRepo?.insert(
             title: job.audioPath.split(RegExp(r'[\\/]')).last,
             text: result.text,
@@ -54,9 +72,16 @@ class QueueWorker {
             totalMs: result.elapsed.inMilliseconds,
             avgTokensPerSec: result.avgTokensPerSec,
           );
-          queue.complete(job.id);
+          queue.complete(id);
+        } on EngineCancelledException {
+          // Requested cancellation, surfaced when the native call returned.
+          queue.markCancelled(id);
         } catch (error) {
-          queue.fail(job.id, error.toString());
+          if (queue.isCancelling(id)) {
+            queue.markCancelled(id);
+          } else {
+            queue.fail(id, error.toString());
+          }
         }
       }
     } finally {

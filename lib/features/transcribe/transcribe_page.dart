@@ -145,6 +145,7 @@ class _TranscribePageState extends State<TranscribePage> {
   Future<void> _start() async {
     final l10n = AppLocalizations.of(context);
     final state = widget.state;
+    if (state?.engineBusy ?? false) return; // another page owns the engine
     final model = _modelSpec;
     if (_filePath == null || model == null) {
       _notify(l10n.transcribeModelRequired);
@@ -258,6 +259,17 @@ class _TranscribePageState extends State<TranscribePage> {
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    if (state == null) return _build(context);
+    // Rebuild when the shared "engine busy" flag flips, so a run started on
+    // the queue page disables this page's Start too.
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -271,6 +283,9 @@ class _TranscribePageState extends State<TranscribePage> {
         final modelPath = _modelPath;
         final needsDecoder =
             widget.state?.selectionNeedsMissingCompanion ?? false;
+        // Another page's run owns the shared engine; this one must not start.
+        final busyElsewhere =
+            (widget.state?.engineBusy ?? false) && !running;
         // Nothing starts without a model file, and a selection the engine cannot
         // load (whisper without its decoder) is refused up front.
         final canStart =
@@ -278,6 +293,7 @@ class _TranscribePageState extends State<TranscribePage> {
             _fileName != null &&
             modelPath != null &&
             !running &&
+            !busyElsewhere &&
             !needsDecoder;
         final hasResult = _result.isNotEmpty;
         // While running the panel echoes the engine's own partial text; it is
@@ -377,6 +393,13 @@ class _TranscribePageState extends State<TranscribePage> {
                     _Hint(
                       icon: Icons.info_outline,
                       text: l10n.transcribeModelRequired,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ] else if (busyElsewhere) ...[
+                    const SizedBox(height: 12),
+                    _Hint(
+                      icon: Icons.sync,
+                      text: l10n.engineBusyNote,
                       color: scheme.onSurfaceVariant,
                     ),
                   ],

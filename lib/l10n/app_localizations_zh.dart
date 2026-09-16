@@ -171,6 +171,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get queueStatusRunning => '运行中';
 
   @override
+  String get queueStatusCancelling => '正在取消';
+
+  @override
   String get queueStatusDone => '已完成';
 
   @override
@@ -178,6 +181,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get queueStatusCancelled => '已取消';
+
+  @override
+  String get queueCancel => '取消';
+
+  @override
+  String get queueRetry => '重试';
+
+  @override
+  String get queueRemove => '移除';
+
+  @override
+  String get queueMoveUp => '上移';
+
+  @override
+  String get queueMoveDown => '下移';
+
+  @override
+  String get engineBusyNote => '正在执行另一项转录，请等待其完成。';
 
   @override
   String get historyTitle => '历史';

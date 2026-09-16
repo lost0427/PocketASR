@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -109,4 +111,193 @@ void main() {
     // The busy flag is released once the queue drains.
     expect(state.engineBusy, isFalse);
   });
+
+  testWidgets('adding the same path twice keeps two separate jobs', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var openCount = 0;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') {
+        openCount++;
+        return ['same.wav'];
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(_host(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add audio'));
+    await tester.pumpAndSettle();
+
+    expect(openCount, 2);
+    expect(find.text('same.wav'), findsNWidgets(2)); // not shadowed by one id
+  });
+
+  testWidgets('reorder moves a queued job and remove drops it', (tester) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['a.wav', 'b.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(_host(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add audio'));
+    await tester.pumpAndSettle();
+
+    // Second row's "move up" swaps the two titles.
+    await tester.tap(find.byTooltip('Move up').at(1));
+    await tester.pumpAndSettle();
+    final titles = tester
+        .widgetList<Text>(find.descendant(
+          of: find.byType(ListTile),
+          matching: find.byType(Text),
+        ))
+        .map((t) => t.data)
+        .toList();
+    expect(titles.indexOf('a.wav'), greaterThan(titles.indexOf('b.wav')));
+
+    // Remove the first remaining row; only one title is left.
+    await tester.tap(find.byTooltip('Remove').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('a.wav').evaluate().length + find.text('b.wav').evaluate().length,
+      1,
+    );
+  });
+
+  testWidgets('cancelling the running job asks a cancellable engine to stop', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['a.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final engine = _CancellableFakeEngine();
+    final service = _BlockingService();
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.modelPath = 'm.onnx'; // a run needs a model to start
+
+    await tester.pumpWidget(
+      _host(state: state, engine: engine, service: service),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run queue'));
+    await tester.pump();
+
+    // The page really asked the engine to abort (the cooperative seam).
+    await tester.tap(find.byTooltip('Cancel'));
+    await tester.pumpAndSettle();
+    expect(engine.cancelCalls, 1);
+    expect(find.text('Cancelled'), findsOneWidget);
+    expect(state.engineBusy, isFalse);
+  });
+
+  testWidgets('another page\'s run disables this one', (tester) async {
+    final state = AppState()..engineBusy = true;
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(_host(state: state));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Another transcription is running. Wait for it to finish first.'),
+      findsOneWidget,
+    );
+    final run = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Run queue'),
+    );
+    expect(run.onPressed, isNull);
+  });
+}
+
+Widget _host({
+  required AppState state,
+  AsrEngine engine = const UnavailableAsrEngine(),
+  TranscriptionService? service,
+}) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: QueuePage(
+      engine: engine,
+      transcriptRepo: TranscriptRepo(AppDatabase.open()),
+      state: state,
+      service: service,
+    ),
+  ),
+);
+
+/// Cancellable engine seam: records [cancel] calls without native work.
+class _CancellableFakeEngine implements CancellableAsrEngine {
+  int cancelCalls = 0;
+
+  @override
+  String get id => 'fake';
+
+  @override
+  Future<void> cancel() async => cancelCalls++;
+
+  @override
+  Future<List<Backend>> availableBackends() async => const [Backend.cpu];
+
+  @override
+  Future<EngineCapabilities> capabilities() async =>
+      const EngineCapabilities(available: true, backends: {Backend.cpu});
+
+  @override
+  Future<void> load(EngineModelSpec spec, Backend backend) async {}
+
+  @override
+  Stream<TranscribeProgress> transcribe(TranscribeRequest request) =>
+      const Stream<TranscribeProgress>.empty();
+
+  @override
+  Future<VadPlan> planVad(TranscribeRequest request) async =>
+      const VadPlan.empty();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// Blocks like a native call and throws once [isCancelled] flips.
+class _BlockingService extends TranscriptionService {
+  _BlockingService() : super(engine: const UnavailableAsrEngine());
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    while (!(isCancelled?.call() ?? false)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    throw const EngineCancelledException('stopped between chunks');
+  }
 }

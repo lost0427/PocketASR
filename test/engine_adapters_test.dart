@@ -52,6 +52,23 @@ void main() {
       expect(engine, isA<UnavailableAsrEngine>());
       expect((engine as UnavailableAsrEngine).reason, 'override');
     });
+
+    test('threads configure the built-in worker engines; overrides still win', () {
+      // The count is passed to WorkerAsrEngine's factory, which keeps it inside
+      // the worker isolate (not inspectable here); the seam is that the built-in
+      // is still a WorkerAsrEngine and a caller override is not bypassed.
+      final registry = EngineRegistry();
+      expect(registry.createAsr('sherpa', threads: 2), isA<WorkerAsrEngine>());
+      expect(registry.createAsr('crispasr', threads: 1), isA<WorkerAsrEngine>());
+
+      final overridden = EngineRegistry(
+        asrBuilders: {'sherpa': () => const UnavailableAsrEngine()},
+      );
+      expect(
+        overridden.createAsr('sherpa', threads: 2),
+        isA<UnavailableAsrEngine>(),
+      );
+    });
   });
 
   group('AppState engine selection', () {
@@ -82,6 +99,31 @@ void main() {
 
       state.engineId = 'nope';
       expect(() => state.engine, throwsArgumentError);
+    });
+
+    test('changing threads rebuilds the worker engine', () {
+      final state = AppState();
+      addTearDown(state.dispose);
+
+      final first = state.engine;
+      state.threads = 1;
+      final second = state.engine;
+      expect(identical(second, first), isFalse);
+      expect(second, isA<WorkerAsrEngine>());
+    });
+
+    test('a thread change waits while a run owns the engine', () {
+      final state = AppState()..engineBusy = true;
+      addTearDown(state.dispose);
+
+      final first = state.engine;
+      state.threads = 1;
+      // Still the same instance while busy: the native session in use is not
+      // disposed out from under the worker.
+      expect(identical(state.engine, first), isTrue);
+
+      state.engineBusy = false;
+      expect(identical(state.engine, first), isFalse); // rebuilt after the run
     });
   });
 

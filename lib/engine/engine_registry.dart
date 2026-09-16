@@ -24,7 +24,8 @@ class EngineRegistry {
   EngineRegistry({
     Map<String, AsrEngineBuilder>? asrBuilders,
     Map<String, EmbedderBuilder>? embedderBuilders,
-  }) : _asrBuilders = {..._builtinAsr, ...?asrBuilders},
+  }) : _asrOverrides = {...?asrBuilders},
+       _asrBuilders = {..._builtinAsr, ...?asrBuilders},
        _embedderBuilders = {..._builtinEmbedders, ...?embedderBuilders};
 
   static final Map<String, AsrEngineBuilder> _builtinAsr = {
@@ -37,11 +38,22 @@ class EngineRegistry {
     'sherpa': () => WorkerAsrEngine.sherpa(),
   };
 
+  /// Worker-backed native engines, rebuilt with a caller's thread count through
+  /// their existing [WorkerAsrEngine] factories.
+  static final Map<String, AsrEngine Function(int threads)> _threadedAsr = {
+    'crispasr': (threads) => WorkerAsrEngine.crispAsr(threads: threads),
+    'sherpa': (threads) => WorkerAsrEngine.sherpa(threads: threads),
+  };
+
   static final Map<String, EmbedderBuilder> _builtinEmbedders = {
     'deterministic': () => DeterministicEmbedder(),
     // 'crispembed' is intentionally absent: it needs a model path, so callers
     // register it via `embedderBuilders` once they know which model to load.
   };
+
+  /// Ids the caller overrode; a caller override always wins over the built-in
+  /// (and therefore over the [createAsr] `threads` shortcut).
+  final Map<String, AsrEngineBuilder> _asrOverrides;
 
   final Map<String, AsrEngineBuilder> _asrBuilders;
   final Map<String, EmbedderBuilder> _embedderBuilders;
@@ -53,8 +65,18 @@ class EngineRegistry {
   List<String> get embedderIds => _embedderBuilders.keys.toList(growable: false);
 
   /// Builds the ASR engine registered as [id]; throws [ArgumentError] on a miss.
-  AsrEngine createAsr(String id) =>
-      _build(_asrBuilders, id, 'ASR engine');
+  ///
+  /// [threads] configures the built-in worker-backed native engines
+  /// (`crispasr`/`sherpa`) through their [WorkerAsrEngine] factories. A
+  /// caller-supplied override for the same id still wins, so tests can keep
+  /// injecting their own engine.
+  AsrEngine createAsr(String id, {int? threads}) {
+    if (threads != null && !_asrOverrides.containsKey(id)) {
+      final threaded = _threadedAsr[id];
+      if (threaded != null) return threaded(threads);
+    }
+    return _build(_asrBuilders, id, 'ASR engine');
+  }
 
   /// Builds the embedder registered as [id]; throws [ArgumentError] on a miss.
   Embedder createEmbedder(String id) =>

@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/data/db.dart';
+import 'package:pocket_asr/data/transcript_repo.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/features/queue/queue_worker.dart';
 import 'package:pocket_asr/features/queue/transcription_queue.dart';
@@ -93,17 +97,48 @@ void main() {
     expect(queue.byId('a')?.status, TranscriptionJobStatus.done);
   });
 
-  test('cancel stops pending and running jobs but not finished ones', () {
+  test('cancel stops a pending job at once and a running one cooperatively', () {
     final queue = TranscriptionQueue();
     queue.add(job('a'));
     queue.add(job('b'));
     queue.claimNext(); // a running
 
+    // Running -> cancelling (the native block in flight must return first).
     expect(queue.cancel('a'), isTrue);
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelling);
+    expect(queue.isCancelling('a'), isTrue);
+    expect(queue.cancel('a'), isFalse); // already requested
+    expect(queue.byId('a')?.isFinished, isFalse); // not finished yet
+
+    // Pending -> cancelled immediately.
     expect(queue.cancel('b'), isTrue);
-    expect(queue.cancel('a'), isFalse); // already cancelled
+    expect(queue.byId('b')?.status, TranscriptionJobStatus.cancelled);
     expect(queue.cancel('missing'), isFalse);
+
+    // The worker observed the abort and drained the job.
+    expect(queue.markCancelled('a'), isTrue);
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelled);
+    expect(queue.byId('a')?.isFinished, isTrue);
+    expect(queue.markCancelled('a'), isFalse); // already finished
     expect(queue.jobs.every((j) => j.isFinished), isTrue);
+  });
+
+  test('mutations notify listeners so the page can repaint', () {
+    final queue = TranscriptionQueue();
+    var notifications = 0;
+    queue.addListener(() => notifications++);
+
+    queue.add(job('a')); // 1
+    queue.add(job('b')); // 2
+    queue.claimNext(); // 3: claims a
+    queue.fail('a', 'boom'); // 4
+    queue.retry('a'); // 5
+    queue.reorder(0, 1); // 6
+    queue.cancel('a'); // 7: pending -> cancelled
+    queue.remove('b'); // 8
+
+    expect(notifications, 8);
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelled);
   });
 
   test('failed job retries back to pending and can run again', () {
@@ -149,4 +184,111 @@ void main() {
     expect(service.lastChunkSettings?.mode, ChunkMode.energy);
     expect(service.lastChunkSettings?.chunkSeconds, 12);
   });
+
+  test('a cancelled job is never persisted and ends as cancelled', () async {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final repo = TranscriptRepo(db);
+
+    final queue = TranscriptionQueue();
+    queue.add(job('a'));
+    // The service blocks like a real native call and throws once the queue
+    // marks the job cancelling — exactly the cooperative contract.
+    final service = _BlockingService();
+    final worker = QueueWorker(
+      queue,
+      service,
+      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice'),
+      transcriptRepo: repo,
+    );
+
+    final running = worker.run();
+    // Let the worker claim the job and reach the "native" await.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.running);
+
+    queue.cancel('a'); // running -> cancelling, isCancelled now true
+    await running;
+
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelled);
+    expect(repo.list(), isEmpty); // a cancelled result is not a success
+  });
+
+  test('a result landing after a cancel request is discarded', () async {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final repo = TranscriptRepo(db);
+
+    final queue = TranscriptionQueue();
+    queue.add(job('a'));
+    // The service finishes "successfully" only after we release it, which
+    // models a native call that returns after the user asked to stop.
+    final service = _GatedService();
+    final worker = QueueWorker(
+      queue,
+      service,
+      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice'),
+      transcriptRepo: repo,
+    );
+
+    final running = worker.run();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    queue.cancel('a');
+    service.release.complete();
+    await running;
+
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelled);
+    expect(repo.list(), isEmpty); // the text was thrown away, not saved
+  });
+}
+
+/// Polls [isCancelled] like a real chunk loop and throws once it is true.
+class _BlockingService extends TranscriptionService {
+  _BlockingService() : super(engine: const UnavailableAsrEngine());
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    while (!(isCancelled?.call() ?? false)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    throw const EngineCancelledException('stopped between chunks');
+  }
+}
+
+/// Finishes successfully, but only once [release] is completed.
+class _GatedService extends TranscriptionService {
+  _GatedService() : super(engine: const UnavailableAsrEngine());
+
+  final release = Completer<void>();
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    await release.future;
+    return TranscriptionJobResult(
+      text: 'late success',
+      elapsed: const Duration(milliseconds: 10),
+      audioDuration: const Duration(milliseconds: 10),
+      engine: 'fake',
+      model: model,
+      backend: backend,
+      originalLufs: -16,
+      gainDb: 0,
+    );
+  }
 }

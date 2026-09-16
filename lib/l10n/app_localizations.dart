@@ -416,6 +416,12 @@ abstract class AppLocalizations {
   /// **'Running'**
   String get queueStatusRunning;
 
+  /// No description provided for @queueStatusCancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling'**
+  String get queueStatusCancelling;
+
   /// No description provided for @queueStatusDone.
   ///
   /// In en, this message translates to:
@@ -433,6 +439,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancelled'**
   String get queueStatusCancelled;
+
+  /// No description provided for @queueCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get queueCancel;
+
+  /// No description provided for @queueRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get queueRetry;
+
+  /// No description provided for @queueRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get queueRemove;
+
+  /// No description provided for @queueMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get queueMoveUp;
+
+  /// No description provided for @queueMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get queueMoveDown;
+
+  /// No description provided for @engineBusyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Another transcription is running. Wait for it to finish first.'**
+  String get engineBusyNote;
 
   /// No description provided for @historyTitle.
   ///

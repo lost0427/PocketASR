@@ -1,7 +1,15 @@
+import 'package:flutter/foundation.dart';
+
 /// Lifecycle of a queued transcription.
+///
+/// [cancelling] is the cooperative window the running job spends between
+/// "the user asked to stop" and "the native block that was already running
+/// returned": the engine cannot be hard-killed mid-call, so the job is aborted
+/// at the next safe boundary (see [CancellableAsrEngine]).
 enum TranscriptionJobStatus {
   pending,
   running,
+  cancelling,
   done,
   failed,
   cancelled,
@@ -14,6 +22,9 @@ enum TranscriptionJobStatus {
 class TranscriptionJob {
   TranscriptionJob({required this.id, required this.audioPath});
 
+  /// Unique id for this queued entry. Two entries may point at the same
+  /// [audioPath] — the queue keys on [id], never on the path, so adding the
+  /// same file twice cannot make one job shadow the other.
   final String id;
   final String audioPath;
 
@@ -35,13 +46,17 @@ class TranscriptionJob {
 
 /// In-memory FIFO queue of [TranscriptionJob]s. No engine, no persistence —
 /// callers drive it with [claimNext]/[complete]/[fail].
-class TranscriptionQueue {
+///
+/// Notifies after every accepted mutation so a page can rebuild from real
+/// status transitions (a worker claim, a cancel, a failure) without polling.
+class TranscriptionQueue extends ChangeNotifier {
   final List<TranscriptionJob> _jobs = [];
 
   /// Snapshot of the queue in run order.
   List<TranscriptionJob> get jobs => List.unmodifiable(_jobs);
 
-  bool get hasPending => _jobs.any((job) => job.status == TranscriptionJobStatus.pending);
+  bool get hasPending =>
+      _jobs.any((job) => job.status == TranscriptionJobStatus.pending);
 
   int get length => _jobs.length;
 
@@ -55,13 +70,17 @@ class TranscriptionQueue {
   }
 
   /// Appends [job] to the back of the queue.
-  void add(TranscriptionJob job) => _jobs.add(job);
+  void add(TranscriptionJob job) {
+    _jobs.add(job);
+    notifyListeners();
+  }
 
   /// Drops the job with [id]. Returns false when it wasn't queued.
   bool remove(String id) {
     final index = _jobs.indexWhere((job) => job.id == id);
     if (index < 0) return false;
     _jobs.removeAt(index);
+    notifyListeners();
     return true;
   }
 
@@ -77,15 +96,43 @@ class TranscriptionQueue {
     if (oldIndex == newIndex) return true;
     final job = _jobs.removeAt(oldIndex);
     _jobs.insert(newIndex, job);
+    notifyListeners();
     return true;
   }
 
-  /// Cancels a job that hasn't finished. Returns false when [id] is unknown or
-  /// already done/cancelled.
+  /// Requests cancellation of a job that hasn't finished.
+  ///
+  /// A still-queued job is [TranscriptionJobStatus.cancelled] at once; a
+  /// running one enters [TranscriptionJobStatus.cancelling] and finishes as
+  /// [TranscriptionJobStatus.cancelled] once the worker observes the abort.
+  /// Returns false when [id] is unknown, already finished, or already
+  /// cancelling.
   bool cancel(String id) {
     final job = byId(id);
     if (job == null || job.isFinished) return false;
+    if (job.status == TranscriptionJobStatus.cancelling) return false;
+    job.status = job.status == TranscriptionJobStatus.pending
+        ? TranscriptionJobStatus.cancelled
+        : TranscriptionJobStatus.cancelling;
+    notifyListeners();
+    return true;
+  }
+
+  /// True while [id]'s running job has been asked to stop but has not yet
+  /// returned — the state the worker's `isCancelled` poll reads.
+  bool isCancelling(String id) =>
+      byId(id)?.status == TranscriptionJobStatus.cancelling;
+
+  /// Marks a running/cancelling job cancelled after the worker aborted it.
+  bool markCancelled(String id) {
+    final job = byId(id);
+    if (job == null) return false;
+    if (job.status != TranscriptionJobStatus.running &&
+        job.status != TranscriptionJobStatus.cancelling) {
+      return false;
+    }
     job.status = TranscriptionJobStatus.cancelled;
+    notifyListeners();
     return true;
   }
 
@@ -98,6 +145,7 @@ class TranscriptionQueue {
     }
     job.status = TranscriptionJobStatus.pending;
     job.error = null;
+    notifyListeners();
     return true;
   }
 
@@ -108,6 +156,7 @@ class TranscriptionQueue {
       if (job.status == TranscriptionJobStatus.pending) {
         job.status = TranscriptionJobStatus.running;
         job.attempts++;
+        notifyListeners();
         return job;
       }
     }
@@ -121,6 +170,7 @@ class TranscriptionQueue {
       return false;
     }
     job.status = TranscriptionJobStatus.done;
+    notifyListeners();
     return true;
   }
 
@@ -133,6 +183,7 @@ class TranscriptionQueue {
     }
     job.status = TranscriptionJobStatus.failed;
     job.error = error;
+    notifyListeners();
     return true;
   }
 }

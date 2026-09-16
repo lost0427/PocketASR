@@ -175,6 +175,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueStatusRunning => 'Running';
 
   @override
+  String get queueStatusCancelling => 'Cancelling';
+
+  @override
   String get queueStatusDone => 'Done';
 
   @override
@@ -182,6 +185,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueStatusCancelled => 'Cancelled';
+
+  @override
+  String get queueCancel => 'Cancel';
+
+  @override
+  String get queueRetry => 'Retry';
+
+  @override
+  String get queueRemove => 'Remove';
+
+  @override
+  String get queueMoveUp => 'Move up';
+
+  @override
+  String get queueMoveDown => 'Move down';
+
+  @override
+  String get engineBusyNote =>
+      'Another transcription is running. Wait for it to finish first.';
 
   @override
   String get historyTitle => 'History';
