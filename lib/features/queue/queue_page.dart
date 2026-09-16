@@ -1,17 +1,32 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/app_state.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
+import '../../l10n/app_localizations.dart';
 import '../transcribe/transcription_service.dart';
 import 'queue_worker.dart';
 import 'transcription_queue.dart';
 
+/// Queue tab: line up audio files and run them one at a time.
+///
+/// Uses the same shared [AppState] as the transcribe page, so the chosen model,
+/// its family/quant, the backend and the chunk settings are identical in both
+/// flows. A worker is built per run from the current state.
 class QueuePage extends StatefulWidget {
-  const QueuePage({super.key, required this.engine, required this.transcriptRepo});
+  const QueuePage({
+    super.key,
+    required this.engine,
+    required this.transcriptRepo,
+    this.state,
+  });
 
   final AsrEngine engine;
   final TranscriptRepo transcriptRepo;
+
+  /// App-wide settings shared with the transcribe page. Null only in tests.
+  final AppState? state;
 
   @override
   State<QueuePage> createState() => _QueuePageState();
@@ -20,12 +35,29 @@ class QueuePage extends StatefulWidget {
 class _QueuePageState extends State<QueuePage> {
   final _queue = TranscriptionQueue();
   QueueWorker? _worker;
-  String? _modelPath;
+
+  /// Model path used only when no [AppState] is injected.
+  String? _localModelPath;
+
+  /// Shared, persisted model path; a pick in either page updates the same value.
+  String? get _modelPath => widget.state?.modelPath ?? _localModelPath;
+
+  bool get _running => _worker?.running ?? false;
+
+  bool get _needsDecoder =>
+      widget.state?.selectionNeedsMissingCompanion ?? false;
 
   Future<void> _add() async {
-    final files = await openFiles(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Audio', extensions: ['wav', 'm4a', 'mp3', 'flac']),
-    ]);
+    if (_running) return; // a run owns the current queue
+    final l10n = AppLocalizations.of(context);
+    final files = await openFiles(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: l10n.fileTypeAudio,
+          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
+        ),
+      ],
+    );
     if (!mounted) return;
     setState(() {
       for (final file in files) {
@@ -35,50 +67,126 @@ class _QueuePageState extends State<QueuePage> {
   }
 
   Future<void> _run() async {
-    if (_modelPath == null) return;
+    if (_running) return; // one worker at a time
+    final modelPath = _modelPath;
+    if (modelPath == null || _needsDecoder) return;
+    final state = widget.state;
     final worker = QueueWorker(
       _queue,
       TranscriptionService(engine: widget.engine),
-      EngineModelSpec(path: _modelPath!),
+      EngineModelSpec(
+        path: modelPath,
+        family: state?.modelFamily,
+        quant: state?.modelQuant,
+      ),
       transcriptRepo: widget.transcriptRepo,
+      chunkSettings: state?.chunkSettings,
+      backend: state?.backend ?? Backend.cpu,
     );
     _worker = worker;
+    setState(() {}); // disable the controls that would change this run
     await worker.run();
     if (mounted) setState(() {});
   }
 
   Future<void> _pickModel() async {
-    final file = await openFile(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Model', extensions: ['gguf', 'onnx', 'bin']),
-    ]);
+    if (_running) return; // a run owns the current model
+    final l10n = AppLocalizations.of(context);
+    final file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: l10n.fileTypeModel,
+          extensions: const ['gguf', 'onnx', 'bin'],
+        ),
+      ],
+    );
     if (!mounted || file == null) return;
-    setState(() => _modelPath = file.path);
+    _localModelPath = file.path;
+    widget.state?.modelPath = file.path;
+    setState(() {});
   }
+
+  String _statusLabel(AppLocalizations l10n, TranscriptionJobStatus status) =>
+      switch (status) {
+        TranscriptionJobStatus.pending => l10n.queueStatusPending,
+        TranscriptionJobStatus.running => l10n.queueStatusRunning,
+        TranscriptionJobStatus.done => l10n.queueStatusDone,
+        TranscriptionJobStatus.failed => l10n.queueStatusFailed,
+        TranscriptionJobStatus.cancelled => l10n.queueStatusCancelled,
+      };
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final jobs = _queue.jobs;
+    final running = _running;
+    final modelPath = _modelPath;
+    final needsDecoder = _needsDecoder;
+
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add audio'))),
-            const SizedBox(width: 12),
-            Expanded(child: OutlinedButton.icon(onPressed: _pickModel, icon: const Icon(Icons.model_training_outlined), label: Text(_modelPath == null ? 'Choose model' : 'Model ready'))),
-          ]),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: running ? null : _add,
+                  icon: const Icon(Icons.add),
+                  label: Text(l10n.queueAddAudio),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: running ? null : _pickModel,
+                  icon: const Icon(Icons.model_training_outlined),
+                  label: Text(
+                    modelPath == null
+                        ? l10n.queueChooseModel
+                        : l10n.queueModelReady,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+        if (needsDecoder)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.modelNeedsDecoder,
+              color: scheme.error,
+            ),
+          )
+        else if (modelPath == null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _Note(
+              icon: Icons.info_outline,
+              text: l10n.queueModelRequired,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: FilledButton.icon(
-            onPressed: _modelPath != null && _queue.hasPending && !(_worker?.running ?? false) ? _run : null,
+            onPressed: modelPath != null && !needsDecoder && _queue.hasPending && !running
+                ? _run
+                : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Run queue'),
+            label: Text(l10n.queueRun),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
           ),
         ),
+        const SizedBox(height: 8),
         Expanded(
           child: jobs.isEmpty
-              ? const Center(child: Text('Queue is empty'))
+              ? Center(child: Text(l10n.queueEmpty))
               : ListView.builder(
                   itemCount: jobs.length,
                   itemBuilder: (_, index) {
@@ -86,10 +194,16 @@ class _QueuePageState extends State<QueuePage> {
                     return ListTile(
                       leading: Icon(_icon(job.status)),
                       title: Text(job.audioPath.split(RegExp(r'[\\/]')).last),
-                      subtitle: Text(job.error ?? job.status.name),
+                      subtitle: Text(
+                        job.error ?? _statusLabel(l10n, job.status),
+                      ),
                       trailing: IconButton(
                         icon: const Icon(Icons.close),
-                        onPressed: job.status == TranscriptionJobStatus.pending ? () { setState(() => _queue.remove(job.id)); } : null,
+                        onPressed: job.status == TranscriptionJobStatus.pending
+                            ? () {
+                                setState(() => _queue.remove(job.id));
+                              }
+                            : null,
                       ),
                     );
                   },
@@ -106,4 +220,34 @@ class _QueuePageState extends State<QueuePage> {
     TranscriptionJobStatus.failed => Icons.error,
     TranscriptionJobStatus.cancelled => Icons.cancel,
   };
+}
+
+/// One-line note under the controls: why the queue cannot run yet.
+class _Note extends StatelessWidget {
+  const _Note({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: color,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

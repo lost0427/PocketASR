@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/audio/chunk_planner.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
@@ -98,6 +99,10 @@ class SettingsPage extends StatelessWidget {
         _SectionLabel(l10n.settingsAudio),
         const SizedBox(height: 12),
         _Card(child: _LoudnessControl(state: state)),
+        const SizedBox(height: 28),
+        _SectionLabel(l10n.settingsChunking),
+        const SizedBox(height: 12),
+        _Card(child: _ChunkControl(state: state)),
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsAbout),
         const SizedBox(height: 12),
@@ -310,6 +315,122 @@ class _LoudnessControl extends StatelessWidget {
           l10n.settingsLoudnessUnit,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChunkControl extends StatelessWidget {
+  const _ChunkControl({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final energy = state.chunkMode == ChunkMode.energy;
+    final valueStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ControlLabel(l10n.settingsChunkMode),
+        const SizedBox(height: 10),
+        SegmentedButton<ChunkMode>(
+          expandedInsets: EdgeInsets.zero,
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(
+              value: ChunkMode.fixed,
+              label: Text(l10n.settingsChunkFixed),
+            ),
+            ButtonSegment(
+              value: ChunkMode.energy,
+              label: Text(l10n.settingsChunkEnergy),
+            ),
+          ],
+          selected: {state.chunkMode},
+          onSelectionChanged: (selection) => state.chunkMode = selection.first,
+        ),
+        const SizedBox(height: 20),
+        if (!energy) ...[
+          Row(
+            children: [
+              Expanded(child: _ControlLabel(l10n.settingsChunkSeconds)),
+              Text(
+                l10n.settingsChunkSecondsValue(state.chunkSeconds.round()),
+                style: valueStyle,
+              ),
+            ],
+          ),
+          Slider(
+            value: state.chunkSeconds,
+            min: AppState.minChunkSeconds,
+            max: AppState.maxChunkSeconds,
+            divisions:
+                ((AppState.maxChunkSeconds - AppState.minChunkSeconds) / 5)
+                    .round(),
+            label: l10n.settingsChunkSecondsValue(state.chunkSeconds.round()),
+            onChanged: (value) => state.chunkSeconds = value,
+          ),
+        ] else ...[
+          Row(
+            children: [
+              Expanded(child: _ControlLabel(l10n.settingsEnergyThreshold)),
+              Text(state.energyThreshold.toStringAsFixed(3), style: valueStyle),
+            ],
+          ),
+          Slider(
+            value: state.energyThreshold,
+            min: AppState.minEnergyThreshold,
+            max: AppState.maxEnergyThreshold,
+            divisions:
+                ((AppState.maxEnergyThreshold - AppState.minEnergyThreshold) /
+                        0.001)
+                    .round(),
+            label: state.energyThreshold.toStringAsFixed(3),
+            onChanged: (value) => state.energyThreshold = value,
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(child: _ControlLabel(l10n.settingsSpeechPad)),
+              Text(
+                l10n.settingsSpeechPadValue(state.speechPadMs),
+                style: valueStyle,
+              ),
+            ],
+          ),
+          Slider(
+            value: state.speechPadMs.toDouble(),
+            min: 0,
+            max: AppState.maxSpeechPadMs.toDouble(),
+            divisions: AppState.maxSpeechPadMs ~/ 25,
+            label: l10n.settingsSpeechPadValue(state.speechPadMs),
+            onChanged: (value) => state.speechPadMs = value.round(),
+          ),
+        ],
+        const SizedBox(height: 4),
+        Text(
+          l10n.settingsChunkHint,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.45,
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: state.resetChunkSettings,
+            icon: const Icon(Icons.restart_alt, size: 18),
+            label: Text(l10n.settingsChunkReset),
           ),
         ),
       ],

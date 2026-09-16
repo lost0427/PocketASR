@@ -1,6 +1,41 @@
 import 'dart:typed_data';
 
 import 'audio_buffer.dart';
+import 'pcm.dart';
+
+/// Mono 16-bit PCM WAV encoder — the counterpart of [WavDecoder].
+///
+/// Engines take file paths, so the transcription service uses this to hand a
+/// normalized PCM slice (or a whole buffer) to an engine request without
+/// re-implementing the RIFF header per caller.
+Uint8List encodePcm16Wav(Float32List samples, int sampleRate) {
+  if (sampleRate <= 0) {
+    throw ArgumentError.value(sampleRate, 'sampleRate', 'must be > 0');
+  }
+  final payload = float32ToPcm16(samples);
+  final out = Uint8List(44 + payload.length);
+  final header = ByteData.sublistView(out, 0, 44);
+  void text(int offset, String value) {
+    for (var i = 0; i < value.length; i++) {
+      header.setUint8(offset + i, value.codeUnitAt(i));
+    }
+  }
+
+  text(0, 'RIFF');
+  header.setUint32(4, 36 + payload.length, Endian.little);
+  text(8, 'WAVEfmt ');
+  header.setUint32(16, 16, Endian.little);
+  header.setUint16(20, 1, Endian.little); // PCM
+  header.setUint16(22, 1, Endian.little); // mono
+  header.setUint32(24, sampleRate, Endian.little);
+  header.setUint32(28, sampleRate * 2, Endian.little);
+  header.setUint16(32, 2, Endian.little);
+  header.setUint16(34, 16, Endian.little);
+  text(36, 'data');
+  header.setUint32(40, payload.length, Endian.little);
+  out.setRange(44, out.length, payload);
+  return out;
+}
 
 class WavDecoder {
   const WavDecoder({this.targetSampleRate = 16000});

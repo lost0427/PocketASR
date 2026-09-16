@@ -46,6 +46,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeFileHint => 'WAV · M4A · MP3，本地解码';
 
   @override
+  String get fileTypeAudio => '音频';
+
+  @override
+  String get fileTypeModel => '模型文件';
+
+  @override
   String get transcribePickerUnavailable => '文件选择功能尚未接入。';
 
   @override
@@ -98,6 +104,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeCopied => '已复制到剪贴板';
 
   @override
+  String get transcribeChooseModel => '选择模型文件';
+
+  @override
+  String get transcribeModelRequired => '开始前请先选择模型文件。';
+
+  @override
+  String get modelNeedsDecoder =>
+      'Whisper 需要单独的 decoder 文件，而本构建只接受单个模型文件，因此当前选择不受支持。';
+
+  @override
   String get metricTokensPerSec => 'tokens/s';
 
   @override
@@ -123,6 +139,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get queueBody => '一次排入多个文件，自由调整顺序，逐个查看进度。';
+
+  @override
+  String get queueAddAudio => '添加音频';
+
+  @override
+  String get queueChooseModel => '选择模型';
+
+  @override
+  String get queueModelReady => '模型已就绪';
+
+  @override
+  String get queueRun => '运行队列';
+
+  @override
+  String get queueEmpty => '队列为空';
+
+  @override
+  String get queueModelRequired => '运行前请先选择模型文件。';
+
+  @override
+  String get queueStatusPending => '排队中';
+
+  @override
+  String get queueStatusRunning => '运行中';
+
+  @override
+  String get queueStatusDone => '已完成';
+
+  @override
+  String get queueStatusFailed => '失败';
+
+  @override
+  String get queueStatusCancelled => '已取消';
 
   @override
   String get historyTitle => '历史';
@@ -240,6 +289,44 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLoudnessUnit => 'LUFS';
 
   @override
+  String get settingsChunking => '切割';
+
+  @override
+  String get settingsChunkMode => '模式';
+
+  @override
+  String get settingsChunkFixed => '固定时长';
+
+  @override
+  String get settingsChunkEnergy => '能量检测';
+
+  @override
+  String get settingsChunkSeconds => '分块时长';
+
+  @override
+  String settingsChunkSecondsValue(int seconds) {
+    return '$seconds 秒';
+  }
+
+  @override
+  String get settingsEnergyThreshold => '能量阈值';
+
+  @override
+  String get settingsSpeechPad => '语音补白';
+
+  @override
+  String settingsSpeechPadValue(int ms) {
+    return '$ms 毫秒';
+  }
+
+  @override
+  String get settingsChunkHint =>
+      '能量检测是按响度开门限，不是神经 VAD。默认不重叠：本构建不会合并分块接缝处重复的文本。';
+
+  @override
+  String get settingsChunkReset => '恢复默认切割';
+
+  @override
   String get settingsAbout => '关于';
 
   @override
@@ -251,7 +338,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutHint => '完全在本机运行，不会上传任何内容。';
 
   @override
-  String get settingsNotPersisted => '设置暂不持久化，重启后恢复默认。';
+  String get settingsNotPersisted => '已保存在本机；线程数重启后恢复默认。';
 
   @override
   String get benchTitle => '性能基准';

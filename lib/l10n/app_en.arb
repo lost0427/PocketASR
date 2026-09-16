@@ -12,6 +12,8 @@
   "transcribeChangeFile": "Change file",
   "transcribeNoFile": "No audio selected",
   "transcribeFileHint": "WAV · M4A · MP3, decoded on-device",
+  "fileTypeAudio": "Audio",
+  "fileTypeModel": "Model files",
   "transcribePickerUnavailable": "File picking is not wired up yet.",
   "transcribeEngineUnavailableTitle": "On-device engine unavailable",
   "transcribeEngineUnavailableBody": "This build ships without the native speech engine, so transcription cannot run yet. Nothing is faked and no audio leaves the device.",
@@ -29,6 +31,9 @@
   "transcribeResultEmpty": "The transcript will appear here.",
   "transcribeCopy": "Copy",
   "transcribeCopied": "Copied to clipboard",
+  "transcribeChooseModel": "Choose model file",
+  "transcribeModelRequired": "Choose a model file before starting.",
+  "modelNeedsDecoder": "Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.",
   "metricTokensPerSec": "tokens/s",
   "metricCharsPerSec": "chars/s",
   "metricRtf": "RTF",
@@ -38,6 +43,17 @@
   "metricUnavailable": "—",
   "queueTitle": "Queue",
   "queueBody": "Line up several files at once, reorder them, and watch each one finish in turn.",
+  "queueAddAudio": "Add audio",
+  "queueChooseModel": "Choose model",
+  "queueModelReady": "Model ready",
+  "queueRun": "Run queue",
+  "queueEmpty": "Queue is empty",
+  "queueModelRequired": "Choose a model file before running.",
+  "queueStatusPending": "Pending",
+  "queueStatusRunning": "Running",
+  "queueStatusDone": "Done",
+  "queueStatusFailed": "Failed",
+  "queueStatusCancelled": "Cancelled",
   "historyTitle": "History",
   "historyBody": "Every transcript is stored locally, so you can search it, copy it again, or restore it from the trash.",
   "modelsTitle": "Models",
@@ -86,6 +102,27 @@
   "settingsLoudnessHint": "Lifts quiet recordings to the target level before transcription. This is loudness, not peak.",
   "settingsLoudnessTarget": "Target loudness",
   "settingsLoudnessUnit": "LUFS",
+  "settingsChunking": "Chunking",
+  "settingsChunkMode": "Mode",
+  "settingsChunkFixed": "Fixed length",
+  "settingsChunkEnergy": "Energy detection",
+  "settingsChunkSeconds": "Chunk length",
+  "settingsChunkSecondsValue": "{seconds} s",
+  "@settingsChunkSecondsValue": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "settingsEnergyThreshold": "Energy threshold",
+  "settingsSpeechPad": "Speech padding",
+  "settingsSpeechPadValue": "{ms} ms",
+  "@settingsSpeechPadValue": {
+    "placeholders": {
+      "ms": { "type": "int" }
+    }
+  },
+  "settingsChunkHint": "Energy detection is a loudness gate over the audio, not a neural VAD. Overlap stays off: this build does not merge repeated text at chunk seams.",
+  "settingsChunkReset": "Reset chunking",
   "settingsAbout": "About",
   "settingsVersion": "Version {version}",
   "@settingsVersion": {
@@ -94,7 +131,7 @@
     }
   },
   "settingsAboutHint": "Runs entirely on the device. Nothing is uploaded.",
-  "settingsNotPersisted": "Settings reset on restart for now.",
+  "settingsNotPersisted": "Saved on this device; the thread count resets on restart.",
   "benchTitle": "Benchmark",
   "benchIntro": "Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.",
   "benchUnavailableTitle": "Nothing can run in this build",

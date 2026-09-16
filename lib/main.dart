@@ -95,16 +95,19 @@ class _HomeShellState extends State<HomeShell> {
         label: l10n.navTranscribe,
         page: TranscribePage(
           engine: engine,
+          state: state,
           transcriptRepo: state.transcriptRepo,
-          loudnessEnabled: state.loudnessEnabled,
-          loudnessTargetLufs: state.loudnessTargetLufs,
         ),
       ),
       _Section(
         navIcon: Icons.list_alt_outlined,
         selectedNavIcon: Icons.list_alt,
         label: l10n.navQueue,
-        page: QueuePage(engine: engine, transcriptRepo: state.transcriptRepo),
+        page: QueuePage(
+          engine: engine,
+          state: state,
+          transcriptRepo: state.transcriptRepo,
+        ),
       ),
       _Section(
         navIcon: Icons.history,

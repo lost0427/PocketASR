@@ -1,15 +1,28 @@
+import '../../core/audio/chunk_planner.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
 import '../transcribe/transcription_service.dart';
 import 'transcription_queue.dart';
 
 class QueueWorker {
-  QueueWorker(this.queue, this.service, this.model, {this.transcriptRepo});
+  QueueWorker(
+    this.queue,
+    this.service,
+    this.model, {
+    this.transcriptRepo,
+    this.chunkSettings,
+    this.backend = Backend.cpu,
+  });
 
   final TranscriptionQueue queue;
   final TranscriptionService service;
   final EngineModelSpec model;
   final TranscriptRepo? transcriptRepo;
+
+  /// Chunking handed to every job; null keeps the service's single-request path.
+  final ChunkSettings? chunkSettings;
+
+  final Backend backend;
   bool _running = false;
 
   bool get running => _running;
@@ -25,6 +38,8 @@ class QueueWorker {
           final result = await service.transcribe(
             audioPath: job.audioPath,
             model: model,
+            backend: backend,
+            chunkSettings: chunkSettings,
           );
           transcriptRepo?.insert(
             title: job.audioPath.split(RegExp(r'[\\/]')).last,

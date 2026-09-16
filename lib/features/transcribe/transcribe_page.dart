@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
 import '../../engine/metrics.dart';
+import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/text/token_counter.dart';
@@ -21,18 +22,21 @@ class TranscribePage extends StatefulWidget {
   const TranscribePage({
     super.key,
     required this.engine,
+    this.state,
     this.transcriptRepo,
-    this.loudnessEnabled = true,
-    this.loudnessTargetLufs = -16,
     this.service,
   });
 
   /// The engine to report status for; resolved from `AppState.engine` in
   /// production and injected directly in tests.
   final AsrEngine engine;
+
+  /// App-wide settings shared with the queue page: model path, family, quant,
+  /// backend, loudness and chunk settings all come from here. Null only in
+  /// tests that exercise the page without an [AppState].
+  final AppState? state;
+
   final TranscriptRepo? transcriptRepo;
-  final bool loudnessEnabled;
-  final double loudnessTargetLufs;
   final TranscriptionService? service;
 
   @override
@@ -44,7 +48,12 @@ class _TranscribePageState extends State<TranscribePage> {
 
   String? _fileName;
   String? _filePath;
-  String? _modelPath;
+
+  /// Model path used only when no [AppState] is injected.
+  String? _localModelPath;
+
+  /// Shared, persisted model path; a pick in either page updates the same value.
+  String? get _modelPath => widget.state?.modelPath ?? _localModelPath;
 
   /// Rolling tokens/s across engine-reported true token counts. Its `tokens`
   /// also carries the latest cumulative token count for the run.
@@ -67,6 +76,16 @@ class _TranscribePageState extends State<TranscribePage> {
   void initState() {
     super.initState();
     _capabilities = widget.engine.capabilities();
+  }
+
+  @override
+  void didUpdateWidget(TranscribePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Switching engines must re-probe: the cached future belongs to the old
+    // engine, and its availability says nothing about the new one.
+    if (!identical(widget.engine, oldWidget.engine)) {
+      _capabilities = widget.engine.capabilities();
+    }
   }
 
   /// Mirrors one engine progress update into the live metrics. A negative or
@@ -96,9 +115,14 @@ class _TranscribePageState extends State<TranscribePage> {
   }
 
   Future<void> _pickFile() async {
+    if (_running) return; // a run owns the current file
+    final l10n = AppLocalizations.of(context);
     final file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Audio', extensions: ['wav', 'm4a', 'mp3', 'flac']),
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: l10n.fileTypeAudio,
+          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
+        ),
       ],
     );
     if (!mounted || file == null) return;
@@ -109,11 +133,24 @@ class _TranscribePageState extends State<TranscribePage> {
   }
 
   Future<void> _start() async {
-    if (_filePath == null) return;
-    if (_modelPath == null) {
-      _notify(AppLocalizations.of(context).transcribeStartUnavailable);
+    final l10n = AppLocalizations.of(context);
+    final state = widget.state;
+    final modelPath = _modelPath;
+    if (_filePath == null || modelPath == null) {
+      _notify(l10n.transcribeModelRequired);
       return;
     }
+    if (state?.selectionNeedsMissingCompanion ?? false) {
+      _notify(l10n.modelNeedsDecoder);
+      return;
+    }
+    final service = widget.service ?? TranscriptionService(
+      engine: widget.engine,
+      preprocessor: AudioPreprocessor(
+        enabled: state?.loudnessEnabled ?? true,
+        targetLufs: state?.loudnessTargetLufs ?? -16,
+      ),
+    );
     _tokenRates.reset();
     setState(() {
       _running = true;
@@ -128,15 +165,15 @@ class _TranscribePageState extends State<TranscribePage> {
       _runBackend = null;
     });
     try {
-      final result = await (widget.service ?? TranscriptionService(
-        engine: widget.engine,
-        preprocessor: AudioPreprocessor(
-          enabled: widget.loudnessEnabled,
-          targetLufs: widget.loudnessTargetLufs,
-        ),
-      )).transcribe(
+      final result = await service.transcribe(
         audioPath: _filePath!,
-        model: EngineModelSpec(path: _modelPath!),
+        model: EngineModelSpec(
+          path: modelPath,
+          family: state?.modelFamily,
+          quant: state?.modelQuant,
+        ),
+        backend: state?.backend ?? Backend.cpu,
+        chunkSettings: state?.chunkSettings,
         onProgress: _onProgress,
       );
       // Saving the successful result is unchanged; only the live view grew.
@@ -175,13 +212,22 @@ class _TranscribePageState extends State<TranscribePage> {
   }
 
   Future<void> _pickModel() async {
+    if (_running) return; // a run owns the current model
+    final l10n = AppLocalizations.of(context);
     final file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Model', extensions: ['gguf', 'onnx', 'bin']),
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: l10n.fileTypeModel,
+          extensions: const ['gguf', 'onnx', 'bin'],
+        ),
       ],
     );
     if (!mounted || file == null) return;
-    setState(() => _modelPath = file.path);
+    // Store it in the shared state so the queue page sees the same model, and
+    // fall back to a local copy when no state was injected.
+    _localModelPath = file.path;
+    widget.state?.modelPath = file.path;
+    setState(() {});
   }
 
   Future<void> _copy() async {
@@ -214,7 +260,17 @@ class _TranscribePageState extends State<TranscribePage> {
         final capabilities = snapshot.data;
         final engineAvailable = capabilities?.available ?? false;
         final running = _running;
-        final canStart = engineAvailable && _fileName != null && !running;
+        final modelPath = _modelPath;
+        final needsDecoder =
+            widget.state?.selectionNeedsMissingCompanion ?? false;
+        // Nothing starts without a model file, and a selection the engine cannot
+        // load (whisper without its decoder) is refused up front.
+        final canStart =
+            engineAvailable &&
+            _fileName != null &&
+            modelPath != null &&
+            !running &&
+            !needsDecoder;
         final hasResult = _result.isNotEmpty;
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
@@ -242,6 +298,7 @@ class _TranscribePageState extends State<TranscribePage> {
                     actionLabel: _fileName == null
                         ? l10n.transcribeChooseFile
                         : l10n.transcribeChangeFile,
+                    enabled: !running,
                     onPick: _pickFile,
                   ),
                   if (!engineAvailable) ...[
@@ -287,8 +344,23 @@ class _TranscribePageState extends State<TranscribePage> {
                   OutlinedButton.icon(
                     onPressed: running ? null : _pickModel,
                     icon: const Icon(Icons.model_training_outlined),
-                    label: Text(l10n.transcribeChooseFile),
+                    label: Text(l10n.transcribeChooseModel),
                   ),
+                  if (needsDecoder) ...[
+                    const SizedBox(height: 12),
+                    _Hint(
+                      icon: Icons.warning_amber_rounded,
+                      text: l10n.modelNeedsDecoder,
+                      color: scheme.error,
+                    ),
+                  ] else if (modelPath == null) ...[
+                    const SizedBox(height: 12),
+                    _Hint(
+                      icon: Icons.info_outline,
+                      text: l10n.transcribeModelRequired,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(_error!, style: TextStyle(color: scheme.error)),
@@ -388,12 +460,14 @@ class _SourceCard extends StatelessWidget {
     required this.fileName,
     required this.hint,
     required this.actionLabel,
+    required this.enabled,
     required this.onPick,
   });
 
   final String? fileName;
   final String hint;
   final String actionLabel;
+  final bool enabled;
   final VoidCallback onPick;
 
   @override
@@ -447,7 +521,7 @@ class _SourceCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
-            onPressed: onPick,
+            onPressed: enabled ? onPick : null,
             icon: const Icon(Icons.folder_open_outlined, size: 20),
             label: Text(actionLabel),
             style: OutlinedButton.styleFrom(
@@ -505,6 +579,36 @@ class _EngineBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One-line note under a control: why the current selection cannot run.
+class _Hint extends StatelessWidget {
+  const _Hint({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: color,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

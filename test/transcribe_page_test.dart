@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocket_asr/app/app_state.dart';
+import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/data/transcript_repo.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
@@ -11,6 +13,7 @@ import 'package:pocket_asr/l10n/app_localizations.dart';
 Widget _app({
   Locale? locale,
   AsrEngine engine = const UnavailableAsrEngine(),
+  AppState? state,
   TranscriptRepo? transcriptRepo,
   TranscriptionService? service,
 }) => MaterialApp(
@@ -20,6 +23,7 @@ Widget _app({
   home: Scaffold(
     body: TranscribePage(
       engine: engine,
+      state: state,
       transcriptRepo: transcriptRepo,
       service: service,
     ),
@@ -68,14 +72,23 @@ class _ScriptedService extends TranscriptionService {
 
   final List<TranscribeProgress> steps;
 
+  /// What the page actually sent, for asserting wiring rather than layout.
+  EngineModelSpec? lastModel;
+  Backend? lastBackend;
+  ChunkSettings? lastChunkSettings;
+
   @override
   Future<TranscriptionJobResult> transcribe({
     required String audioPath,
     required EngineModelSpec model,
     Backend backend = Backend.cpu,
     String? language,
+    ChunkSettings? chunkSettings,
     void Function(TranscribeProgress progress)? onProgress,
   }) async {
+    lastModel = model;
+    lastBackend = backend;
+    lastChunkSettings = chunkSettings;
     for (final step in steps) {
       onProgress?.call(step);
     }
@@ -194,7 +207,7 @@ void main() {
     // Pick the audio, then the model.
     await tester.tap(find.text('Choose audio file').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose audio file').last);
+    await tester.tap(find.text('Choose model file'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Start transcription'));
@@ -242,5 +255,98 @@ void main() {
 
     expect(find.text('本地引擎不可用'), findsOneWidget);
     expect(find.text('开始转录'), findsOneWidget);
+  });
+
+  testWidgets('sends family, quant, backend and chunk settings to the service', (
+    tester,
+  ) async {
+    final picks = <List<String>>[
+      ['meeting.wav'],
+      ['model.onnx'],
+    ];
+    var pick = 0;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return picks[pick++];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.modelFamily = 'sensevoice';
+    state.modelQuant = 'q8_0';
+    state.chunkMode = ChunkMode.energy;
+    state.chunkSeconds = 12;
+    state.energyThreshold = 0.02;
+    state.speechPadMs = 40;
+
+    final service = _ScriptedService(const [
+      TranscribeProgress(elapsed: Duration(seconds: 1), ratio: 1, partialText: 'hi'),
+    ]);
+
+    await tester.pumpWidget(
+      _app(
+        engine: const _FakeEngine(_availableCaps),
+        state: state,
+        service: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose model file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start transcription'));
+    await tester.pumpAndSettle();
+
+    // The spec carries the real family/quant, not just a path (the bug that
+    // made every sherpa load fail).
+    expect(service.lastModel!.path, 'model.onnx');
+    expect(service.lastModel!.family, 'sensevoice');
+    expect(service.lastModel!.quant, 'q8_0');
+    expect(service.lastBackend, Backend.cpu);
+    // Chunk settings travel through unchanged, with overlap off.
+    expect(service.lastChunkSettings!.mode, ChunkMode.energy);
+    expect(service.lastChunkSettings!.chunkSeconds, 12);
+    expect(service.lastChunkSettings!.energyThreshold, 0.02);
+    expect(service.lastChunkSettings!.speechPadMs, 40);
+    expect(service.lastChunkSettings!.overlapSeconds, 0);
+    // The pick was shared into AppState so the queue page sees the same model.
+    expect(state.modelPath, 'model.onnx');
+  });
+
+  testWidgets('refuses a whisper selection that needs a missing decoder', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['meeting.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.modelFamily = 'whisper';
+    state.modelPath = 'whisper-encoder.onnx';
+
+    await tester.pumpWidget(
+      _app(engine: const _FakeEngine(_availableCaps), state: state),
+    );
+    await tester.pumpAndSettle();
+
+    // Both an audio and a model are chosen, yet the selection still cannot run.
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('needs a separate decoder'), findsOneWidget);
+    final start = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Start transcription'),
+    );
+    expect(start.onPressed, isNull);
   });
 }

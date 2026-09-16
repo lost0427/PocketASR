@@ -47,6 +47,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeFileHint => 'WAV · M4A · MP3, decoded on-device';
 
   @override
+  String get fileTypeAudio => 'Audio';
+
+  @override
+  String get fileTypeModel => 'Model files';
+
+  @override
   String get transcribePickerUnavailable => 'File picking is not wired up yet.';
 
   @override
@@ -100,6 +106,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeCopied => 'Copied to clipboard';
 
   @override
+  String get transcribeChooseModel => 'Choose model file';
+
+  @override
+  String get transcribeModelRequired => 'Choose a model file before starting.';
+
+  @override
+  String get modelNeedsDecoder =>
+      'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.';
+
+  @override
   String get metricTokensPerSec => 'tokens/s';
 
   @override
@@ -126,6 +142,39 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get queueBody =>
       'Line up several files at once, reorder them, and watch each one finish in turn.';
+
+  @override
+  String get queueAddAudio => 'Add audio';
+
+  @override
+  String get queueChooseModel => 'Choose model';
+
+  @override
+  String get queueModelReady => 'Model ready';
+
+  @override
+  String get queueRun => 'Run queue';
+
+  @override
+  String get queueEmpty => 'Queue is empty';
+
+  @override
+  String get queueModelRequired => 'Choose a model file before running.';
+
+  @override
+  String get queueStatusPending => 'Pending';
+
+  @override
+  String get queueStatusRunning => 'Running';
+
+  @override
+  String get queueStatusDone => 'Done';
+
+  @override
+  String get queueStatusFailed => 'Failed';
+
+  @override
+  String get queueStatusCancelled => 'Cancelled';
 
   @override
   String get historyTitle => 'History';
@@ -246,6 +295,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLoudnessUnit => 'LUFS';
 
   @override
+  String get settingsChunking => 'Chunking';
+
+  @override
+  String get settingsChunkMode => 'Mode';
+
+  @override
+  String get settingsChunkFixed => 'Fixed length';
+
+  @override
+  String get settingsChunkEnergy => 'Energy detection';
+
+  @override
+  String get settingsChunkSeconds => 'Chunk length';
+
+  @override
+  String settingsChunkSecondsValue(int seconds) {
+    return '$seconds s';
+  }
+
+  @override
+  String get settingsEnergyThreshold => 'Energy threshold';
+
+  @override
+  String get settingsSpeechPad => 'Speech padding';
+
+  @override
+  String settingsSpeechPadValue(int ms) {
+    return '$ms ms';
+  }
+
+  @override
+  String get settingsChunkHint =>
+      'Energy detection is a loudness gate over the audio, not a neural VAD. Overlap stays off: this build does not merge repeated text at chunk seams.';
+
+  @override
+  String get settingsChunkReset => 'Reset chunking';
+
+  @override
   String get settingsAbout => 'About';
 
   @override
@@ -258,7 +345,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Runs entirely on the device. Nothing is uploaded.';
 
   @override
-  String get settingsNotPersisted => 'Settings reset on restart for now.';
+  String get settingsNotPersisted =>
+      'Saved on this device; the thread count resets on restart.';
 
   @override
   String get benchTitle => 'Benchmark';

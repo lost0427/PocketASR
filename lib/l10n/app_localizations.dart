@@ -170,6 +170,18 @@ abstract class AppLocalizations {
   /// **'WAV · M4A · MP3, decoded on-device'**
   String get transcribeFileHint;
 
+  /// No description provided for @fileTypeAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get fileTypeAudio;
+
+  /// No description provided for @fileTypeModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model files'**
+  String get fileTypeModel;
+
   /// No description provided for @transcribePickerUnavailable.
   ///
   /// In en, this message translates to:
@@ -272,6 +284,24 @@ abstract class AppLocalizations {
   /// **'Copied to clipboard'**
   String get transcribeCopied;
 
+  /// No description provided for @transcribeChooseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose model file'**
+  String get transcribeChooseModel;
+
+  /// No description provided for @transcribeModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a model file before starting.'**
+  String get transcribeModelRequired;
+
+  /// No description provided for @modelNeedsDecoder.
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper needs a separate decoder file, but this build accepts only one model file, so the current selection is not supported.'**
+  String get modelNeedsDecoder;
+
   /// No description provided for @metricTokensPerSec.
   ///
   /// In en, this message translates to:
@@ -325,6 +355,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Line up several files at once, reorder them, and watch each one finish in turn.'**
   String get queueBody;
+
+  /// No description provided for @queueAddAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Add audio'**
+  String get queueAddAudio;
+
+  /// No description provided for @queueChooseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose model'**
+  String get queueChooseModel;
+
+  /// No description provided for @queueModelReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Model ready'**
+  String get queueModelReady;
+
+  /// No description provided for @queueRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run queue'**
+  String get queueRun;
+
+  /// No description provided for @queueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue is empty'**
+  String get queueEmpty;
+
+  /// No description provided for @queueModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a model file before running.'**
+  String get queueModelRequired;
+
+  /// No description provided for @queueStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get queueStatusPending;
+
+  /// No description provided for @queueStatusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get queueStatusRunning;
+
+  /// No description provided for @queueStatusDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get queueStatusDone;
+
+  /// No description provided for @queueStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get queueStatusFailed;
+
+  /// No description provided for @queueStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get queueStatusCancelled;
 
   /// No description provided for @historyTitle.
   ///
@@ -548,6 +644,72 @@ abstract class AppLocalizations {
   /// **'LUFS'**
   String get settingsLoudnessUnit;
 
+  /// No description provided for @settingsChunking.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunking'**
+  String get settingsChunking;
+
+  /// No description provided for @settingsChunkMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get settingsChunkMode;
+
+  /// No description provided for @settingsChunkFixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed length'**
+  String get settingsChunkFixed;
+
+  /// No description provided for @settingsChunkEnergy.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy detection'**
+  String get settingsChunkEnergy;
+
+  /// No description provided for @settingsChunkSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunk length'**
+  String get settingsChunkSeconds;
+
+  /// No description provided for @settingsChunkSecondsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} s'**
+  String settingsChunkSecondsValue(int seconds);
+
+  /// No description provided for @settingsEnergyThreshold.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy threshold'**
+  String get settingsEnergyThreshold;
+
+  /// No description provided for @settingsSpeechPad.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech padding'**
+  String get settingsSpeechPad;
+
+  /// No description provided for @settingsSpeechPadValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String settingsSpeechPadValue(int ms);
+
+  /// No description provided for @settingsChunkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy detection is a loudness gate over the audio, not a neural VAD. Overlap stays off: this build does not merge repeated text at chunk seams.'**
+  String get settingsChunkHint;
+
+  /// No description provided for @settingsChunkReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset chunking'**
+  String get settingsChunkReset;
+
   /// No description provided for @settingsAbout.
   ///
   /// In en, this message translates to:
@@ -569,7 +731,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsNotPersisted.
   ///
   /// In en, this message translates to:
-  /// **'Settings reset on restart for now.'**
+  /// **'Saved on this device; the thread count resets on restart.'**
   String get settingsNotPersisted;
 
   /// No description provided for @benchTitle.

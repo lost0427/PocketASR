@@ -1,8 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/engine/asr_engine.dart';
+import 'package:pocket_asr/features/queue/queue_worker.dart';
 import 'package:pocket_asr/features/queue/transcription_queue.dart';
+import 'package:pocket_asr/features/transcribe/transcription_service.dart';
 
 TranscriptionJob job(String id) =>
     TranscriptionJob(id: id, audioPath: 'audio/$id.wav');
+
+/// Records what the worker actually sent; the engine is never touched because
+/// [transcribe] is overridden.
+class _RecordingService extends TranscriptionService {
+  _RecordingService() : super(engine: const UnavailableAsrEngine());
+
+  final List<EngineModelSpec> models = [];
+  Backend? lastBackend;
+  ChunkSettings? lastChunkSettings;
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscribeProgress progress)? onProgress,
+  }) async {
+    models.add(model);
+    lastBackend = backend;
+    lastChunkSettings = chunkSettings;
+    return TranscriptionJobResult(
+      text: 'ok',
+      elapsed: const Duration(milliseconds: 10),
+      audioDuration: const Duration(milliseconds: 10),
+      engine: 'fake',
+      model: model,
+      backend: backend,
+      originalLufs: -16,
+      gainDb: 0,
+    );
+  }
+}
 
 void main() {
   test('add appends in insertion order and remove drops by id', () {
@@ -83,5 +121,31 @@ void main() {
 
     expect(queue.claimNext()?.attempts, 2);
     expect(queue.retry('a'), isFalse); // running again, not failed
+  });
+
+  test('worker sends the family, quant, backend and chunk settings it was given', () async {
+    final queue = TranscriptionQueue()..add(job('a'));
+    final service = _RecordingService();
+    final worker = QueueWorker(
+      queue,
+      service,
+      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice', quant: 'q4_k'),
+      backend: Backend.cpu,
+      chunkSettings: const ChunkSettings(
+        mode: ChunkMode.energy,
+        chunkSeconds: 12,
+      ),
+    );
+
+    await worker.run();
+
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.done);
+    expect(service.models, hasLength(1));
+    expect(service.models.single.path, 'm.onnx');
+    expect(service.models.single.family, 'sensevoice');
+    expect(service.models.single.quant, 'q4_k');
+    expect(service.lastBackend, Backend.cpu);
+    expect(service.lastChunkSettings?.mode, ChunkMode.energy);
+    expect(service.lastChunkSettings?.chunkSeconds, 12);
   });
 }

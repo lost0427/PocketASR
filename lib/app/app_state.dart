@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
+import '../core/audio/chunk_planner.dart';
 import '../engine/asr_engine.dart' show AsrEngine, Backend;
 import '../engine/engine_registry.dart';
 import '../data/db.dart';
@@ -11,9 +12,10 @@ import '../data/transcript_repo.dart';
 /// App-wide settings.
 ///
 /// Theme and language are tri-state: [ThemeMode.system] and a `null` [locale]
-/// mean "follow the device". The model/quant, thread count and loudness values
-/// round out the Settings tab. Persistence lands in Phase 5 (settings table),
-/// so for now every value lives in memory only.
+/// mean "follow the device". The model/quant, selected model path, thread
+/// count, loudness and chunking values round out the Settings tab. Everything
+/// except [threads] is stored in the sqlite `settings` table and restored on
+/// start; anything unparseable or out of range falls back to the default.
 class AppState extends ChangeNotifier {
   AppState({AppDatabase? database}) : database = database ?? AppDatabase.open() {
     _loadSettings();
@@ -32,8 +34,28 @@ class AppState extends ChangeNotifier {
     _locale = language == null || language.isEmpty ? null : Locale(language);
     _modelFamily = database.getSetting('model_family') ?? _modelFamily;
     _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
+    _modelPath = _nonEmpty(database.getSetting('model_path'));
     _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
     _loudnessTargetLufs = double.tryParse(database.getSetting('loudness_target') ?? '') ?? _loudnessTargetLufs;
+    _chunkMode = _chunkModeFrom(database.getSetting('chunk_mode'));
+    _chunkSeconds = _boundedDouble(
+      database.getSetting('chunk_seconds'),
+      minChunkSeconds,
+      maxChunkSeconds,
+      defaultChunkSettings.chunkSeconds,
+    );
+    _energyThreshold = _boundedDouble(
+      database.getSetting('chunk_threshold'),
+      minEnergyThreshold,
+      maxEnergyThreshold,
+      defaultChunkSettings.energyThreshold,
+    );
+    _speechPadMs = _boundedInt(
+      database.getSetting('chunk_pad_ms'),
+      0,
+      maxSpeechPadMs,
+      defaultChunkSettings.speechPadMs,
+    );
   }
 
   void _save(String key, String value) => database.setSetting(key, value);
@@ -142,6 +164,130 @@ class AppState extends ChangeNotifier {
     _loudnessTargetLufs = value;
     _save('loudness_target', value.toString());
     notifyListeners();
+  }
+
+  /// Filesystem path of the model both the transcribe and queue flows load.
+  ///
+  /// Shared so a pick in one page is the same model in the other, and persisted
+  /// so it survives a restart. `null` (or empty) means no model is selected and
+  /// nothing may start — the pages disable Start rather than guess a path.
+  String? _modelPath;
+  String? get modelPath => _modelPath;
+  set modelPath(String? value) {
+    final path = _nonEmpty(value);
+    if (path == _modelPath) return;
+    _modelPath = path;
+    _save('model_path', path ?? '');
+    notifyListeners();
+  }
+
+  /// Chunking defaults and the bounds the Settings sliders offer. The energy
+  /// mode is a loudness gate, **not** a neural VAD (see [ChunkPlanner]).
+  static const ChunkSettings defaultChunkSettings = ChunkSettings();
+  static const double minChunkSeconds = 5;
+  static const double maxChunkSeconds = 120;
+  static const double minEnergyThreshold = 0.001;
+  static const double maxEnergyThreshold = 0.1;
+  static const int maxSpeechPadMs = 500;
+
+  ChunkMode _chunkMode = defaultChunkSettings.mode;
+  ChunkMode get chunkMode => _chunkMode;
+  set chunkMode(ChunkMode value) {
+    if (value == _chunkMode) return;
+    _chunkMode = value;
+    _save('chunk_mode', value.name);
+    notifyListeners();
+  }
+
+  double _chunkSeconds = defaultChunkSettings.chunkSeconds;
+  double get chunkSeconds => _chunkSeconds;
+  set chunkSeconds(double value) {
+    final capped = value.clamp(minChunkSeconds, maxChunkSeconds).toDouble();
+    if (capped == _chunkSeconds) return;
+    _chunkSeconds = capped;
+    _save('chunk_seconds', '$capped');
+    notifyListeners();
+  }
+
+  double _energyThreshold = defaultChunkSettings.energyThreshold;
+  double get energyThreshold => _energyThreshold;
+  set energyThreshold(double value) {
+    final capped = value
+        .clamp(minEnergyThreshold, maxEnergyThreshold)
+        .toDouble();
+    if (capped == _energyThreshold) return;
+    _energyThreshold = capped;
+    _save('chunk_threshold', '$capped');
+    notifyListeners();
+  }
+
+  int _speechPadMs = defaultChunkSettings.speechPadMs;
+  int get speechPadMs => _speechPadMs;
+  set speechPadMs(int value) {
+    final capped = value < 0
+        ? 0
+        : (value > maxSpeechPadMs ? maxSpeechPadMs : value);
+    if (capped == _speechPadMs) return;
+    _speechPadMs = capped;
+    _save('chunk_pad_ms', '$capped');
+    notifyListeners();
+  }
+
+  /// The chunking the pages hand to [TranscriptionService.transcribe]. Overlap
+  /// stays at its default of 0: this build does no deduplication.
+  ChunkSettings get chunkSettings => ChunkSettings(
+    mode: _chunkMode,
+    chunkSeconds: _chunkSeconds,
+    energyThreshold: _energyThreshold,
+    speechPadMs: _speechPadMs,
+  );
+
+  /// Restores every chunking value to [defaultChunkSettings] and persists it.
+  void resetChunkSettings() {
+    _chunkMode = defaultChunkSettings.mode;
+    _chunkSeconds = defaultChunkSettings.chunkSeconds;
+    _energyThreshold = defaultChunkSettings.energyThreshold;
+    _speechPadMs = defaultChunkSettings.speechPadMs;
+    _save('chunk_mode', _chunkMode.name);
+    _save('chunk_seconds', '$_chunkSeconds');
+    _save('chunk_threshold', '$_energyThreshold');
+    _save('chunk_pad_ms', '$_speechPadMs');
+    notifyListeners();
+  }
+
+  /// True when the selected engine cannot load the selected family from the one
+  /// path the app stores, because it needs a companion file this build never
+  /// ships: sherpa-onnx whisper needs a separate decoder ONNX. The pages show
+  /// "not supported" and refuse to start instead of failing deep in the engine.
+  bool get selectionNeedsMissingCompanion =>
+      engineId == 'sherpa' && modelFamily == 'whisper';
+
+  static String? _nonEmpty(String? value) =>
+      value == null || value.isEmpty ? null : value;
+
+  static ChunkMode _chunkModeFrom(String? raw) => ChunkMode.values.any(
+    (mode) => mode.name == raw,
+  )
+      ? ChunkMode.values.firstWhere((mode) => mode.name == raw)
+      : defaultChunkSettings.mode;
+
+  static double _boundedDouble(
+    String? raw,
+    double min,
+    double max,
+    double fallback,
+  ) {
+    final value = double.tryParse(raw ?? '');
+    if (value == null || !value.isFinite || value < min || value > max) {
+      return fallback;
+    }
+    return value;
+  }
+
+  static int _boundedInt(String? raw, int min, int max, int fallback) {
+    final value = int.tryParse(raw ?? '');
+    if (value == null || value < min || value > max) return fallback;
+    return value;
   }
 
   static int _defaultThreads() {

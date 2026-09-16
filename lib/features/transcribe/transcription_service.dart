@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
-import '../../core/audio/audio_buffer.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/audio/audio_source.dart';
+import '../../core/audio/chunk_planner.dart';
+import '../../core/audio/wav.dart';
 import '../../engine/asr_engine.dart';
 
 class TranscriptionJobResult {
@@ -51,79 +53,116 @@ class TranscriptionService {
 
   /// Runs one file through [engine].
   ///
-  /// [onProgress] is invoked for every [TranscribeProgress] the engine emits
-  /// (progress ratio, partial text, cumulative true token count and elapsed),
-  /// so a caller can show live metrics without re-implementing the stream
-  /// consumption. It is optional and never changes the returned result.
+  /// When [chunkSettings] is given, the normalized PCM is sliced per
+  /// [ChunkPlanner] plan and each block is sent as its own engine request:
+  /// the model is loaded once, blocks run sequentially, and text, engine-
+  /// reported elapsed time and tokens are aggregated, while [onProgress]
+  /// receives the running aggregate (global ratio over planned audio).
+  /// Unknown token counts stay null — nothing is estimated. Chunk overlap
+  /// ([ChunkSettings.overlapSeconds] > 0) duplicates boundary text on purpose
+  /// or not at all: no deduplication is implemented here, so the default is 0.
+  ///
+  /// Leaving [chunkSettings] null keeps the historic behavior: exactly one
+  /// request with the whole file. [onProgress] is optional and never changes
+  /// the returned result. A failing or silent engine throws
+  /// [EngineUnavailableException]; no placeholder text is ever returned.
   Future<TranscriptionJobResult> transcribe({
     required String audioPath,
     required EngineModelSpec model,
     Backend backend = Backend.cpu,
     String? language,
+    ChunkSettings? chunkSettings,
     void Function(TranscribeProgress progress)? onProgress,
   }) async {
     final sourceAudio = await _source.read(audioPath);
     final processed = _preprocessor.process(sourceAudio);
-    final temp = await _writeTemporaryWav(processed.audio);
+    final audio = processed.audio;
+    final chunks = chunkSettings == null
+        ? [AudioChunk(start: Duration.zero, end: audio.duration)]
+        : ChunkPlanner(settings: chunkSettings).plan(audio);
+    if (chunks.isEmpty) {
+      throw const EngineUnavailableException(
+        'Chunk planner found no speech to transcribe (energy gate, not a '
+        'neural VAD); nothing was sent to the engine.',
+      );
+    }
+    // One directory for the whole job; every chunk WAV lives in it and the
+    // directory itself (not just the files) is removed in `finally`, on
+    // success and on failure alike.
+    final dir = await Directory.systemTemp.createTemp('pocket_asr_');
     try {
       await engine.load(model, backend);
-      TranscribeProgress? last;
-      await for (final progress in engine.transcribe(
-        TranscribeRequest(audioPath: temp.path, backend: backend, language: language),
-      )) {
-        last = progress;
-        onProgress?.call(progress);
-      }
-      final result = last;
-      if (result == null || result.partialText.trim().isEmpty) {
-        throw const EngineUnavailableException('ASR returned no transcript');
+      final totalUs = chunks.fold<int>(
+        0,
+        (sum, chunk) => sum + chunk.duration.inMicroseconds,
+      );
+      final parts = <String>[];
+      var doneUs = 0;
+      var elapsed = Duration.zero;
+      int? tokensSoFar = 0;
+      for (var i = 0; i < chunks.length; i++) {
+        final chunk = chunks[i];
+        final chunkUs = math.max(1, chunk.duration.inMicroseconds);
+        final slice = Float32List.sublistView(
+          audio.samples,
+          chunk.startSampleAt(audio.sampleRate),
+          chunk.endSampleAt(audio.sampleRate),
+        );
+        final file = File('${dir.path}${Platform.pathSeparator}chunk$i.wav');
+        await file.writeAsBytes(encodePcm16Wav(slice, audio.sampleRate));
+        TranscribeProgress? last;
+        await for (final progress in engine.transcribe(
+          TranscribeRequest(
+            audioPath: file.path,
+            backend: backend,
+            language: language,
+          ),
+        )) {
+          last = progress;
+          if (onProgress != null) {
+            final aggregated = TranscribeProgress(
+              elapsed: elapsed + progress.elapsed,
+              ratio: progress.ratio < 0
+                  ? -1
+                  : (doneUs + progress.ratio * chunkUs) / math.max(1, totalUs),
+              partialText: <String>[...parts, progress.partialText]
+                  .join(' ')
+                  .trim(),
+              tokens: tokensSoFar == null || progress.tokens == null
+                  ? null
+                  : tokensSoFar + progress.tokens!,
+            );
+            onProgress.call(aggregated);
+          }
+        }
+        final result = last;
+        if (result == null || result.partialText.trim().isEmpty) {
+          throw const EngineUnavailableException('ASR returned no transcript');
+        }
+        parts.add(result.partialText.trim());
+        elapsed += result.elapsed;
+        if (result.tokens == null) {
+          tokensSoFar = null;
+        } else if (tokensSoFar != null) {
+          // result.tokens is the engine's cumulative count *within* this
+          // chunk, so add it once, at chunk end.
+          tokensSoFar += result.tokens!;
+        }
+        doneUs += chunkUs;
       }
       return TranscriptionJobResult(
-        text: result.partialText.trim(),
-        elapsed: result.elapsed,
-        audioDuration: processed.audio.duration,
+        text: parts.join(' ').trim(),
+        elapsed: elapsed,
+        audioDuration: audio.duration,
         engine: engine.id,
         model: model,
         backend: backend,
         originalLufs: processed.originalLufs,
         gainDb: processed.gainDb,
-        tokens: result.tokens,
+        tokens: tokensSoFar,
       );
     } finally {
-      await temp.delete();
+      await dir.delete(recursive: true);
     }
-  }
-
-  static Future<File> _writeTemporaryWav(AudioBuffer audio) async {
-    final dir = await Directory.systemTemp.createTemp('pocket_asr_');
-    final file = File('${dir.path}${Platform.pathSeparator}input.wav');
-    final bytes = BytesBuilder();
-    for (final sample in audio.samples) {
-      var value = (sample.clamp(-1.0, 1.0) * 32768).round();
-      if (value > 32767) value = 32767;
-      final data = ByteData(2)..setInt16(0, value, Endian.little);
-      bytes.add(data.buffer.asUint8List());
-    }
-    final payload = bytes.takeBytes();
-    final header = ByteData(44);
-    void text(int offset, String value) {
-      for (var i = 0; i < value.length; i++) {
-        header.setUint8(offset + i, value.codeUnitAt(i));
-      }
-    }
-    text(0, 'RIFF');
-    header.setUint32(4, 36 + payload.length, Endian.little);
-    text(8, 'WAVEfmt ');
-    header.setUint32(16, 16, Endian.little);
-    header.setUint16(20, 1, Endian.little);
-    header.setUint16(22, 1, Endian.little);
-    header.setUint32(24, audio.sampleRate, Endian.little);
-    header.setUint32(28, audio.sampleRate * 2, Endian.little);
-    header.setUint16(32, 2, Endian.little);
-    header.setUint16(34, 16, Endian.little);
-    text(36, 'data');
-    header.setUint32(40, payload.length, Endian.little);
-    await file.writeAsBytes(<int>[...header.buffer.asUint8List(), ...payload]);
-    return file;
   }
 }
