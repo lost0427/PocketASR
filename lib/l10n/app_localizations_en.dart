@@ -10,6 +10,27 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get recordStart => 'Record audio';
+
+  @override
+  String get recordStop => 'Stop and use recording';
+
+  @override
+  String get recordDiscard => 'Discard recording';
+
+  @override
+  String get recordEmpty => 'No audio was recorded. Cancel and try again.';
+
+  @override
+  String get recordPermissionDenied =>
+      'Microphone access was denied. Enable it in system settings and try again.';
+
+  @override
+  String recordElapsed(int seconds) {
+    return 'Recording · ${seconds}s';
+  }
+
+  @override
   String modelsParameterCount(String count) {
     return '${count}M parameters';
   }

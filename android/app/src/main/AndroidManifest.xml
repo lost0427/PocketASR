@@ -2,6 +2,7 @@
     <!-- The app downloads user-supplied model files at runtime; release
          builds get no overlay manifest, so this must live in main. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="PocketASR"
         android:name="${applicationName}"

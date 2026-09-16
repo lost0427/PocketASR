@@ -21,6 +21,7 @@ dependencies:
   # plugin is intentionally not used because it is incompatible with AGP 9.
   sqlite3: ^3.6.0
   path_provider: ^2.1.6
+  record: ^7.1.1
 
 dev_dependencies:
   flutter_test:

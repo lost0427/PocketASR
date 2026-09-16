@@ -98,6 +98,42 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @recordStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Record audio'**
+  String get recordStart;
+
+  /// No description provided for @recordStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop and use recording'**
+  String get recordStop;
+
+  /// No description provided for @recordDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard recording'**
+  String get recordDiscard;
+
+  /// No description provided for @recordEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio was recorded. Cancel and try again.'**
+  String get recordEmpty;
+
+  /// No description provided for @recordPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access was denied. Enable it in system settings and try again.'**
+  String get recordPermissionDenied;
+
+  /// No description provided for @recordElapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording · {seconds}s'**
+  String recordElapsed(int seconds);
+
   /// No description provided for @modelsParameterCount.
   ///
   /// In en, this message translates to:

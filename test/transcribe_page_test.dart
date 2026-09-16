@@ -573,6 +573,7 @@ void main() {
     await tester.pump();
 
     // Ask to stop while the "engine" is still in flight.
+    await tester.ensureVisible(find.text('Cancel'));
     await tester.tap(find.text('Cancel'));
     await tester.pump();
 
@@ -622,6 +623,8 @@ void main() {
     expect(find.text('Analysing speech…'), findsOneWidget);
 
     // Cancel mid-plan, then let the plan land.
+    await tester.ensureVisible(find.text('Cancel'));
+    await tester.pump();
     await tester.tap(find.text('Cancel'));
     await tester.pump();
     service.release.complete();

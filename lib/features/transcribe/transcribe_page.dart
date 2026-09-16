@@ -12,6 +12,7 @@ import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/text/token_counter.dart';
 import 'transcription_service.dart';
+import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Transcribe tab.
@@ -83,6 +84,7 @@ class _TranscribePageState extends State<TranscribePage> {
   String _partialText = '';
   double? _progress;
   bool _running = false;
+  bool _recordingBusy = false;
   String? _error;
 
   double? _tokensPerSec;
@@ -466,7 +468,7 @@ class _TranscribePageState extends State<TranscribePage> {
             !busyElsewhere &&
             !needsDecoder &&
             !needsVadModel &&
-            !_previewing;
+            !_previewing && !_recordingBusy;
         final hasResult = _result.isNotEmpty;
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
@@ -494,8 +496,20 @@ class _TranscribePageState extends State<TranscribePage> {
                     actionLabel: _fileName == null
                         ? l10n.transcribeChooseFile
                         : l10n.transcribeChangeFile,
-                    enabled: !running,
+                    enabled: !running && !_previewing && !_recordingBusy,
                     onPick: _pickFile,
+                  ),
+                  RecordingControls(
+                    enabled: !running && !_previewing && !busyElsewhere,
+                    onBusy: (busy) => setState(() => _recordingBusy = busy),
+                    onRecorded: (path) => setState(() {
+                      _filePath = path;
+                      _fileName = path.split(RegExp(r'[\\/]')).reversed.skip(1).first;
+                      _vadPreview = null;
+                      _vadPreviewSignature = null;
+                      _vadPreviewError = null;
+                      _result = '';
+                    }),
                   ),
                   if (!engineAvailable) ...[
                     const SizedBox(height: 16),
@@ -692,7 +706,7 @@ class _TranscribePageState extends State<TranscribePage> {
     final scheme = theme.colorScheme;
     final preview = _vadPreview;
     final canPreview =
-        _filePath != null && !_previewing && !_running &&
+        _filePath != null && !_previewing && !_running && !_recordingBusy &&
         (widget.state?.neuralVadReady ?? false);
     final stale =
         preview != null &&

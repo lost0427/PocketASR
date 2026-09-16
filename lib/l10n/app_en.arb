@@ -1,4 +1,11 @@
 {
+  "recordStart": "Record audio",
+  "recordStop": "Stop and use recording",
+  "recordDiscard": "Discard recording",
+  "recordEmpty": "No audio was recorded. Cancel and try again.",
+  "recordPermissionDenied": "Microphone access was denied. Enable it in system settings and try again.",
+  "recordElapsed": "Recording · {seconds}s",
+  "@recordElapsed": {"placeholders": {"seconds": {"type": "int"}}},
   "modelsParameterCount": "{count}M parameters",
   "@modelsParameterCount": {"placeholders": {"count": {"type": "String"}}},
   "@@locale": "en",

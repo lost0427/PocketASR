@@ -10,6 +10,26 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get recordStart => '录制音频';
+
+  @override
+  String get recordStop => '停止并使用录音';
+
+  @override
+  String get recordDiscard => '放弃录音';
+
+  @override
+  String get recordEmpty => '未录到音频，请放弃本次录音后重试。';
+
+  @override
+  String get recordPermissionDenied => '未获得麦克风权限。请在系统设置中允许后重试。';
+
+  @override
+  String recordElapsed(int seconds) {
+    return '录音中 · $seconds 秒';
+  }
+
+  @override
   String modelsParameterCount(String count) {
     return '$count 百万参数';
   }
