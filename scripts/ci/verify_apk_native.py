@@ -4,14 +4,17 @@
 Checks, for every lib/arm64-v8a/*.so in an APK (or a directory of .so files,
 for local wiring tests):
 
-1. ELF LOAD alignment: every PT_LOAD has p_align >= 16384 AND
-   p_offset == p_vaddr (mod 16384)  — Android 16KB-page requirement
+1. ELF LOAD alignment (inside the file): every PT_LOAD has p_align >= 16384
+   AND p_offset == p_vaddr (mod 16384)  — Android 16KB-page requirement
    (https://developer.android.com/guide/practices/page-sizes).
-2. DT_NEEDED closure: every library a .so needs is either bundled in the same
+2. APK zip placement (container): a STORED .so's data must start at a
+   16KB-aligned offset within the APK (what `zipalign -P 16` guarantees), so
+   the loader can mmap it in place. Compressed .so entries fail too.
+3. DT_NEEDED closure: every library a .so needs is either bundled in the same
    APK lib dir or is a known Android *system* library. Anything else (e.g. a
    stray libomp.so) fails the build — that is the point.
-3. Required libraries present: --require NAME (repeatable).
-4. Required exported symbols: --require-symbol NAME.so:sym (repeatable).
+4. Required libraries present: --require NAME (repeatable).
+5. Required exported symbols: --require-symbol NAME.so:sym (repeatable).
    Guards against -fvisibility=hidden swallowing the FFI ABI.
 
 Exit 0 = all good; exit 1 = do not ship. stdlib only (runs anywhere CI does).
@@ -142,6 +145,20 @@ def check_lib(name: str, data: bytes):
     return problems, needed, exports
 
 
+def _local_data_offset(raw, zi) -> int:
+    """File-data offset from the LOCAL header, or -1 if it is malformed.
+
+    zipalign's alignment padding lives in the local header's extra field only;
+    ZipInfo.extra comes from the central directory and is empty in a real
+    zipaligned APK, so using it under-reports the offset and false-fails."""
+    raw.seek(zi.header_offset)
+    fixed = raw.read(30)
+    if len(fixed) < 30 or struct.unpack_from("<I", fixed, 0)[0] != 0x04034B50:
+        return -1
+    name_len, extra_len = struct.unpack_from("<HH", fixed, 26)
+    return zi.header_offset + 30 + name_len + extra_len
+
+
 def collect_targets(target: str):
     """Return ({basename: bytes}, extra_ok) for an APK or a directory."""
     if os.path.isdir(target):
@@ -152,7 +169,7 @@ def collect_targets(target: str):
                     out[fn] = fh.read()
         return out, True
     out, ok = {}, True
-    with zipfile.ZipFile(target) as zf:
+    with open(target, "rb") as raw, zipfile.ZipFile(target) as zf:
         for zi in zf.infolist():
             if not (zi.filename.startswith("lib/arm64-v8a/")
                     and zi.filename.endswith(".so")):
@@ -162,11 +179,13 @@ def collect_targets(target: str):
                 print(f"FAIL {base}: compressed in APK; native libs must be "
                       "STORED (packaging.jniLibs.useLegacyPackaging=false)")
                 ok = False
-            data_off = (zi.header_offset + 30 + len(zi.filename.encode())
-                        + len(zi.extra))
-            if data_off % 4:
-                print(f"FAIL {base}: data starts at {data_off}, not 4-byte "
-                      "aligned (zipalign)")
+            data_off = _local_data_offset(raw, zi)
+            if data_off < 0:
+                print(f"FAIL {base}: malformed local file header")
+                ok = False
+            elif data_off % PAGE:
+                print(f"FAIL {base}: data starts at {data_off}, not 16KB "
+                      "aligned in the APK (zipalign -P 16)")
                 ok = False
             out[base] = zf.read(zi)
     return out, ok

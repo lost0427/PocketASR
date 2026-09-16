@@ -110,7 +110,9 @@ and hardware AAC/MP3 via the Android Media NDK are unaffected).
    (`whisper_full`, `crispembed_init`). Covers third-party `.so` in the APK
    too (flutter, sherpa-onnx).
 2. `zipalign -c -P 16 4 <apk>` from the newest installed build-tools.
-3. A `.so` entry in the APK must be STORED (uncompressed) and 4-byte aligned.
+3. A `.so` entry in the APK must be STORED (uncompressed) and 16KB-aligned
+   within the archive (the offset padded by `zipalign -P 16`, so the loader
+   can `mmap` it in place).
 
 Any failure fails the job — `release.yml`'s `publish` job needs `android`, so a
 failing gate means **no release is published**. The workflow caches

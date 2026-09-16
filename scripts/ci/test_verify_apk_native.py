@@ -3,14 +3,14 @@
 
 No cross toolchain needed: hand-built bytes exercise exactly the branches the
 release gate depends on — LOAD alignment/congruence, DT_NEEDED closure,
-required symbols, and APK STORED+4-byte zip alignment. Run:
+required symbols, and APK STORED+16KB zip placement. Run:
     python3 scripts/ci/test_verify_apk_native.py
 """
+import binascii
 import os
 import struct
 import sys
 import tempfile
-import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from verify_apk_native import main as verify  # noqa: E402
@@ -70,12 +70,33 @@ def build_lib(align: int, extra_needed=(), exports=("must_have",)) -> bytes:
             + b"\0" * (total - sym_off - len(syms)) + sections)
 
 
-def pad_entry(zf, name, data):
-    """Write an APK-style STORED entry whose data starts 4-byte aligned."""
-    zi = zipfile.ZipInfo(name)
-    zi.compress_type = zipfile.ZIP_STORED
-    zi.extra = b"\0" * ((-(30 + len(name))) % 4)
-    zf.writestr(zi, data)
+def write_apk(path, entries, align=16384):
+    """Minimal STORED zip emulating zipalign: the alignment padding lives in
+    each LOCAL header's extra field only, while the central directory records
+    no extra. Python's `zipfile` writes the same extra to both, which hid a
+    bug where the gate read ZipInfo.extra (central) instead of the local
+    header and false-failed every real zipaligned APK."""
+    out = bytearray()
+    central = []
+    for name, data in entries:
+        nb = name.encode()
+        pad = (-(30 + len(nb))) % align
+        crc = binascii.crc32(data) & 0xFFFFFFFF
+        off = len(out)
+        out += struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0, 0, 0, 0, crc,
+                           len(data), len(data), len(nb), pad)
+        out += nb + b"\0" * pad + data
+        central.append((nb, off, crc, len(data)))
+    cd_off = len(out)
+    for nb, off, crc, size in central:
+        out += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0, 0, 0, 0,
+                           crc, size, size, len(nb), 0, 0, 0, 0, 0, off)
+        out += nb
+    cd_size = len(out) - cd_off
+    out += struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, len(central),
+                       len(central), cd_size, cd_off, 0)
+    with open(path, "wb") as fh:
+        fh.write(out)
 
 
 def run():
@@ -95,17 +116,20 @@ def run():
             "missing export must FAIL"
 
         apk = os.path.join(td, "app.apk")
-        with zipfile.ZipFile(apk, "w") as zf:
-            pad_entry(zf, "lib/arm64-v8a/libgood.so", good)
+        write_apk(apk, [("lib/arm64-v8a/libgood.so", good)])
         assert verify([apk]) == 0, "aligned STORED APK must PASS"
+
+        narrow = os.path.join(td, "narrow.apk")
+        write_apk(narrow, [("lib/arm64-v8a/libgood.so", good)], align=4)
+        assert verify([narrow]) == 1, \
+            "4-byte-but-not-16KB APK offset must FAIL"
 
         for name, blob, why in [
             ("bad1.apk", bad_align, "4KB-aligned lib must FAIL"),
             ("bad2.apk", bad_dep, "unresolvable DT_NEEDED must FAIL"),
         ]:
             p = os.path.join(td, name)
-            with zipfile.ZipFile(p, "w") as zf:
-                pad_entry(zf, "lib/arm64-v8a/libx.so", blob)
+            write_apk(p, [("lib/arm64-v8a/libx.so", blob)])
             assert verify([p]) == 1, why
 
         d2 = os.path.join(td, "stale")
