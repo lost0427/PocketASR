@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   windows:
@@ -40,13 +41,14 @@ jobs:
           path: pocket-asr-windows-${{ github.ref_name }}.zip
           if-no-files-found: error
 
-  # Android: identical native pipeline to ci.yml (same script, shared cache —
-  # a CI warm build on the pinned script hash is reused here instead of
-  # rebuilding from source). scripts/ci/build_native_android.sh compiles the
-  # commit-pinned CrispASR/CrispEmbed trees with NDK r28+ so every shipped
-  # .so is 16KB LOAD-aligned; nothing is uploaded unless the ELF alignment /
-  # DT_NEEDED closure gate and zipalign pass against the built APK. If any
-  # check fails, this job fails and `publish` never runs: no release ships.
+  # Android: reuses the exact native libraries CI already built and verified
+  # for this commit SHA (android-native-libs artifact from ci.yml) instead of
+  # recompiling. Fallback, fail-closed: if the CI artifact is unavailable
+  # (e.g. tag pushed before CI finished), rebuild from pinned sources with
+  # scripts/ci/build_native_android.sh (NDK r28+, 16KB LOAD-aligned) and run
+  # the same ELF alignment / DT_NEEDED closure gate and zipalign check against
+  # the built APK before upload. If any check fails, this job fails and
+  # `publish` never runs: no release ships.
   #
   # The APK bundles native ENGINE libraries only. Model files (see
   # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
@@ -74,8 +76,28 @@ jobs:
         with:
           path: android/app/src/main/jniLibs/arm64-v8a
           key: native-android-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+      - name: Reuse CI native libs for this commit
+        id: native-download
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: ci.yml
+          workflow_conclusion: success
+          commit: ${{ github.sha }}
+          name: android-native-libs
+          path: android/app/src/main/jniLibs/arm64-v8a
+          search_artifacts: true
+          if_no_artifact_found: warn
+      - name: Check native libs
+        id: native-check
+        run: |
+          if [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build 16KB-aligned native libraries from pinned sources
-        if: steps.native-cache.outputs.cache-hit != 'true'
+        if: steps.native-check.outputs.found != 'true'
         run: bash scripts/ci/build_native_android.sh
       - run: flutter build apk --release
       - name: Verify APK native payload

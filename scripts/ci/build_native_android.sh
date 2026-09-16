@@ -74,25 +74,36 @@ PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/android/app/src/main/jniLibs/$ANDROID_ABI}"
-WORK="$(mktemp -d)"
+# Stable work dir under ROOT (not mktemp): ccache keys on absolute source
+# paths, so a throwaway /tmp/tmp.XXX dir would miss on every run even with
+# CCACHE_BASEDIR set. The runner checkout path is stable, so this dir gives
+# stable paths and real hits across runs.
+WORK="$ROOT/.native-work"
+rm -rf "$WORK"
+mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
 log() { echo "build_native_android: $*"; }
 
 # --- ccache ---
-# The build runs in a throwaway mktemp WORK dir, so every cache miss would
-# otherwise recompile both engines and both pinned ggml trees from zero.
-# ccache makes those compiles reusable across runs. Sources and NDK are
-# pinned; CCACHE_COMPILERCHECK=content guards against a re-provisioned
-# toolchain reusing stale object files.
+# Optional but strongly recommended: makes fallback rebuilds reusable across
+# runs. Sources and NDK are pinned; CCACHE_COMPILERCHECK=content guards
+# against a re-provisioned toolchain reusing stale object files. Missing
+# ccache is a warning, not a fatal error, so the Release fallback path never
+# goes red just because the tool is absent.
 export CCACHE_DIR="${CCACHE_DIR:-$ROOT/.ccache}"
 export CCACHE_BASEDIR="$ROOT"
 export CCACHE_COMPRESS=1
 export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-2G}"
 export CCACHE_COMPILERCHECK=content
-command -v ccache >/dev/null 2>&1 || { log "FATAL: ccache not on PATH"; exit 1; }
-mkdir -p "$CCACHE_DIR"
-ccache --zero-stats >/dev/null
+USE_CCACHE=0
+if command -v ccache >/dev/null 2>&1; then
+  USE_CCACHE=1
+  mkdir -p "$CCACHE_DIR"
+  ccache --zero-stats >/dev/null
+else
+  log "WARNING: ccache not on PATH, building without compiler cache"
+fi
 
 # --- NDK ---
 : "${ANDROID_HOME:?ANDROID_HOME must be set (predefined on GitHub runners)}"
@@ -120,10 +131,14 @@ common_cmake=(
   -DANDROID_PLATFORM="android-$ANDROID_API"
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-  -DCMAKE_C_COMPILER_LAUNCHER=ccache
-  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
   -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS"
 )
+if [ "$USE_CCACHE" = "1" ]; then
+  common_cmake+=(
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+  )
+fi
 
 clone_at() { # url commit dest
   git init -q "$3" && git -C "$3" remote add origin "$1"
@@ -196,8 +211,10 @@ done
 
 log "staged:"
 ls -l "$OUT"
-log "ccache stats:"
-ccache --show-stats
+if [ "$USE_CCACHE" = "1" ]; then
+  log "ccache stats:"
+  ccache --show-stats
+fi
 
 log "pre-check (the authoritative run happens against the built APK):"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \

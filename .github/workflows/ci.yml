@@ -81,3 +81,11 @@ jobs:
           name: android-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+      # Release reuses these exact bits for the same commit SHA instead of
+      # recompiling (see release.yml). Upload after the APK gate so a green
+      # CI run always implies verified 16KB-aligned libraries.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-native-libs
+          path: android/app/src/main/jniLibs/arm64-v8a
+          if-no-files-found: error

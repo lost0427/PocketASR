@@ -57,6 +57,8 @@ native/*
 
 # ccache for the native Android build (CI caches it via actions/cache).
 /.ccache/
+# Stable build work dir for scripts/ci/build_native_android.sh (keeps ccache hits).
+/.native-work/
 android/key.properties
 
 # Android/Gradle first-sync artifacts
