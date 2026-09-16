@@ -54,6 +54,9 @@ app.*.map.json
 native/*
 !native/README.md
 *.so
+
+# ccache for the native Android build (CI caches it via actions/cache).
+/.ccache/
 android/key.properties
 
 # Android/Gradle first-sync artifacts

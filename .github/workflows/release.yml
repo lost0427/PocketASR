@@ -61,6 +61,13 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
+      - name: Restore native compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: native-ccache-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+          restore-keys: |
+            native-ccache-
       - name: Restore cached native build
         id: native-cache
         uses: actions/cache@v4

@@ -79,6 +79,21 @@ trap 'rm -rf "$WORK"' EXIT
 
 log() { echo "build_native_android: $*"; }
 
+# --- ccache ---
+# The build runs in a throwaway mktemp WORK dir, so every cache miss would
+# otherwise recompile both engines and both pinned ggml trees from zero.
+# ccache makes those compiles reusable across runs. Sources and NDK are
+# pinned; CCACHE_COMPILERCHECK=content guards against a re-provisioned
+# toolchain reusing stale object files.
+export CCACHE_DIR="${CCACHE_DIR:-$ROOT/.ccache}"
+export CCACHE_BASEDIR="$ROOT"
+export CCACHE_COMPRESS=1
+export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-2G}"
+export CCACHE_COMPILERCHECK=content
+command -v ccache >/dev/null 2>&1 || { log "FATAL: ccache not on PATH"; exit 1; }
+mkdir -p "$CCACHE_DIR"
+ccache --zero-stats >/dev/null
+
 # --- NDK ---
 : "${ANDROID_HOME:?ANDROID_HOME must be set (predefined on GitHub runners)}"
 if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
@@ -105,6 +120,8 @@ common_cmake=(
   -DANDROID_PLATFORM="android-$ANDROID_API"
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
   -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS"
 )
 
@@ -179,6 +196,9 @@ done
 
 log "staged:"
 ls -l "$OUT"
+log "ccache stats:"
+ccache --show-stats
+
 log "pre-check (the authoritative run happens against the built APK):"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \
   --require libcrispasr.so --require libcrispembed.so \
