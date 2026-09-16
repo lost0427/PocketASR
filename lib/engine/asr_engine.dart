@@ -15,12 +15,21 @@ enum Backend { cpu, vulkan, npu }
 
 /// Model to load into an engine.
 ///
-/// The Phase 7 catalog produces these from `assets/model_allowlist.json`; the
-/// engine layer only needs the on-disk [path] plus labels for display.
+/// The Phase 7 catalog produces these from `assets/model_allowlist.json` via
+/// `LocalModelStore.specFor`; the engine layer only needs on-disk paths plus
+/// labels for display. Multi-file engines (sherpa-onnx) read the companion
+/// paths; single-file engines (CrispASR GGUF) use [path] alone.
 class EngineModelSpec {
-  const EngineModelSpec({required this.path, this.family, this.quant});
+  const EngineModelSpec({
+    required this.path,
+    this.family,
+    this.quant,
+    this.tokensPath,
+    this.encoderPath,
+    this.decoderPath,
+  });
 
-  /// Filesystem path to the model weights.
+  /// Filesystem path to the (primary) model weights.
   final String path;
 
   /// Served model family (`sensevoice`, `whisper`, ...), for labels/logs.
@@ -28,6 +37,15 @@ class EngineModelSpec {
 
   /// Quantization tag (`q8_0`, `q4_k`, ...), for labels/logs.
   final String? quant;
+
+  /// Tokenizer file for engines that need one beside the model.
+  final String? tokensPath;
+
+  /// Encoder weights, for encoder/decoder models like whisper.
+  final String? encoderPath;
+
+  /// Decoder weights, for encoder/decoder models like whisper.
+  final String? decoderPath;
 }
 
 /// What an engine can actually do right now.

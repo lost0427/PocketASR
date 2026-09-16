@@ -14,10 +14,11 @@ import 'asr_engine.dart';
 /// [AsrEngine] backed by sherpa-onnx's `OfflineRecognizer`.
 ///
 /// sherpa-onnx models are multi-file (e.g. whisper needs an encoder + decoder,
-/// and every family needs a `tokens.txt`). [EngineModelSpec] only carries one
-/// path, so the adapter derives [tokensPath] as `tokens.txt` next to the model
-/// and accepts explicit [encoderPath]/[decoderPath] overrides. A missing file
-/// fails `load` with a clear message rather than guessing.
+/// and every family needs a tokens file). A catalog bundle spec carries those
+/// companions as [EngineModelSpec.tokensPath]/[encoderPath]/[decoderPath] and
+/// this adapter reads them; the constructor params override the spec for
+/// callers that stage files by hand. A missing file fails `load` with a clear
+/// message rather than guessing.
 class SherpaEngine implements AsrEngine {
   SherpaEngine({
     this.tokensPath,
@@ -27,13 +28,13 @@ class SherpaEngine implements AsrEngine {
     this.libraryPath,
   });
 
-  /// Path to `tokens.txt`; defaults to `tokens.txt` beside the model file.
+  /// Path to the tokens file; overrides the bundle spec's `tokensPath`.
   final String? tokensPath;
 
-  /// Whisper encoder ONNX; defaults to the [EngineModelSpec.path].
+  /// Whisper encoder ONNX; overrides the bundle spec's `encoderPath`.
   final String? encoderPath;
 
-  /// Whisper decoder ONNX; required for the `whisper` family.
+  /// Whisper decoder ONNX; overrides the bundle spec's `decoderPath`.
   final String? decoderPath;
 
   final int threads;
@@ -110,20 +111,22 @@ class SherpaEngine implements AsrEngine {
 
   sherpa.OfflineModelConfig _modelConfig(EngineModelSpec spec) {
     final family = (spec.family ?? '').toLowerCase();
-    final tokens = tokensPath ?? _sibling(spec.path, 'tokens.txt');
+    // Precedence: explicit constructor override > bundle spec > sibling file.
+    final tokens =
+        tokensPath ?? spec.tokensPath ?? _sibling(spec.path, 'tokens.txt');
 
     switch (family) {
       case 'whisper':
-        final decoder = decoderPath;
+        final decoder = decoderPath ?? spec.decoderPath;
         if (decoder == null || decoder.isEmpty) {
           throw const EngineUnavailableException(
             'sherpa-onnx whisper needs both an encoder and a decoder ONNX; '
-            'pass decoderPath (and optionally encoderPath).',
+            'load a bundle spec with a decoder file, or pass decoderPath.',
           );
         }
         return sherpa.OfflineModelConfig(
           whisper: sherpa.OfflineWhisperModelConfig(
-            encoder: encoderPath ?? spec.path,
+            encoder: encoderPath ?? spec.encoderPath ?? spec.path,
             decoder: decoder,
           ),
           tokens: tokens,

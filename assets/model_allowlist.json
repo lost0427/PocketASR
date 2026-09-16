@@ -1,20 +1,100 @@
 {
-  "version": 1,
-  "comment": "Curated models PocketASR may run on-device. This build has no downloader, so entries only declare the local file the app expects. sizeBytes is omitted until a real download size is confirmed; the catalog never invents one.",
+  "version": 2,
+  "comment": "Curated bundles PocketASR may fetch and run on-device. Each bundle is one primary model file plus companions (tokens, whisper encoder/decoder). sizeBytes/sha256 are the exact values pinned at the Hugging Face revision named in each URL; nothing here is estimated. license names the upstream license; where the mirror ships no LICENSE file, that is stated instead of implied.",
   "models": [
     {
-      "id": "sensevoice-small",
-      "displayName": "SenseVoice Small",
+      "id": "sherpa-sensevoice-int8",
+      "displayName": "SenseVoice Small (sherpa-onnx int8)",
+      "engine": "sherpa",
+      "type": "asr",
       "family": "sensevoice",
-      "quant": "q8",
-      "fileName": "sensevoice-small-q8.onnx"
+      "quant": "int8",
+      "languages": ["zh", "en", "yue", "ja", "ko"],
+      "license": "FunASR v1.1 (attribution required)",
+      "files": [
+        {
+          "fileName": "model.int8.onnx",
+          "role": "model",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/model.int8.onnx",
+          "sizeBytes": 239233841,
+          "sha256": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
+        },
+        {
+          "fileName": "tokens.txt",
+          "role": "tokens",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/tokens.txt",
+          "sizeBytes": 315894,
+          "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+        }
+      ]
     },
     {
-      "id": "whisper-base",
-      "displayName": "Whisper Base",
+      "id": "sherpa-whisper-base-int8",
+      "displayName": "Whisper Base (sherpa-onnx int8)",
+      "engine": "sherpa",
+      "type": "asr",
       "family": "whisper",
-      "quant": "q5",
-      "fileName": "whisper-base-q5.onnx"
+      "quant": "int8",
+      "license": "MIT (upstream Whisper); the HF mirror ships no LICENSE file",
+      "files": [
+        {
+          "fileName": "base-encoder.int8.onnx",
+          "role": "encoder",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/bb53ee204431c90d314c1cc08d28d23e5b7927cc/base-encoder.int8.onnx",
+          "sizeBytes": 29120534,
+          "sha256": "0b8fb1304b6109976038efff5ace81720e00386f3ff6b54ee8c75291ca0a1e11"
+        },
+        {
+          "fileName": "base-decoder.int8.onnx",
+          "role": "decoder",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/bb53ee204431c90d314c1cc08d28d23e5b7927cc/base-decoder.int8.onnx",
+          "sizeBytes": 130672026,
+          "sha256": "9759d217388a01b3a4c7c15533201067b48ae819c4daafc8624e64b9409dc02d"
+        },
+        {
+          "fileName": "base-tokens.txt",
+          "role": "tokens",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/bb53ee204431c90d314c1cc08d28d23e5b7927cc/base-tokens.txt",
+          "sizeBytes": 816730,
+          "sha256": "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
+        }
+      ]
+    },
+    {
+      "id": "crispasr-sensevoice-q4k",
+      "displayName": "SenseVoice Small (CrispASR q4_k GGUF)",
+      "engine": "crispasr",
+      "type": "asr",
+      "family": "sensevoice",
+      "quant": "q4_k",
+      "languages": ["zh", "en", "yue", "ja", "ko"],
+      "license": "FunASR v1.1 (attribution required)",
+      "files": [
+        {
+          "fileName": "sensevoice-small-q4_k.gguf",
+          "role": "model",
+          "url": "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/e14d94223aef728879f08dfb4d5f20fe873b22ef/sensevoice-small-q4_k.gguf",
+          "sizeBytes": 135549024,
+          "sha256": "b76123fcdf8dd447867446ad4fab3d071bec1cf327ec107829563346307e3891"
+        }
+      ]
+    },
+    {
+      "id": "crispembed-e5-small-q8",
+      "displayName": "Multilingual E5 Small (CrispEmbed q8_0 GGUF)",
+      "engine": "crispembed",
+      "type": "embedding",
+      "quant": "q8_0",
+      "license": "MIT",
+      "files": [
+        {
+          "fileName": "multilingual-e5-small-q8_0.gguf",
+          "role": "model",
+          "url": "https://huggingface.co/cstr/multilingual-e5-small-GGUF/resolve/178420da727e544c2689e89b6648b205ad176eda/multilingual-e5-small-q8_0.gguf",
+          "sizeBytes": 131624960,
+          "sha256": "0a34067a40f25d3149b36885faa62bee0e5284d0f9edc102acfc00e115d953e8"
+        }
+      ]
     }
   ]
 }

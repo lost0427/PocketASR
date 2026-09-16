@@ -61,7 +61,9 @@ void main() {
       fileName: 'a.onnx',
       sizeBytes: 999999, // declared; must not be shown once the file is here
     );
-    File(store.pathFor(entry)).writeAsBytesSync(List.filled(2048, 0));
+    File(store.pathFor(entry))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(List.filled(2048, 0));
 
     await tester.pumpWidget(host(entries: const [entry]));
     await tester.pumpAndSettle();
