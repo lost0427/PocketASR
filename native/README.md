@@ -1,9 +1,10 @@
 # Native libraries
 
 PocketASR's Dart adapters (`lib/engine/`) are pure FFI bindings. The actual
-native libraries are **not** committed to this repo — they are pinned, fetched
-by CI, and loaded at runtime. This file records where each engine comes from so
-the versions and licenses are auditable.
+native libraries are **not** committed to this repo — CI **builds them from
+pinned upstream sources** and stages the result into `jniLibs`; they are loaded
+at runtime. This file records where each engine comes from, how it is built,
+and under which licenses.
 
 | Adapter | Upstream | Dart package | Version | License | Native artifact |
 |---|---|---|---|---|---|
@@ -13,7 +14,8 @@ the versions and licenses are auditable.
 
 ## Current state
 
-- **CrispASR / CrispEmbed**: no `.so`/`.dll` is bundled yet. The adapters report
+- **CrispASR / CrispEmbed**: no `.so`/`.dll` is committed. On Android, CI
+  builds both from source (below). The adapters report
   `EngineCapabilities.unavailable` with a clear reason and never fabricate text
   or embeddings. `CrispEmbedder` throws `EmbedderUnavailableException` instead
   of falling back to `DeterministicEmbedder`.
@@ -23,45 +25,117 @@ the versions and licenses are auditable.
   app is built for a platform the plugin covers; in a bare `flutter test` it may
   or may not resolve the library, so no test depends on it.
 
-## Android (arm64-v8a)
+## Android (arm64-v8a): built from source, 16KB-aligned
 
-`android/app/build.gradle.kts` restricts ABIs to `arm64-v8a` and keeps the
-app `src/main/jniLibs/<abi>/` source set, which is where fetched libs land.
+`android/app/build.gradle.kts` restricts ABIs to `arm64-v8a` and keeps the app
+`src/main/jniLibs/<abi>/` source set, where the build stages the libraries.
 
-Fetch the pinned CrispASR library (verifies SHA-256, extracts, copies `.so`
-into `android/app/src/main/jniLibs/arm64-v8a/`):
+**Why a source build replaced the prebuilt fetch.** The old
+`scripts/ci/fetch_native_android.sh` (deleted) downloaded the upstream
+`v0.8.32` / `v0.16.1` Android tarballs; their SHA-256 pins were genuine, but
+inspection of those exact binaries shows every `PT_LOAD` is `p_align=0x1000`
+(4 KB), not 16 KB. ELF LOAD alignment is fixed at **link time** (lld's
+`-z,max-page-size`); there is no supported post-hoc fix — so 16 KB compliance
+requires a rebuild, which is what `scripts/ci/build_native_android.sh` does.
+No `patchelf`, no `pickFirst`: the shipped bytes are compiled for the contract.
+Some Android 16 devices run a 4 KB compat mode, so 4 KB libraries are not
+categorically "cannot install" — they are also not something to ship and rely
+on. The old bundle additionally had defects a rebuild makes impossible:
+`libcrispasr.so` DT_NEEDEDed a `libomp.so` the tarball never carried, and
+`libcrispembed.so` DT_NEEDEDed three `libggml*.so` siblings its plugin's fetch
+never unpacked.
 
-```bash
-scripts/ci/fetch_native_android.sh
-```
+Pinned source revisions (tags dereferenced to commit SHAs; submodule gitlinks
+asserted by the script):
 
-The script deliberately does **not** re-download CrispEmbed: the `crispembed`
-Flutter plugin's own `android/build.gradle` runs a `fetchCrispembedLibs` task on
-`preBuild` that downloads its prebuilt `.so` (from `v0.16.0`, the version its
-Gradle metadata declares) into its package `jniLibs`. Pass
-`--with-crispembed` to force the pinned CrispEmbed `v0.16.1` asset instead.
-`.so` files are gitignored and must never be committed.
+| Repo | Tag | Commit | Pinned ggml (CrispStrobe/ggml) |
+|---|---|---|---|
+| CrispASR | v0.8.32 | `e2a356146e36bc1cc0410edefb01990448766979` | `5049ebb8472fdc965eb3fb72c1cb111260726186` |
+| CrispEmbed | v0.16.1 | `e6411e48bfd2572cc29a7c04eccee8a8153bef2e` | `0714117daca2471b00e09554c7eaa74a06b0b2c5` |
 
-Pinned CrispASR assets (from the `v0.8.32` release):
+The two repos pin **different ggml commits**. Matching exported-symbol sets do
+not prove ABI compatibility between ggml builds, so **the two ggml trees are
+never shared**: each engine statically embeds its own pinned ggml and no
+`libggml*.so` is ever packaged. (If a future change ever needs a shared ggml,
+it requires both repos pinning the same ggml commit — do not improvise.)
 
-- `crispasr-android-arm64-v8a.tar.gz`
-  sha256 `c1a3478ed7c0ad47077ecb8f8c600068b78674aa56c98a6c366108a3a09dd8fc`
-- `libcrispasr-windows-x86_64.tar.gz`
-  sha256 `3c2bccdd7e02ac5c526a744628f08b2ce6333f29c03804340fba8d131001b9b9`
+Build contract (options verified against the pinned tags' `CMakeLists.txt`):
 
-Pinned CrispEmbed `v0.16.1` asset (opt-in):
+- NDK **r30 LTS (`30.0.16248370`)** — any r28+ qualifies (lld 16 KB default
+  landed in r27); ABI `arm64-v8a`, API `android-24`, CPU-only ggml backends,
+  CMake + Ninja.
+- Link flags: `-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384`.
+- CrispASR: `-DBUILD_SHARED_LIBS=ON -DCRISPASR_BUILD_TESTS=OFF
+  -DCRISPASR_BUILD_EXAMPLES=OFF -DCRISPASR_BUILD_SERVER=OFF`, target
+  `crispasr-lib`. `crispasr-lib` is a keywordless CMake target, so one knob
+  cannot make it shared while its ggml is static; instead the repo's own
+  pinned ggml submodule is built `-DBUILD_SHARED_LIBS=OFF` and fed back
+  through the upstream `-DCRISPASR_USE_SYSTEM_GGML=ON` path — libcrispasr.so
+  links the static ggml archives and carries no ggml `DT_NEEDED`.
+  `-DGGML_OPENMP=OFF`, and `-DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF` for a
+  deterministic, network-free link (`.opus`/`.amr` file decoding is not
+available through the CrispASR engine on Android; WAV/MP3/FLAC via miniaudio
+and hardware AAC/MP3 via the Android Media NDK are unaffected).
+- CrispEmbed: `-DBUILD_SHARED_LIBS=OFF -DCRISPEMBED_BUILD_SHARED=ON
+  -DGGML_LLAMAFILE=OFF -DGGML_OPENMP=OFF -DCRISPEMBED_NATIVE=OFF`, target
+  `crispembed-shared`. Its ggml goes static under that same
+  `BUILD_SHARED_LIBS=OFF` (the shared target is declared with an explicit
+  `SHARED` keyword), producing one self-contained `libcrispembed.so`. Built
+  with `-fvisibility=hidden -fvisibility-inlines-hidden`; this is safe because
+  every public symbol is marked `CRISPEMBED_API`
+  (`__attribute__((visibility("default")))` under `CRISPEMBED_BUILD`, which the
+  shared target defines). libcrispasr.so keeps default visibility — same as
+  the old bundle, and harmless under `RTLD_LOCAL` dlopen, because the only
+  other ggml copy in the process (inside libcrispembed.so) is hidden.
+- The `crispembed` plugin's `fetchCrispembedLibs` Gradle task uses the `Project.exec`
+  API removed in Gradle 9 and is disabled in `android/app/build.gradle.kts`.
+  Nothing in this project's build downloads CrispEmbed; do not describe the
+  plugin as fetching anything.
+- **NDK runtime deps are staged explicitly** (AGP does not add them for plain
+  `jniLibs` inputs): `libc++_shared.so` / `libomp.so` are copied from the NDK
+  sysroot only if a built library's `DT_NEEDED` actually requests one.
 
-- `crispembed-android-arm64-v8a.tar.gz`
-  sha256 `bc6f61d501a95aeefb2dff54b82ca34e5e84ad21ed748604004e984f6a3b1334`
+### Gates (both ci.yml and release.yml, before any artifact upload)
+
+1. `scripts/ci/verify_apk_native.py <apk>` — every `lib/arm64-v8a/*.so`:
+   `PT_LOAD` `p_align >= 16384` and `p_offset ≡ p_vaddr (mod 16384)`; full
+   `DT_NEEDED` closure against "bundled or known Android system library";
+   required libraries and required exported symbols
+   (`whisper_full`, `crispembed_init`). Covers third-party `.so` in the APK
+   too (flutter, sherpa-onnx).
+2. `zipalign -c -P 16 4 <apk>` from the newest installed build-tools.
+3. A `.so` entry in the APK must be STORED (uncompressed) and 4-byte aligned.
+
+Any failure fails the job — `release.yml`'s `publish` job needs `android`, so a
+failing gate means **no release is published**. The workflow caches
+`jniLibs/arm64-v8a` keyed on the build script's own hash, shared between CI
+and release runs, so the large C++ builds happen once per pin change.
+
+Historical prebuilt assets (audit record — **not** used by any current
+workflow): `crispasr-android-arm64-v8a.tar.gz` (v0.8.32) sha256
+`c1a3478ed7c0ad47077ecb8f8c600068b78674aa56c98a6c366108a3a09dd8fc`;
+`crispembed-android-arm64-v8a.tar.gz` (v0.16.1) sha256
+`bc6f61d501a95aeefb2dff54b82ca34e5e84ad21ed748604004e984f6a3b1334`.
 
 ## Windows
 
-The release workflow builds a Windows app. To enable CrispASR there, download
-`libcrispasr-windows-x86_64.tar.gz` from the CrispASR `v0.8.32` release and put
-its DLLs next to the built executable (`build/windows/x64/runner/Release/`).
+The release workflow builds a Windows app, but with **no CrispASR/CrispEmbed
+DLLs**: there is no Windows native build step, so the two Crisp adapters
+honestly report unavailable on Windows. This is *not* "no ASR on Windows" —
+SherpaEngine is available there because the `sherpa_onnx` plugin bundles its
+Windows DLLs (`sherpa_onnx_windows`) automatically.
+
+To enable CrispASR manually, download `libcrispasr-windows-x86_64.tar.gz` from
+the CrispASR `v0.8.32` release (sha256
+`3c2bccdd7e02ac5c526a744628f08b2ce6333f29c03804340fba8d131001b9b9`) and put its
+DLLs next to the built executable (`build/windows/x64/runner/Release/`).
 CrispEmbed's Windows plugin looks for `windows/lib/crispembed.dll`; without a
-staged `crispembed-windows-x86_64.zip` it warns and bundles nothing. sherpa-onnx
-Windows DLLs are bundled automatically by the plugin.
+staged `crispembed-windows-x86_64.zip` it warns and bundles nothing.
+
+## Models are never built or downloaded
+
+No workflow compiles or downloads any model. Every artifact above is an engine
+library; users supply model files at runtime (see `assets/model_allowlist.json`).
 
 ## Why no fallback
 

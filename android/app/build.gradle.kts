@@ -28,16 +28,18 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // PocketASR ships native ASR/embedding libraries for arm64 only
-        // (see native/README.md and scripts/ci/fetch_native_android.sh).
+        // PocketASR ships native ASR/embedding libraries for arm64 only.
+        // They are BUILT FROM PINNED SOURCE by CI (scripts/ci/build_native_android.sh,
+        // see native/README.md) — never fetched or committed.
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
     }
 
-    // Keep the fetched libcrispasr.so / libcrispembed.so loadable by
+    // Keep the CI-built libcrispasr.so / libcrispembed.so loadable by
     // DynamicLibrary.open at runtime; app jniLibs are `src/main/jniLibs/<abi>/`
-    // by default, where the fetch script drops them.
+    // by default, where scripts/ci/build_native_android.sh stages them.
+    // useLegacyPackaging=false keeps them STORED so zipalign/16KB checks pass.
     packaging {
         jniLibs {
             useLegacyPackaging = false
@@ -63,8 +65,11 @@ flutter {
     source = "../.."
 }
 
-// crispembed 0.16.1 calls the removed Project.exec() API from its fetch task.
-// CI stages the verified library instead; keep the plugin's jniLibs source set.
+// The crispembed 0.16.1 plugin's fetchCrispembedLibs task calls the
+// Project.exec() API removed in Gradle 9, and its prebuilt target is a 4KB
+// -aligned lib that DT_NEEDEDs ggml siblings it never unpacked. Disable the
+// task; CI builds and stages the library from pinned source instead
+// (scripts/ci/build_native_android.sh). Keep the plugin's jniLibs source set.
 gradle.projectsEvaluated {
     project(":crispembed").tasks.matching {
         it.name == "fetchCrispembedLibs"

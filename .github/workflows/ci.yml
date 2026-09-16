@@ -23,15 +23,17 @@ jobs:
           path: build/windows/x64/runner/Debug
           if-no-files-found: error
 
-  # Android (arm64-v8a). Like release.yml, this runs the pinned native fetch
-  # before the build:
-  #   - CrispASR: scripts/ci/fetch_native_android.sh verifies the SHA-256 and
-  #     stages libcrispasr.so into android/app/src/main/jniLibs/arm64-v8a/.
-  #   - CrispEmbed: the crispembed plugin's own `fetchCrispembedLibs` Gradle task
-  #     downloads its prebuilt .so during `flutter build apk`. That is the only
-  #     CrispEmbed mechanism used here — do not substitute an unverified asset.
-  # Model files are NOT fetched or bundled. The APK ships engine libraries only;
-  # users must supply models (see assets/model_allowlist.json) at runtime.
+  # Android (arm64-v8a). The native engine libraries are BUILT FROM SOURCE in
+  # this job, not fetched: scripts/ci/build_native_android.sh compiles the
+  # commit-pinned CrispASR/CrispEmbed trees (plus each repo's own pinned ggml,
+  # statically embedded — the two ggml versions are never shared) with NDK
+  # r28+ so every shipped .so is 16KB LOAD-aligned. The old prebuilt tarball
+  # fetch was retired: its hashes were genuine but the bits were only 4KB
+  # aligned (native/README.md). The job fails closed — ELF LOAD alignment,
+  # DT_NEEDED closure and zipalign are verified against the built APK before
+  # any artifact is uploaded.
+  # Model files are NOT fetched or bundled. The APK ships engine libraries
+  # only; users must supply models (see assets/model_allowlist.json) at runtime.
   android:
     runs-on: ubuntu-latest
     steps:
@@ -40,13 +42,25 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - name: Fetch pinned native Android libraries
-        run: bash scripts/ci/fetch_native_android.sh --with-crispembed
-      - name: Verify native libraries staged in jniLibs
-        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so && test -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so
+      - name: Restore cached native build
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/jniLibs/arm64-v8a
+          key: native-android-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+      - name: Build 16KB-aligned native libraries from pinned sources
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: bash scripts/ci/build_native_android.sh
       - run: flutter build apk --debug
-      - name: Verify native libraries packaged in the APK
-        run: unzip -l build/app/outputs/flutter-apk/app-debug.apk | grep -q 'lib/arm64-v8a/libcrispasr.so' && unzip -l build/app/outputs/flutter-apk/app-debug.apk | grep -q 'lib/arm64-v8a/libcrispembed.so'
+      - name: Verify APK native payload
+        run: |
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          python3 scripts/ci/verify_apk_native.py "$APK" \
+            --require libcrispasr.so --require libcrispembed.so \
+            --require-symbol libcrispasr.so:whisper_full \
+            --require-symbol libcrispembed.so:crispembed_init
+          ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
+          "$ZIPALIGN" -c -P 16 4 "$APK"
       - uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk

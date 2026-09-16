@@ -18,8 +18,10 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # Honest build: no Windows native fetch is wired, so this release ships
-      # UnavailableAsrEngine/DeterministicEmbedder stand-ins.
+      # Honest build: no Windows native build/fetch for CrispASR/CrispEmbed is
+      # wired, so the Crisp adapters report unavailable on Windows. That is NOT
+      # "no ASR": SherpaEngine works there — the sherpa_onnx plugin bundles its
+      # own Windows DLLs (sherpa_onnx_windows).
       - run: flutter build windows --release
       - name: Package Windows release
         shell: pwsh
@@ -30,12 +32,13 @@ jobs:
           path: pocket-asr-windows-${{ github.ref_name }}.zip
           if-no-files-found: error
 
-  # Android release is enabled now that the native fetch path is wired. The fetch
-  # is the job's first real step and is fail-fast: if the pinned CrispASR
-  # download or its SHA-256 check fails, the job aborts before `flutter build apk`
-  # and no APK is uploaded. CrispEmbed is bundled by the crispembed plugin's own
-  # `fetchCrispembedLibs` Gradle task during the build — the only confirmed
-  # CrispEmbed mechanism; no other CrispEmbed version/asset is substituted.
+  # Android: identical native pipeline to ci.yml (same script, shared cache —
+  # a CI warm build on the pinned script hash is reused here instead of
+  # rebuilding from source). scripts/ci/build_native_android.sh compiles the
+  # commit-pinned CrispASR/CrispEmbed trees with NDK r28+ so every shipped
+  # .so is 16KB LOAD-aligned; nothing is uploaded unless the ELF alignment /
+  # DT_NEEDED closure gate and zipalign pass against the built APK. If any
+  # check fails, this job fails and `publish` never runs: no release ships.
   #
   # The APK bundles native ENGINE libraries only. Model files (see
   # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
@@ -50,13 +53,25 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - name: Fetch pinned native Android libraries
-        run: bash scripts/ci/fetch_native_android.sh --with-crispembed
-      - name: Verify native libraries staged in jniLibs
-        run: test -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so && test -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so
+      - name: Restore cached native build
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/jniLibs/arm64-v8a
+          key: native-android-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+      - name: Build 16KB-aligned native libraries from pinned sources
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: bash scripts/ci/build_native_android.sh
       - run: flutter build apk --release
-      - name: Verify native libraries packaged in the APK
-        run: unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispasr.so' && unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -q 'lib/arm64-v8a/libcrispembed.so'
+      - name: Verify APK native payload
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          python3 scripts/ci/verify_apk_native.py "$APK" \
+            --require libcrispasr.so --require libcrispembed.so \
+            --require-symbol libcrispasr.so:whisper_full \
+            --require-symbol libcrispembed.so:crispembed_init
+          ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
+          "$ZIPALIGN" -c -P 16 4 "$APK"
       - uses: actions/upload-artifact@v4
         with:
           name: pocket-asr-android-${{ github.ref_name }}
