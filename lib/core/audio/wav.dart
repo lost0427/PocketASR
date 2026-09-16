@@ -1,7 +1,30 @@
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'audio_buffer.dart';
 import 'pcm.dart';
+
+/// Writes bounded PCM blocks, including for a full-length VAD input.
+Future<void> writePcm16Wav(File file, Float32List samples, int sampleRate) async {
+  if (samples.length > (0xffffffff - 36) ~/ 2) {
+    throw ArgumentError('Audio exceeds the RIFF WAV size limit');
+  }
+  final header = encodePcm16Wav(Float32List(0), sampleRate);
+  final fields = ByteData.sublistView(header);
+  fields.setUint32(4, 36 + samples.length * 2, Endian.little);
+  fields.setUint32(40, samples.length * 2, Endian.little);
+  final output = await file.open(mode: FileMode.write);
+  try {
+    await output.writeFrom(header);
+    const blockSamples = 16384;
+    for (var start = 0; start < samples.length; start += blockSamples) {
+      final end = (start + blockSamples).clamp(0, samples.length);
+      await output.writeFrom(float32ToPcm16(Float32List.sublistView(samples, start, end)));
+    }
+  } finally {
+    await output.close();
+  }
+}
 
 /// Mono 16-bit PCM WAV encoder — the counterpart of [WavDecoder].
 ///

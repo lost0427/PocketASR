@@ -195,7 +195,7 @@ class TranscriptionService {
         final chunkUs = math.max(1, _windowSpeechUs(window));
         final slice = _windowPcm(window, audio);
         final file = File('${dir.path}${Platform.pathSeparator}chunk$i.wav');
-        await file.writeAsBytes(encodePcm16Wav(slice, audio.sampleRate));
+        await writePcm16Wav(file, slice, audio.sampleRate);
         TranscribeProgress? last;
         await for (final progress in engine.transcribe(
           TranscribeRequest(
@@ -277,7 +277,7 @@ class TranscriptionService {
       );
     }
     final file = File('${dir.path}${Platform.pathSeparator}vad_input.wav');
-    await file.writeAsBytes(encodePcm16Wav(audio.samples, audio.sampleRate));
+    await writePcm16Wav(file, audio.samples, audio.sampleRate);
     final VadPlan plan;
     try {
       plan = await (vadEngine ?? engine).planVad(

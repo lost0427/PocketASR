@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -39,9 +40,7 @@ class FileAudioSource implements AudioSource {
   @override
   Future<AudioBuffer> read(String path) async {
     if (usesNativeDecoder()) return _readNative(path);
-    final file = File(path);
-    if (!await file.exists()) throw FileSystemException('Audio file not found', path);
-    return decoder.decode(await file.readAsBytes());
+    return _decodeWavFile(path, decoder);
   }
 
   Future<AudioBuffer> _readNative(String path) async {
@@ -92,3 +91,7 @@ class FileAudioSource implements AudioSource {
     }
   }
 }
+
+// Capture only the decoder and path, never the platform channel or its owner.
+Future<AudioBuffer> _decodeWavFile(String path, WavDecoder decoder) =>
+    Isolate.run(() async => decoder.decode(await File(path).readAsBytes()));
