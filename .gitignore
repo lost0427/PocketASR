@@ -60,3 +60,6 @@ android/key.properties
 /android/build/
 /android/.project
 /android/.settings/
+
+# CodeGraph local index (not tracked)
+/.codegraph/
