@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
-import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/engine_registry.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
@@ -114,7 +113,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Energy detection'));
     await tester.pumpAndSettle();
-    expect(state.chunkMode, ChunkMode.energy);
+    expect(state.chunkStrategy, ChunkStrategy.energy);
 
     state.chunkSeconds = 10;
     await tester.pumpAndSettle();
@@ -125,7 +124,7 @@ void main() {
     await tester.tap(find.text('Reset chunking'));
     await tester.pumpAndSettle();
 
-    expect(state.chunkMode, ChunkMode.fixed);
+    expect(state.chunkStrategy, ChunkStrategy.fixed);
     expect(state.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
     expect(state.energyThreshold, AppState.defaultChunkSettings.energyThreshold);
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);

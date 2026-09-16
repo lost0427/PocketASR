@@ -75,6 +75,7 @@ void main() {
     expect(state.searchRepo.embedder, isNull);
 
     state.selectEmbedding(path: 'e5.gguf');
+    await settle(); // the embedder now loads asynchronously (worker seam)
 
     expect(state.embeddingPath, 'e5.gguf');
     expect(state.embeddingReady, isTrue);
@@ -101,7 +102,10 @@ void main() {
 
     final fake = factory.created['e5.gguf']!;
     expect(fake.documents, contains('connect to wifi'));
-    expect(state.searchRepo.searchSemantic('wifi').map((t) => t.id), [id]);
+    expect(
+      (await state.searchRepo.searchSemantic('wifi')).map((t) => t.id),
+      [id],
+    );
   });
 
   test('the choice is restored on the next start', () async {
@@ -119,6 +123,7 @@ void main() {
     );
     addTearDown(second.dispose);
     addTearDown(first.dispose);
+    await settle(); // restore loads async too
 
     expect(second.embeddingPath, 'e5.gguf');
     expect(second.embeddingReady, isTrue);

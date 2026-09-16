@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -79,23 +81,36 @@ class _HistoryPageState extends State<HistoryPage> {
     if (mounted) _reload();
   }
 
+  /// Guards the async semantic/hybrid reloads: only the newest request may
+  /// write [_rows], so a slow encode for an older query can never overwrite
+  /// the result of a newer one, and a result arriving after dispose is
+  /// dropped instead of a setState-after-dispose crash.
+  int _reloadSeq = 0;
+
   void _reload() {
     final query = _query.text.trim();
     final mode = _hasEmbedder ? _mode : SearchMode.literal;
-    setState(() {
-      if (query.isEmpty) {
+    final seq = ++_reloadSeq;
+    if (query.isEmpty) {
+      setState(() {
         _rows = _trash ? widget.repo.listTrash() : widget.repo.list();
-        return;
-      }
-      _rows = switch (mode) {
-        SearchMode.literal =>
-          widget.search.searchLiteral(query, onlyTrash: _trash),
-        SearchMode.semantic =>
-          widget.search.searchSemantic(query, onlyTrash: _trash),
-        SearchMode.hybrid =>
-          widget.search.searchHybrid(query, onlyTrash: _trash),
-      };
-    });
+      });
+      return;
+    }
+    if (mode == SearchMode.literal) {
+      setState(() {
+        _rows = widget.search.searchLiteral(query, onlyTrash: _trash);
+      });
+      return;
+    }
+    // Semantic/hybrid embed on the worker isolate, so the rows land later.
+    unawaited(() async {
+      final rows = await (mode == SearchMode.semantic
+          ? widget.search.searchSemantic(query, onlyTrash: _trash)
+          : widget.search.searchHybrid(query, onlyTrash: _trash));
+      if (!mounted || seq != _reloadSeq) return; // superseded or disposed
+      setState(() => _rows = rows);
+    }());
   }
 
   /// Compact status row for the semantic indexer: a live phase, its error, and

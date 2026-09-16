@@ -108,27 +108,30 @@ void main() {
       return id;
     }
 
-    test('searchSemantic ranks by similarity and hides trash by default', () {
+    test('searchSemantic ranks by similarity and hides trash by default', () async {
       final wifi = store('WiFi', 'connect to the wifi network');
       final lunch = store('Lunch', 'beef noodles for lunch');
 
-      final hits = search.searchSemantic('wifi network');
+      final hits = await search.searchSemantic('wifi network');
       expect(hits.first.id, wifi);
-      expect(search.searchSemantic('wifi network', topK: 1).single.id, wifi);
+      expect(
+        (await search.searchSemantic('wifi network', topK: 1)).single.id,
+        wifi,
+      );
       expect(hits.map((t) => t.id), contains(lunch)); // still comparable
 
       transcripts.softDelete(wifi);
       expect(
-        search.searchSemantic('wifi network').map((t) => t.id),
+        (await search.searchSemantic('wifi network')).map((t) => t.id),
         isNot(contains(wifi)),
       );
       expect(
-        search.searchSemantic('wifi network', includeTrash: true).first.id,
+        (await search.searchSemantic('wifi network', includeTrash: true)).first.id,
         wifi,
       );
     });
 
-    test('returns nothing without an embedder and skips other models', () {
+    test('returns nothing without an embedder and skips other models', () async {
       final wifi = store('WiFi', 'wifi network');
       final other = transcripts.insert(title: 'Other', text: 'wifi network');
       db.db.execute(
@@ -143,23 +146,26 @@ void main() {
         ],
       );
 
-      expect(SearchRepo(db).searchSemantic('wifi'), isEmpty);
-      expect(search.searchSemantic('wifi').map((t) => t.id), [wifi]);
+      expect(await SearchRepo(db).searchSemantic('wifi'), isEmpty);
+      expect(
+        (await search.searchSemantic('wifi')).map((t) => t.id),
+        [wifi],
+      );
     });
 
-    test('searchHybrid fuses literal and semantic matches', () {
+    test('searchHybrid fuses literal and semantic matches', () async {
       final wifi = store('WiFi', 'connect to the wifi network');
       final tea = transcripts.insert(title: 'Tea', text: 'how to brew green tea');
 
-      final ids = search.searchHybrid('wifi').map((t) => t.id);
+      final ids = (await search.searchHybrid('wifi')).map((t) => t.id);
       expect(ids, contains(wifi)); // literal + semantic both rank it
       expect(ids, isNot(contains(tea)));
-      expect(search.searchHybrid('wifi', topK: 1), hasLength(1));
+      expect(await search.searchHybrid('wifi', topK: 1), hasLength(1));
 
       transcripts.softDelete(wifi);
-      expect(search.searchHybrid('wifi'), isEmpty);
+      expect(await search.searchHybrid('wifi'), isEmpty);
       expect(
-        search.searchHybrid('wifi', includeTrash: true).map((t) => t.id),
+        (await search.searchHybrid('wifi', includeTrash: true)).map((t) => t.id),
         contains(wifi),
       );
     });

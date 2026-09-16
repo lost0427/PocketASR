@@ -81,14 +81,24 @@ class BenchmarkResult {
 /// run — and [EngineCancelledException] is rethrown rather than turned into an
 /// error cell, so the page can stop the whole matrix.
 class BenchmarkRunner {
-  BenchmarkRunner(this.engine, this.service, {this.chunkSettings});
+  BenchmarkRunner(
+    this.engine,
+    this.service, {
+    this.chunkSettings,
+    this.neuralVad,
+  });
 
   final AsrEngine engine;
   final TranscriptionService service;
 
   /// Chunking for every run. Null keeps the single whole-file request, which is
-  /// what makes the rows comparable.
+  /// what makes the rows comparable — or, in neural mode, is null because
+  /// [neuralVad] is the mutually exclusive alternative.
   final ChunkSettings? chunkSettings;
+
+  /// Real neural VAD settings for every run. Null unless the neural strategy is
+  /// selected; the service refuses it together with [chunkSettings].
+  final NeuralVadSettings? neuralVad;
 
   Future<BenchmarkResult> run(
     BenchmarkCase caseSpec,
@@ -113,6 +123,7 @@ class BenchmarkRunner {
           audioPath: audioPath,
           model: model,
           chunkSettings: chunkSettings,
+          neuralVad: neuralVad,
           isCancelled: isCancelled,
         );
         elapsed.add(result.elapsed);

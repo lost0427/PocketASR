@@ -100,6 +100,18 @@ class _TranscribePageState extends State<TranscribePage> {
   Timer? _metricsTimer;
   bool _sampling = false;
 
+  /// Set when the user cancels the running job or its VAD plan; polled by the
+  /// service so the abort lands at the next safe boundary.
+  bool _cancelRequested = false;
+
+  /// The last real neural-VAD preview of the picked file, plus the settings it
+  /// was produced with so a Settings change can be called out as stale.
+  VadPreview? _vadPreview;
+  String? _vadPreviewSignature;
+  String? _vadPreviewError;
+  bool _previewing = false;
+  bool _previewCancelRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -163,8 +175,25 @@ class _TranscribePageState extends State<TranscribePage> {
     setState(() {
       _filePath = file.path;
       _fileName = file.name;
+      // A preview belongs to the file it was taken from.
+      _vadPreview = null;
+      _vadPreviewSignature = null;
+      _vadPreviewError = null;
     });
   }
+
+  /// The service for a run or a preview: injected in tests, otherwise the real
+  /// ASR engine plus the independent (sherpa-onnx) VAD worker.
+  TranscriptionService _service(AppState? state) =>
+      widget.service ??
+      TranscriptionService(
+        engine: widget.engine,
+        vadEngine: state?.activeVadEngine,
+        preprocessor: AudioPreprocessor(
+          enabled: state?.loudnessEnabled ?? true,
+          targetLufs: state?.loudnessTargetLufs ?? -16,
+        ),
+      );
 
   Future<void> _start() async {
     final l10n = AppLocalizations.of(context);
@@ -179,18 +208,22 @@ class _TranscribePageState extends State<TranscribePage> {
       _notify(l10n.modelNeedsDecoder);
       return;
     }
-    final service = widget.service ?? TranscriptionService(
-      engine: widget.engine,
-      preprocessor: AudioPreprocessor(
-        enabled: state?.loudnessEnabled ?? true,
-        targetLufs: state?.loudnessTargetLufs ?? -16,
-      ),
-    );
+    // Neural mode is only real when its own model is on disk: without it the
+    // run is refused, never silently downgraded to the energy gate.
+    final neuralVad = state?.neuralVadSettings;
+    if (state?.chunkStrategy == ChunkStrategy.neural && neuralVad == null) {
+      _notify(l10n.vadModelRequired);
+      return;
+    }
+    // A previous cancel replaces the VAD worker; start this run on a fresh one.
+    state?.resetVadEngine();
+    final service = _service(state);
     _tokenRates.reset();
     state?.engineBusy = true; // the Models page must not swap this instance
     setState(() {
       _running = true;
       _error = null;
+      _cancelRequested = false;
       _progress = 0;
       _result = '';
       _partialText = '';
@@ -209,7 +242,9 @@ class _TranscribePageState extends State<TranscribePage> {
         model: model,
         backend: state?.backend ?? Backend.cpu,
         chunkSettings: state?.chunkSettings,
+        neuralVad: neuralVad,
         onProgress: _onProgress,
+        isCancelled: () => _cancelRequested,
       );
       // Saving the successful result is unchanged; only the live view grew.
       widget.transcriptRepo?.insert(
@@ -245,8 +280,66 @@ class _TranscribePageState extends State<TranscribePage> {
       _metricsTimer?.cancel();
       _metricsTimer = null;
       state?.engineBusy = false;
+      // A cancelled run leaves the VAD worker's cancel flag set; drop it so a
+      // retry starts clean.
+      state?.resetVadEngine();
       if (mounted) setState(() => _running = false);
     }
+  }
+
+  /// Asks the running job to stop. The engine refuses later chunks and the VAD
+  /// worker is told too (a neural job may still be planning); both surface the
+  /// abort at their next safe boundary.
+  void _cancelRun() {
+    if (!_running || _cancelRequested) return;
+    setState(() => _cancelRequested = true);
+    final engine = widget.engine;
+    if (engine is CancellableAsrEngine) engine.cancel();
+    widget.state?.cancelVad();
+  }
+
+  /// Runs the real neural VAD over the picked file *without* touching the ASR
+  /// engine, so the user can see the windows a neural job would transcribe and
+  /// re-run it after changing the Settings knobs.
+  Future<void> _previewVad() async {
+    final state = widget.state;
+    final neuralVad = state?.neuralVadSettings;
+    final path = _filePath;
+    if (_previewing || _running || path == null || neuralVad == null) return;
+    state?.resetVadEngine();
+    setState(() {
+      _previewing = true;
+      _previewCancelRequested = false;
+      _vadPreviewError = null;
+    });
+    try {
+      final preview = await _service(state).previewVad(
+        audioPath: path,
+        neuralVad: neuralVad,
+        isCancelled: () => _previewCancelRequested,
+      );
+      if (!mounted) return;
+      setState(() {
+        _vadPreview = preview;
+        _vadPreviewSignature = state?.neuralVadSignature;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _vadPreviewError = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _previewing = false;
+          // A cancelled preview needs a fresh worker for the next attempt.
+          widget.state?.resetVadEngine();
+        });
+      }
+    }
+  }
+
+  void _cancelPreview() {
+    if (!_previewing || _previewCancelRequested) return;
+    setState(() => _previewCancelRequested = true);
+    widget.state?.cancelVad();
   }
 
   /// Samples process CPU/memory once a second while a run is in flight. The
@@ -342,6 +435,12 @@ class _TranscribePageState extends State<TranscribePage> {
         final modelPath = _modelPath;
         final needsDecoder =
             widget.state?.selectionNeedsMissingCompanion ?? false;
+        final state = widget.state;
+        final neuralSelected =
+            (state?.chunkStrategy ?? ChunkStrategy.fixed) ==
+            ChunkStrategy.neural;
+        // Neural mode without its own model cannot start; no silent fallback.
+        final needsVadModel = neuralSelected && !(state?.neuralVadReady ?? false);
         // Another page's run owns the shared engine; this one must not start.
         final busyElsewhere =
             (widget.state?.engineBusy ?? false) && !running;
@@ -353,7 +452,9 @@ class _TranscribePageState extends State<TranscribePage> {
             modelPath != null &&
             !running &&
             !busyElsewhere &&
-            !needsDecoder;
+            !needsDecoder &&
+            !needsVadModel &&
+            !_previewing;
         final hasResult = _result.isNotEmpty;
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
@@ -462,21 +563,49 @@ class _TranscribePageState extends State<TranscribePage> {
                       color: scheme.onSurfaceVariant,
                     ),
                   ],
+                  if (needsVadModel) ...[
+                    const SizedBox(height: 12),
+                    _Hint(
+                      icon: Icons.warning_amber_rounded,
+                      text: l10n.vadModelRequired,
+                      color: scheme.error,
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(_error!, style: TextStyle(color: scheme.error)),
                   ],
+                  if (neuralSelected) ...[
+                    const SizedBox(height: 16),
+                    _buildVadPreview(context),
+                  ],
                   const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: canStart ? _start : null,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text(l10n.transcribeStart),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(52),
-                      textStyle: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: canStart ? _start : null,
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: Text(l10n.transcribeStart),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            textStyle: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      if (running) ...[
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: _cancelRequested ? null : _cancelRun,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 52),
+                          ),
+                          child: Text(l10n.transcribeCancel),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 28),
                   _SectionLabel(l10n.transcribeMetrics),
@@ -533,6 +662,119 @@ class _TranscribePageState extends State<TranscribePage> {
       },
     );
   }
+
+  /// The neural-VAD preview card: real windows for the picked file, with the
+  /// times they cover, a re-preview button (the knobs live in Settings) and a
+  /// cancel for a slow plan. Shown only in neural mode.
+  Widget _buildVadPreview(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final preview = _vadPreview;
+    final canPreview =
+        _filePath != null && !_previewing && !_running &&
+        (widget.state?.neuralVadReady ?? false);
+    final stale =
+        preview != null &&
+        _vadPreviewSignature != widget.state?.neuralVadSignature;
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.graphic_eq, size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(l10n.vadPreview, style: theme.textTheme.titleSmall),
+              ),
+              TextButton.icon(
+                onPressed: canPreview ? _previewVad : null,
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: Text(
+                  preview == null ? l10n.vadPreviewRun : l10n.vadPreviewAgain,
+                ),
+              ),
+            ],
+          ),
+          if (_previewing) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(l10n.vadPreviewing)),
+                TextButton(
+                  onPressed: _previewCancelRequested ? null : _cancelPreview,
+                  child: Text(l10n.queueCancel),
+                ),
+              ],
+            ),
+          ],
+          if (_vadPreviewError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _vadPreviewError!,
+              style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+            ),
+          ],
+          if (preview != null && !_previewing) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.vadPreviewSummary(
+                preview.windows.length,
+                _seconds(preview.speechDuration),
+              ),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            if (stale) ...[
+              const SizedBox(height: 4),
+              Text(
+                l10n.vadPreviewStale,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              ),
+            ],
+            const SizedBox(height: 8),
+            for (var i = 0; i < preview.windows.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.vadPreviewWindow(i + 1),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    for (final span in preview.windows[i])
+                      Text(
+                        l10n.vadPreviewSegment(
+                          _seconds(span.start),
+                          _seconds(span.end),
+                        ),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Whole seconds with two decimals — the timeline unit the preview speaks.
+  static String _seconds(Duration value) =>
+      (value.inMicroseconds / 1000000).toStringAsFixed(2);
 }
 
 /// Rounded surface used for the result, progress and status blocks.

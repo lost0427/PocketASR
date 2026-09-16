@@ -129,21 +129,24 @@ void main() {
     expect(search.searchLiteral('网络').single.id, id);
   });
 
-  test('searchHybrid falls back to literal results with topK/trash shape', () {
+  test('searchHybrid falls back to literal results with topK/trash shape', () async {
     final a = transcripts.insert(title: 'A', text: 'shared keyword alpha');
     final b = transcripts.insert(title: 'B', text: 'shared keyword beta');
     final c = transcripts.insert(title: 'C', text: 'shared keyword gamma');
 
     expect(
-      search.searchHybrid('shared').map((t) => t.id),
+      (await search.searchHybrid('shared')).map((t) => t.id),
       containsAll([a, b, c]),
     );
-    expect(search.searchHybrid('shared', topK: 2), hasLength(2));
+    expect(await search.searchHybrid('shared', topK: 2), hasLength(2));
 
     transcripts.softDelete(c);
-    expect(search.searchHybrid('shared').map((t) => t.id), isNot(contains(c)));
     expect(
-      search.searchHybrid('shared', includeTrash: true).map((t) => t.id),
+      (await search.searchHybrid('shared')).map((t) => t.id),
+      isNot(contains(c)),
+    );
+    expect(
+      (await search.searchHybrid('shared', includeTrash: true)).map((t) => t.id),
       contains(c),
     );
   });

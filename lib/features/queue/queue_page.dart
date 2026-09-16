@@ -71,6 +71,13 @@ class _QueuePageState extends State<QueuePage> {
   bool get _needsDecoder =>
       widget.state?.selectionNeedsMissingCompanion ?? false;
 
+  /// Neural mode needs a real VAD model on disk; without one the queue must not
+  /// start (and must not silently fall back to the energy gate).
+  bool get _needsVadModel =>
+      (widget.state?.chunkStrategy ?? ChunkStrategy.fixed) ==
+          ChunkStrategy.neural &&
+      !(widget.state?.neuralVadReady ?? false);
+
   @override
   void dispose() {
     _queue.dispose();
@@ -106,14 +113,21 @@ class _QueuePageState extends State<QueuePage> {
     if (_running) return; // one worker at a time
     if (widget.state?.engineBusy ?? false) return; // another page is running
     final model = _modelSpec;
-    if (model == null || _needsDecoder) return;
+    if (model == null || _needsDecoder || _needsVadModel) return;
     final state = widget.state;
+    // A cancel replaces the VAD worker; make sure the run starts on a fresh one.
+    state?.resetVadEngine();
     final worker = QueueWorker(
       _queue,
-      widget.service ?? TranscriptionService(engine: widget.engine),
+      widget.service ??
+          TranscriptionService(
+            engine: widget.engine,
+            vadEngine: state?.activeVadEngine,
+          ),
       model,
       transcriptRepo: widget.transcriptRepo,
       chunkSettings: state?.chunkSettings,
+      neuralVad: state?.neuralVadSettings,
       backend: state?.backend ?? Backend.cpu,
     );
     _worker = worker;
@@ -137,6 +151,10 @@ class _QueuePageState extends State<QueuePage> {
       // Cooperative: the engine refuses later chunks and surfaces the abort
       // once the native call in flight returns.
       (widget.engine as CancellableAsrEngine).cancel();
+    }
+    if (wasRunning) {
+      // Neural VAD plans on its own worker, so a cancel must reach that one too.
+      widget.state?.cancelVad();
     }
     setState(() {});
   }
@@ -188,6 +206,7 @@ class _QueuePageState extends State<QueuePage> {
     final running = _running;
     final modelPath = _modelPath;
     final needsDecoder = _needsDecoder;
+    final needsVad = _needsVadModel;
     final busyElsewhere = _engineBusyElsewhere;
 
     return Column(
@@ -254,11 +273,21 @@ class _QueuePageState extends State<QueuePage> {
               color: scheme.onSurfaceVariant,
             ),
           ),
+        if (needsVad)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.vadModelRequired,
+              color: scheme.error,
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: FilledButton.icon(
             onPressed: modelPath != null &&
                     !needsDecoder &&
+                    !needsVad &&
                     _queue.hasPending &&
                     !running &&
                     !busyElsewhere
@@ -352,7 +381,12 @@ class _QueuePageState extends State<QueuePage> {
             visualDensity: VisualDensity.compact,
             tooltip: l10n.queueRetry,
             icon: const Icon(Icons.refresh, size: 18),
-            onPressed: () => setState(() => _queue.retry(job.id)),
+            onPressed: () {
+              // A cancelled run left the VAD worker flag set; a retry needs a
+              // fresh worker, not the one that was told to abort.
+              widget.state?.resetVadEngine();
+              setState(() => _queue.retry(job.id));
+            },
           ),
         if (status != TranscriptionJobStatus.running &&
             status != TranscriptionJobStatus.cancelling)

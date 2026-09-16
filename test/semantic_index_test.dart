@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -24,11 +25,15 @@ class _FakeEmbedder implements Embedder {
   Float32List Function(String text)? custom;
   void Function(String text)? onEmbed;
 
+  /// When set, document embeds complete after this delay — standing in for
+  /// the production embedder's worker round-trip (async, interruptible).
+  Duration? documentDelay;
+
   final List<String> queryTexts = [];
   final List<String> documentTexts = [];
 
   @override
-  Float32List embed(String text) => embedDocument(text);
+  FutureOr<Float32List> embed(String text) => embedDocument(text);
 
   @override
   Float32List embedQuery(String text) {
@@ -37,10 +42,14 @@ class _FakeEmbedder implements Embedder {
   }
 
   @override
-  Float32List embedDocument(String text) {
+  FutureOr<Float32List> embedDocument(String text) {
     documentTexts.add(text);
     onEmbed?.call(text);
-    return _vector(text);
+    final vector = _vector(text);
+    final delay = documentDelay;
+    return delay == null
+        ? vector
+        : Future<Float32List>.delayed(delay, () => vector);
   }
 
   Float32List _vector(String text) =>
@@ -97,7 +106,7 @@ void main() {
       // Documents went in through embedDocument, the query through
       // embedQuery — the E5 prefix seam (never both, never plain embed).
       expect(embedder.documentTexts, containsAll(['connect to the wifi network', 'beef noodles for lunch']));
-      final hits = search.searchSemantic('query');
+      final hits = await search.searchSemantic('query');
       expect(hits.map((t) => t.id), [wifi, lunch]);
       expect(embedder.queryTexts, ['query']);
       expect(embedder.documentTexts, isNot(contains('query')));
@@ -114,7 +123,7 @@ void main() {
       await indexer.indexTranscript(id);
 
       expect(embedder.documentTexts, ['connect to the wifi network']);
-      expect(search.searchSemantic('query').single.id, id);
+      expect((await search.searchSemantic('query')).single.id, id);
 
       await indexer.indexTranscript(id); // already vectorized: no-op
       expect(embedder.documentTexts.length, 1);
@@ -149,7 +158,10 @@ void main() {
 
       // Without the `model = ?` filter, 'near' would rank first; isolation
       // means it is never even a candidate.
-      expect(search.searchSemantic('query').map((t) => t.id), [far]);
+      expect(
+        (await search.searchSemantic('query')).map((t) => t.id),
+        [far],
+      );
     });
 
     test('rebuild deletes only this model\'s rows and never embeds the trashed', () async {
@@ -171,7 +183,10 @@ void main() {
 
       expect(embeddingCount(model: 'other-model'), 1);
       expect(embeddingCount(model: 'fake-a'), 1);
-      expect(search.searchSemantic('query').map((t) => t.id), [wifi]);
+      expect(
+        (await search.searchSemantic('query')).map((t) => t.id),
+        [wifi],
+      );
     });
 
     test('ceiling: one vector per transcript, the active model takes over live rows', () async {
@@ -220,6 +235,23 @@ void main() {
       expect(embeddingCount(), 0);
     });
 
+    test('a dispose/model switch mid-embed never writes the stale index', () async {
+      // The slow (async) embed stands in for the worker round-trip: the model
+      // is replaced while it is in flight. The indexer's post-await liveness
+      // guards must drop the write instead of storing a vector under the
+      // dead model into the live table.
+      transcripts.insert(title: 'W', text: 'connect to the wifi network');
+      embedder.documentDelay = const Duration(milliseconds: 50);
+
+      final running = indexer.indexPending();
+      await Future<void>.delayed(const Duration(milliseconds: 10)); // mid-embed
+      indexer.dispose(); // AppState swaps the model here
+      await running; // must drain without touching the DB or the notifier
+
+      expect(embedder.documentTexts, isNotEmpty); // the encode itself happened
+      expect(embeddingCount(), 0); // but no stale write survived it
+    });
+
     test('bad vectors are refused, exposed as state, and retryable', () async {
       final id = transcripts.insert(title: 'W', text: 'connect to the wifi network');
 
@@ -239,7 +271,7 @@ void main() {
       await indexer.indexPending();
       expect(indexer.phase.value, SemanticIndexPhase.idle);
       expect(indexer.lastError, isNull);
-      expect(search.searchSemantic('query').single.id, id);
+      expect((await search.searchSemantic('query')).single.id, id);
     });
 
     test('jobs serialize and each awaitable call completes its own work', () async {
@@ -263,7 +295,7 @@ void main() {
         [Uint8List(4), bad], // 1 float for a 2-dim model
       );
 
-      final hits = search.searchSemantic('query');
+      final hits = await search.searchSemantic('query');
       expect(hits.map((t) => t.id), [good]); // 'B' skipped, no crash
     });
   });
@@ -300,7 +332,7 @@ void main() {
       expect(search.searchLiteral('wifi').map((t) => t.id), [exact]);
     });
 
-    test('onlyTrash searches the trash alone', () {
+    test('onlyTrash searches the trash alone', () async {
       final live = transcripts.insert(title: 'L', text: '无线网络设置');
       final trashed = transcripts.insert(title: 'D', text: '网络连接状态');
       transcripts.softDelete(trashed);
@@ -315,7 +347,7 @@ void main() {
         [trashed],
       );
       expect(
-        search.searchSemantic('网络', onlyTrash: true),
+        await search.searchSemantic('网络', onlyTrash: true),
         isEmpty, // no embedder configured: honest empty
       );
     });

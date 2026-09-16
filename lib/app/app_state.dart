@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/audio/chunk_planner.dart';
-import '../engine/asr_engine.dart' show AsrEngine, Backend, EngineModelSpec;
-import '../engine/crisp_embedder.dart';
+import '../engine/asr_engine.dart';
 import '../engine/embedder.dart';
+import '../engine/embedding_worker.dart';
 import '../engine/engine_registry.dart';
 import '../data/db.dart';
 import '../data/search_repo.dart';
@@ -14,10 +14,21 @@ import '../data/semantic_indexer.dart';
 import '../data/transcript_repo.dart';
 
 /// Builds the [Embedder] for a selected embedding model path. Production uses
-/// [CrispEmbedder]; tests inject a fake so no native library is needed. A
-/// failure must throw [EmbedderUnavailableException] — never fall back to
-/// [DeterministicEmbedder], which would fake semantic meaning.
-typedef EmbedderFactory = Embedder Function(String modelPath);
+/// [WorkerEmbedder] (the real CrispEmbed instance lives on its worker isolate,
+/// never on the UI thread) and must have [Embedder.load] completed before the
+/// instance is handed back; tests inject a fake so no native library is
+/// needed. A failure must throw [EmbedderUnavailableException] — never fall
+/// back to [DeterministicEmbedder], which would fake semantic meaning.
+typedef EmbedderFactory = FutureOr<Embedder> Function(String modelPath);
+
+/// The three-way chunking control in Settings: the two [ChunkMode] strategies
+/// plus real neural VAD.
+///
+/// Neural VAD is deliberately *not* a [ChunkMode] value: it is a separate
+/// engine path ([NeuralVadSettings], planned by a sherpa-onnx Silero worker)
+/// and is mutually exclusive with [ChunkSettings], which is exactly why the
+/// pages hand one or the other — never both — to the service.
+enum ChunkStrategy { fixed, energy, neural }
 
 /// App-wide settings.
 ///
@@ -37,8 +48,16 @@ class AppState extends ChangeNotifier {
     _loadSettings();
   }
 
-  static Embedder _crispEmbedder(String modelPath) =>
-      CrispEmbedder(modelPath: modelPath);
+  static Future<Embedder> _crispEmbedder(String modelPath) async {
+    final embedder = WorkerEmbedder.crisp(modelPath: modelPath);
+    try {
+      await embedder.load(); // spawns the worker; the native load runs there
+      return embedder;
+    } on Object {
+      await embedder.dispose();
+      rethrow;
+    }
+  }
 
   final AppDatabase database;
   final EmbedderFactory _embedderFactory;
@@ -64,7 +83,7 @@ class AppState extends ChangeNotifier {
     _restoreSelection();
     _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
     _loudnessTargetLufs = double.tryParse(database.getSetting('loudness_target') ?? '') ?? _loudnessTargetLufs;
-    _chunkMode = _chunkModeFrom(database.getSetting('chunk_mode'));
+    _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
       minChunkSeconds,
@@ -83,6 +102,37 @@ class AppState extends ChangeNotifier {
       maxSpeechPadMs,
       defaultChunkSettings.speechPadMs,
     );
+    _vadThreshold = _boundedDouble(
+      database.getSetting('vad_threshold'),
+      minVadThreshold,
+      maxVadThreshold,
+      defaultVadThreshold,
+    );
+    _vadMinSilenceSeconds = _boundedDouble(
+      database.getSetting('vad_min_silence'),
+      minVadMinSilence,
+      maxVadMinSilence,
+      defaultVadMinSilence,
+    );
+    _vadMinSpeechSeconds = _boundedDouble(
+      database.getSetting('vad_min_speech'),
+      minVadMinSpeech,
+      maxVadMinSpeech,
+      defaultVadMinSpeech,
+    );
+    _vadPadMs = _boundedInt(
+      database.getSetting('vad_pad_ms'),
+      0,
+      maxVadPadMs,
+      defaultVadPadMs,
+    );
+    _vadMaxSeconds = _boundedDouble(
+      database.getSetting('vad_max_seconds'),
+      minVadMaxSeconds,
+      maxVadMaxSeconds,
+      defaultVadMaxSeconds,
+    );
+    _restoreVadSelection();
     _restoreEmbedding();
   }
 
@@ -379,7 +429,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Chunking defaults and the bounds the Settings sliders offer. The energy
-  /// mode is a loudness gate, **not** a neural VAD (see [ChunkPlanner]).
+  /// mode is a loudness gate, **not** a neural VAD (see [ChunkPlanner]); the
+  /// neural strategy is the real Silero path described by [NeuralVadSettings].
   static const ChunkSettings defaultChunkSettings = ChunkSettings();
   static const double minChunkSeconds = 5;
   static const double maxChunkSeconds = 120;
@@ -387,11 +438,29 @@ class AppState extends ChangeNotifier {
   static const double maxEnergyThreshold = 0.1;
   static const int maxSpeechPadMs = 500;
 
-  ChunkMode _chunkMode = defaultChunkSettings.mode;
-  ChunkMode get chunkMode => _chunkMode;
-  set chunkMode(ChunkMode value) {
-    if (value == _chunkMode) return;
-    _chunkMode = value;
+  /// Defaults and bounds for the neural VAD knobs. The threshold bounds stay
+  /// strictly inside (0, 1) because [NeuralVadSettings.validate] rejects the
+  /// endpoints, so a slider value can never produce invalid settings.
+  static const double defaultVadThreshold = 0.5;
+  static const double minVadThreshold = 0.05;
+  static const double maxVadThreshold = 0.95;
+  static const double defaultVadMinSilence = 0.5;
+  static const double minVadMinSilence = 0.1;
+  static const double maxVadMinSilence = 5;
+  static const double defaultVadMinSpeech = 0.25;
+  static const double minVadMinSpeech = 0.05;
+  static const double maxVadMinSpeech = 5;
+  static const int defaultVadPadMs = 30;
+  static const int maxVadPadMs = 500;
+  static const double defaultVadMaxSeconds = 30;
+  static const double minVadMaxSeconds = 5;
+  static const double maxVadMaxSeconds = 120;
+
+  ChunkStrategy _chunkStrategy = ChunkStrategy.fixed;
+  ChunkStrategy get chunkStrategy => _chunkStrategy;
+  set chunkStrategy(ChunkStrategy value) {
+    if (value == _chunkStrategy) return;
+    _chunkStrategy = value;
     _save('chunk_mode', value.name);
     notifyListeners();
   }
@@ -430,25 +499,217 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The chunking the pages hand to [TranscriptionService.transcribe]. Overlap
-  /// stays at its default of 0: this build does no deduplication.
-  ChunkSettings get chunkSettings => ChunkSettings(
-    mode: _chunkMode,
-    chunkSeconds: _chunkSeconds,
-    energyThreshold: _energyThreshold,
-    speechPadMs: _speechPadMs,
-  );
+  /// The chunking the pages hand to [TranscriptionService.transcribe]. Null in
+  /// neural mode, which uses [neuralVadSettings] instead — the service refuses
+  /// both at once. Overlap stays at its default of 0: this build does no
+  /// deduplication.
+  ChunkSettings? get chunkSettings => _chunkStrategy == ChunkStrategy.neural
+      ? null
+      : ChunkSettings(
+          mode: _chunkStrategy == ChunkStrategy.energy
+              ? ChunkMode.energy
+              : ChunkMode.fixed,
+          chunkSeconds: _chunkSeconds,
+          energyThreshold: _energyThreshold,
+          speechPadMs: _speechPadMs,
+        );
 
-  /// Restores every chunking value to [defaultChunkSettings] and persists it.
+  double _vadThreshold = defaultVadThreshold;
+  double get vadThreshold => _vadThreshold;
+  set vadThreshold(double value) {
+    final capped = value.clamp(minVadThreshold, maxVadThreshold).toDouble();
+    if (capped == _vadThreshold) return;
+    _vadThreshold = capped;
+    _save('vad_threshold', '$capped');
+    notifyListeners();
+  }
+
+  double _vadMinSilenceSeconds = defaultVadMinSilence;
+  double get vadMinSilenceSeconds => _vadMinSilenceSeconds;
+  set vadMinSilenceSeconds(double value) {
+    final capped = value.clamp(minVadMinSilence, maxVadMinSilence).toDouble();
+    if (capped == _vadMinSilenceSeconds) return;
+    _vadMinSilenceSeconds = capped;
+    _save('vad_min_silence', '$capped');
+    notifyListeners();
+  }
+
+  double _vadMinSpeechSeconds = defaultVadMinSpeech;
+  double get vadMinSpeechSeconds => _vadMinSpeechSeconds;
+  set vadMinSpeechSeconds(double value) {
+    final capped = value.clamp(minVadMinSpeech, maxVadMinSpeech).toDouble();
+    if (capped == _vadMinSpeechSeconds) return;
+    _vadMinSpeechSeconds = capped;
+    _save('vad_min_speech', '$capped');
+    notifyListeners();
+  }
+
+  int _vadPadMs = defaultVadPadMs;
+  int get vadPadMs => _vadPadMs;
+  set vadPadMs(int value) {
+    final capped = value < 0
+        ? 0
+        : (value > maxVadPadMs ? maxVadPadMs : value);
+    if (capped == _vadPadMs) return;
+    _vadPadMs = capped;
+    _save('vad_pad_ms', '$capped');
+    notifyListeners();
+  }
+
+  double _vadMaxSeconds = defaultVadMaxSeconds;
+  double get vadMaxSeconds => _vadMaxSeconds;
+  set vadMaxSeconds(double value) {
+    final capped = value.clamp(minVadMaxSeconds, maxVadMaxSeconds).toDouble();
+    if (capped == _vadMaxSeconds) return;
+    _vadMaxSeconds = capped;
+    _save('vad_max_seconds', '$capped');
+    notifyListeners();
+  }
+
+  String? _vadModelPath;
+  bool _vadSelectionMissing = false;
+
+  /// Local path of the Silero VAD model the neural strategy runs, or null when
+  /// none is selected. A *separate* selection from [modelPath]: choosing a VAD
+  /// bundle never changes what transcribes, and vice versa.
+  String? get vadModelPath => _vadModelPath;
+
+  /// True when the persisted VAD selection could not be restored because the
+  /// file it named is gone; neural mode refuses to start until one is picked.
+  bool get vadSelectionMissing => _vadSelectionMissing;
+
+  /// True when a real neural VAD model is selected and usable. Missing model =
+  /// neural mode disabled, not a silent fall back to the energy gate.
+  bool get neuralVadReady => _vadModelPath != null;
+
+  /// Adopts a downloaded VAD bundle for the neural strategy. Refused while a
+  /// run owns the engines, like [selectModel].
+  void selectVad({required String path}) {
+    if (_engineBusy) return;
+    _vadModelPath = path;
+    _vadSelectionMissing = false;
+    _save('vad_model_path', path);
+    notifyListeners();
+  }
+
+  /// Forgets the VAD selection (its bundle was deleted, or the user cleared
+  /// it). The ASR and embedding selections are untouched.
+  void clearVadSelection() {
+    if (_vadModelPath == null && !_vadSelectionMissing) return;
+    _vadModelPath = null;
+    _vadSelectionMissing = false;
+    _save('vad_model_path', '');
+    notifyListeners();
+  }
+
+  /// The real VAD config the pages hand to [TranscriptionService.transcribe],
+  /// or null unless the neural strategy is selected *and* a model exists. Null
+  /// here means the caller must not start a neural job.
+  NeuralVadSettings? get neuralVadSettings {
+    final path = _vadModelPath;
+    if (_chunkStrategy != ChunkStrategy.neural || path == null) return null;
+    return NeuralVadSettings(
+      modelPath: path,
+      threshold: _vadThreshold,
+      minSilenceDuration: _vadMinSilenceSeconds,
+      minSpeechDuration: _vadMinSpeechSeconds,
+      speechPadMs: _vadPadMs,
+      maxSpeechSeconds: _vadMaxSeconds,
+    );
+  }
+
+  /// Identifies the current VAD knobs so a preview can tell when it has gone
+  /// stale after a Settings change (plain value equality, no framework).
+  String get neuralVadSignature => [
+    _vadModelPath ?? '',
+    _vadThreshold,
+    _vadMinSilenceSeconds,
+    _vadMinSpeechSeconds,
+    _vadPadMs,
+    _vadMaxSeconds,
+  ].join('|');
+
+  void _restoreVadSelection() {
+    final path = _nonEmpty(database.getSetting('vad_model_path'));
+    if (path == null) return;
+    if (File(path).existsSync()) {
+      _vadModelPath = path;
+    } else {
+      // The file vanished: neural mode stays disabled rather than handing the
+      // worker a path that no longer exists.
+      _vadSelectionMissing = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Neural VAD engine (independent of the ASR engine)
+  // ---------------------------------------------------------------------------
+
+  /// sherpa-onnx is the only adapter that runs real Silero VAD, so the VAD
+  /// worker is always a sherpa worker even when CrispASR (or anything else)
+  /// transcribes. That separation is the point: neural VAD is not bound to one
+  /// ASR engine.
+  static const String vadEngineId = 'sherpa';
+
+  AsrEngine? _vadEngine;
+  bool _vadCancelled = false;
+
+  /// The worker that runs [AsrEngine.planVad]/[TranscriptionService.previewVad].
+  /// Built lazily and owned by this [AppState]; [dispose] releases it. Kept
+  /// distinct from [engine] so a CrispASR ASR never has to carry a VAD.
+  AsrEngine get vadEngine =>
+      _vadEngine ??= engineRegistry.createAsr(vadEngineId, threads: _threads);
+
+  /// The VAD worker, but only while neural mode can actually use it. Null for
+  /// fixed/energy or a missing model, so those never spawn a worker isolate.
+  AsrEngine? get activeVadEngine =>
+      _chunkStrategy == ChunkStrategy.neural && neuralVadReady
+      ? vadEngine
+      : null;
+
+  /// Cooperative cancel for an in-flight neural VAD plan. Safe to call when no
+  /// VAD worker exists (nothing to abort).
+  Future<void> cancelVad() async {
+    final engine = _vadEngine;
+    if (engine is CancellableAsrEngine) {
+      _vadCancelled = true;
+      await engine.cancel();
+    }
+  }
+
+  /// Replaces a cancelled VAD worker with a fresh one. A [WorkerAsrEngine] keeps
+  /// its cancel flag until a `load` resets it, and `planVad` never loads, so a
+  /// retry after a cancel needs a new worker rather than a cleared flag.
+  /// No-op when nothing was cancelled.
+  void resetVadEngine() {
+    if (!_vadCancelled) return;
+    _vadCancelled = false;
+    final engine = _vadEngine;
+    _vadEngine = null;
+    unawaited(engine?.dispose() ?? Future<void>.value());
+  }
+
+  /// Restores every chunking value (both strategies) to its default and
+  /// persists it.
   void resetChunkSettings() {
-    _chunkMode = defaultChunkSettings.mode;
+    _chunkStrategy = ChunkStrategy.fixed;
     _chunkSeconds = defaultChunkSettings.chunkSeconds;
     _energyThreshold = defaultChunkSettings.energyThreshold;
     _speechPadMs = defaultChunkSettings.speechPadMs;
-    _save('chunk_mode', _chunkMode.name);
+    _vadThreshold = defaultVadThreshold;
+    _vadMinSilenceSeconds = defaultVadMinSilence;
+    _vadMinSpeechSeconds = defaultVadMinSpeech;
+    _vadPadMs = defaultVadPadMs;
+    _vadMaxSeconds = defaultVadMaxSeconds;
+    _save('chunk_mode', _chunkStrategy.name);
     _save('chunk_seconds', '$_chunkSeconds');
     _save('chunk_threshold', '$_energyThreshold');
     _save('chunk_pad_ms', '$_speechPadMs');
+    _save('vad_threshold', '$_vadThreshold');
+    _save('vad_min_silence', '$_vadMinSilenceSeconds');
+    _save('vad_min_speech', '$_vadMinSpeechSeconds');
+    _save('vad_pad_ms', '$_vadPadMs');
+    _save('vad_max_seconds', '$_vadMaxSeconds');
     notifyListeners();
   }
 
@@ -495,7 +756,8 @@ class AppState extends ChangeNotifier {
   SemanticIndexer? get indexer => _indexer;
 
   /// Selects a downloaded embedding bundle as the semantic model and persists
-  /// the choice. Construction failure (missing native library/model) is kept as
+  /// the choice. The model loads asynchronously on its worker isolate; a
+  /// construction/load failure (missing native library/model) is kept as
   /// [embeddingError] and never replaced with the deterministic test embedder.
   void selectEmbedding({required String path}) {
     if (!_disposed) {
@@ -528,33 +790,52 @@ class AppState extends ChangeNotifier {
     _rebuildEmbedding();
   }
 
-  /// Drops the current embedder/indexer and rebuilds them from
+  /// Drops the current embedder/indexer and starts an async rebuild from
   /// [_embeddingPath]. Any construction failure is state, not a fallback.
   void _rebuildEmbedding() {
     transcriptRepo.removeListener(_onTranscriptChanged);
     _indexer?.dispose();
     _indexer = null;
-    _embedder?.dispose();
+    _embedder?.dispose(); // the worker releases its native session and dies
     _embedder = null;
-    _searchRepo = null; // rebuilt lazily with the new embedder
+    _searchRepo = null; // rebuilt with the new embedder once it loads
     _embeddingError = null;
 
     final path = _embeddingPath;
     if (path == null || path.isEmpty) return;
+    unawaited(_initEmbedding(path));
+  }
+
+  /// Awaits the embedder factory (worker spawn + native load), and wires the
+  /// indexer/search repo only on success — the UI thread never touches the
+  /// native encode. A completion that is no longer current (model switched or
+  /// AppState disposed while loading) releases its embedder instead of wiring
+  /// a stale model into the new index.
+  Future<void> _initEmbedding(String path) async {
+    Embedder embedder;
     try {
-      final embedder = _embedderFactory(path);
-      _embedder = embedder;
-      final indexer = SemanticIndexer(database, embedder: embedder);
-      _indexer = indexer;
-      // Every repo mutation (a new transcript, a restore) triggers a pending
-      // pass; indexPending is idempotent, so a spurious run costs one SELECT.
-      transcriptRepo.addListener(_onTranscriptChanged);
-      _searchRepo = SearchRepo(database, embedder: embedder);
-      // Backfill rows that were stored before the model was chosen.
-      unawaited(indexer.indexPending());
+      embedder = await _embedderFactory(path);
     } on Object catch (error) {
-      _embeddingError = error.toString();
+      if (!_disposed && _embeddingPath == path) {
+        _embeddingError = error.toString();
+        notifyListeners();
+      }
+      return;
     }
+    if (_disposed || _embeddingPath != path) {
+      embedder.dispose();
+      return;
+    }
+    _embedder = embedder;
+    final indexer = SemanticIndexer(database, embedder: embedder);
+    _indexer = indexer;
+    // Every repo mutation (a new transcript, a restore) triggers a pending
+    // pass; indexPending is idempotent, so a spurious run costs one SELECT.
+    transcriptRepo.addListener(_onTranscriptChanged);
+    _searchRepo = SearchRepo(database, embedder: embedder);
+    // Backfill rows that were stored before the model was chosen.
+    unawaited(indexer.indexPending());
+    notifyListeners();
   }
 
   /// Bridges [TranscriptRepo]'s notification to a pending indexing pass,
@@ -567,11 +848,10 @@ class AppState extends ChangeNotifier {
 
   bool _disposed = false;
 
-  static ChunkMode _chunkModeFrom(String? raw) => ChunkMode.values.any(
-    (mode) => mode.name == raw,
-  )
-      ? ChunkMode.values.firstWhere((mode) => mode.name == raw)
-      : defaultChunkSettings.mode;
+  static ChunkStrategy _chunkStrategyFrom(String? raw) =>
+      ChunkStrategy.values.any((strategy) => strategy.name == raw)
+      ? ChunkStrategy.values.firstWhere((strategy) => strategy.name == raw)
+      : ChunkStrategy.fixed;
 
   static double _boundedDouble(
     String? raw,
@@ -601,13 +881,15 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     transcriptRepo.removeListener(_onTranscriptChanged);
-    // ponytail: an indexing job still in flight can touch the closed database
-    // and then a disposed phase notifier; teardown only, the job's error is
-    // already swallowed by SemanticIndexer._enqueue. Add a cancel hook there
-    // if a mid-teardown index run ever becomes visible.
+    // The indexer drops queued jobs after dispose, and an in-flight embed
+    // stops before its write, so a mid-teardown run cannot touch the closed
+    // database or the disposed phase notifier. The embedder's worker gets the
+    // same answer early: its pending calls fail on exit and the job swallows
+    // the error as state.
     _indexer?.dispose();
     _embedder?.dispose();
     _engine?.dispose();
+    _vadEngine?.dispose();
     database.close();
     super.dispose();
   }

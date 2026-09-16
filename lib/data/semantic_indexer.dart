@@ -14,8 +14,10 @@ enum SemanticIndexPhase { idle, running, failed }
 ///
 /// Minimal by design: no job queue, no vector DB — [indexPending], [rebuild]
 /// and [indexTranscript] chain onto one serial future, each awaitable to its
-/// own completion, and each [Embedder.embedDocument] call is one synchronous
-/// encode. Errors end the current job as [SemanticIndexPhase.failed] +
+/// own completion. The production embedder encodes on its worker isolate, so
+/// each [Embedder.embedDocument] is awaited — the UI thread never blocks on
+/// native FFI, and the DB reads/writes stay on the root isolate where the
+/// database lives. Errors end the current job as [SemanticIndexPhase.failed] +
 /// [lastError]; calling again retries where it stopped (rows already stored
 /// are not re-embedded, [rebuild] starts the model's rows over).
 ///
@@ -85,25 +87,34 @@ class SemanticIndexer {
       [id, _embedder.id],
     );
     if (existing.isNotEmpty) return;
-    _embedAndStore(id, rows.single['text'] as String);
+    await _embedAndStore(id, rows.single['text'] as String);
   });
 
   /// Releases the notifier; does not dispose the injected embedder, whose
   /// lifetime belongs to whoever built it (typically AppState/engineRegistry).
-  void dispose() => phase.dispose();
+  /// After dispose, in-flight jobs stop before their next DB write, so a
+  /// replaced model can never be indexed into by a stale job.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    phase.dispose();
+  }
+
+  bool _disposed = false;
 
   Future<void> _enqueue(Future<void> Function() job) {
     // Every job is serial and self-contained: failures become state instead of
     // rejecting the chain, so one bad vector cannot wedge all later indexing.
     _tail = _tail.then((_) async {
+      if (_disposed) return; // superseded model: the queue drains, writes nothing
       _lastError = null;
       phase.value = SemanticIndexPhase.running;
       try {
         await job();
-        phase.value = SemanticIndexPhase.idle;
+        if (!_disposed) phase.value = SemanticIndexPhase.idle;
       } catch (error) {
         _lastError = error.toString();
-        phase.value = SemanticIndexPhase.failed;
+        if (!_disposed) phase.value = SemanticIndexPhase.failed;
       }
     });
     return _tail;
@@ -118,17 +129,18 @@ class SemanticIndexer {
       [_embedder.id],
     );
     for (final row in pending) {
-      // Yield between embeds so taps get their frame. A native encode is
-      // synchronous FFI and still blocks for its own call; moving the job to
-      // an isolate needs DB+embedder access across the boundary.
-      // ponytail: revisit only if single encodes measurably drop frames.
-      await Future<void>.delayed(Duration.zero);
-      _embedAndStore(row['id'] as int, row['text'] as String);
+      // The await on the worker embed already yields the UI thread its frame;
+      // no extra delay is needed (and the native encode no longer blocks at
+      // all — it runs on the embedding worker isolate).
+      await _embedAndStore(row['id'] as int, row['text'] as String);
     }
   }
 
-  void _embedAndStore(int id, String text) {
-    final vector = _embedder.embedDocument(text);
+  Future<void> _embedAndStore(int id, String text) async {
+    final vector = await _embedder.embedDocument(text);
+    // A model switch or AppState teardown may have landed while the worker was
+    // encoding: a stale job must not write into the (now other model's) index.
+    if (_disposed) return;
     _check(vector);
     _db.execute('BEGIN');
     try {

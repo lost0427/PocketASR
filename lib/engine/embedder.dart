@@ -1,39 +1,45 @@
 /// Local text-embedding abstraction — engine- and model-agnostic.
 ///
-/// Only [DeterministicEmbedder] ships today: the native CrispEmbed library is
-/// not in the repo, so semantic search must stay honest instead of faking
-/// meaning. A real `CrispEmbedder` implements [Embedder] later without touching
-/// the UI or the data layer — the interface is the single swap point
-/// (plan §2 / Phase 8).
+/// Production embedding runs on a worker isolate (see embedding_worker.dart):
+/// the native CrispEmbed FFI is synchronous, so keeping it off the UI thread is
+/// a hard requirement, not an optimization. [DeterministicEmbedder] is
+/// test-only; a build without the native library stays honest by failing with
+/// [EmbedderUnavailableException] instead of faking meaning (plan §2 / Phase 8).
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 /// Turns text into a fixed-length embedding vector.
 ///
-/// [embed] is synchronous because the reference CrispEmbed Dart API exposes a
-/// synchronous `encode`; loading the model is a separate, asynchronous concern
-/// owned by the implementation.
+/// The embed methods return [FutureOr] so both a synchronous test embedder and
+/// the production worker-backed embedder ([WorkerEmbedder] in
+/// embedding_worker.dart) satisfy the interface without ceremony. Callers that
+/// need the vector `await` it — awaiting a plain [Float32List] is legal, so
+/// synchronous implementations cost nothing at the call site. The native
+/// CrispEmbed FFI is synchronous *by nature*, which is exactly why the real
+/// instance lives on a worker isolate and never on the UI thread.
 abstract class Embedder {
   /// Stable model id, e.g. `crispembed-gemma-300m`. Stored in the
   /// `embedding.model` column so a query is only compared against vectors
   /// produced by the same model.
   String get id;
 
-  /// Length of the vectors this embedder produces.
+  /// Length of the vectors this embedder produces. For worker-backed
+  /// embedders it is only readable after the asynchronous load has completed.
   int get dim;
 
   /// Embeds [text]. The result may be unnormalized; the index normalizes it.
-  Float32List embed(String text);
+  FutureOr<Float32List> embed(String text);
 
   /// Embeds [text] as a search *query*. Identical to [embed] except for models
   /// trained with a query-side prompt (e.g. E5's `query: ` prefix); those
   /// overrides add the prompt only — never a different vector space.
-  Float32List embedQuery(String text) => embed(text);
+  FutureOr<Float32List> embedQuery(String text) => embed(text);
 
   /// Embeds [text] as an indexed *document* (e.g. E5's `passage: ` prefix).
   /// Indexer writers must call this, not [embedQuery].
-  Float32List embedDocument(String text) => embed(text);
+  FutureOr<Float32List> embedDocument(String text) => embed(text);
 
   /// Releases native resources.
   Future<void> dispose();
@@ -52,13 +58,15 @@ class EmbedderUnavailableException implements Exception {
   String toString() => 'EmbedderUnavailableException: $message';
 }
 
-/// Deterministic, dependency-free [Embedder] for tests and as a fallback when
-/// no native embedding library is bundled.
+/// Deterministic, dependency-free, *synchronous* [Embedder] for tests only.
+///
+/// Production must use the worker-backed embedder; this one runs on the calling
+/// isolate, which for the UI thread is exactly what the worker exists to avoid.
 ///
 /// **Not a semantic model.** It hashes character bigrams into [dim] buckets, so
 /// cosine similarity reflects shared surface n-grams, not meaning. It is a pure
 /// function of the input (same text → same vector, every run), which is exactly
-/// what makes it useful in tests. Swap in `CrispEmbedder` for real semantics.
+/// what makes it useful in tests.
 class DeterministicEmbedder implements Embedder {
   DeterministicEmbedder({this.dim = 128});
 

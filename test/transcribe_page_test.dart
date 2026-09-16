@@ -323,7 +323,7 @@ void main() {
     addTearDown(state.dispose);
     state.modelFamily = 'sensevoice';
     state.modelQuant = 'q8_0';
-    state.chunkMode = ChunkMode.energy;
+    state.chunkStrategy = ChunkStrategy.energy;
     state.chunkSeconds = 12;
     state.energyThreshold = 0.02;
     state.speechPadMs = 40;

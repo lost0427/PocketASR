@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -36,7 +37,48 @@ class _QueryEmbedder implements Embedder {
   Future<void> dispose() async {}
 }
 
+/// Query embeds where 'slow' takes 300ms of worker time and lands on Beta,
+/// anything else resolves immediately and lands on Alpha — enough to tell a
+/// fresh result from a stale one by list order alone.
+class _StaleQueryEmbedder implements Embedder {
+  _StaleQueryEmbedder();
+
+  @override
+  final String id = 'stale-embedder';
+  @override
+  final int dim = 2;
+
+  final List<String> queries = [];
+
+  @override
+  Float32List embed(String text) => embedDocument(text);
+
+  @override
+  Float32List embedDocument(String text) =>
+      text.startsWith('alpha') ? _v(1, 0) : _v(0, 1);
+
+  @override
+  FutureOr<Float32List> embedQuery(String text) {
+    queries.add(text);
+    return text == 'slow'
+        ? Future<Float32List>.delayed(
+            const Duration(milliseconds: 300),
+            () => _v(0, 1),
+          )
+        : _v(1, 0);
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+Float32List _v(double a, double b) => Float32List.fromList([a, b]);
+
 void main() {
+  bool alphaAboveBeta(WidgetTester tester) =>
+      tester.getTopLeft(find.text('Alpha')).dy <
+      tester.getTopLeft(find.text('Beta')).dy;
+
   late AppDatabase db;
   late TranscriptRepo repo;
   late SearchRepo search;
@@ -230,6 +272,71 @@ void main() {
 
     expect(embedder.queries, ['wifi network']); // the real search seam
     expect(find.text('WiFi'), findsOneWidget);
+  });
+
+  testWidgets('a superseded semantic query cannot overwrite newer results', (
+    tester,
+  ) async {
+    final embedder = _StaleQueryEmbedder();
+    final indexer = SemanticIndexer(db, embedder: embedder);
+    addTearDown(indexer.dispose);
+    final semanticSearch = SearchRepo(db, embedder: embedder);
+
+    repo.insert(title: 'Alpha', text: 'alpha one');
+    repo.insert(title: 'Beta', text: 'beta two');
+    await tester.runAsync(() => indexer.indexPending());
+    await pumpHistory(
+      tester,
+      searchRepo: semanticSearch,
+      indexer: indexer,
+    );
+
+    await tester.tap(find.text('Semantic'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'slow');
+    await tester.pump(); // query 1 is now in flight (its 300ms has not elapsed)
+    await tester.enterText(find.byType(TextField), 'fast');
+    await tester.pump();
+    await tester.pump(); // render the fresh answer
+
+    // The fresh query ranked Alpha first (cosine 1 against [1, 0]).
+    expect(alphaAboveBeta(tester), isTrue);
+
+    // Let the stale 'slow' answer land: it must be dropped, not applied.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(embedder.queries, ['slow', 'fast']);
+    expect(alphaAboveBeta(tester), isTrue);
+  });
+
+  testWidgets('a semantic result landing after dispose is dropped', (
+    tester,
+  ) async {
+    final embedder = _StaleQueryEmbedder();
+    final indexer = SemanticIndexer(db, embedder: embedder);
+    addTearDown(indexer.dispose);
+    final semanticSearch = SearchRepo(db, embedder: embedder);
+
+    repo.insert(title: 'Alpha', text: 'alpha one');
+    await tester.runAsync(() => indexer.indexPending());
+    await pumpHistory(
+      tester,
+      searchRepo: semanticSearch,
+      indexer: indexer,
+    );
+    await tester.tap(find.text('Semantic'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'slow');
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Tear the page down mid-query; when the embed lands there is no State.
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox())),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('semantic modes are disabled and explained without an embedder', (

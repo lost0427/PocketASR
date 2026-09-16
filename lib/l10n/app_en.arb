@@ -207,5 +207,48 @@
   "benchExportCsv": "Export CSV",
   "benchExportFailed": "Export failed",
   "benchExitHint": "Tap the title seven times to leave.",
+  "settingsChunkNeural": "Neural VAD",
+  "settingsVadHint": "Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.",
+  "settingsVadModel": "VAD model",
+  "settingsVadModelNone": "None selected",
+  "settingsVadThreshold": "Speech threshold",
+  "settingsVadMinSilence": "Min silence",
+  "settingsVadMinSpeech": "Min speech",
+  "settingsVadMaxSeconds": "Max speech",
+  "settingsVadSecondsValue": "{seconds} s",
+  "@settingsVadSecondsValue": {
+    "placeholders": {
+      "seconds": { "type": "String" }
+    }
+  },
+  "vadModelRequired": "Select a downloaded VAD model in the Models tab to use neural VAD.",
+  "modelsVadSection": "VAD models",
+  "modelsVadNote": "A VAD model detects speech boundaries for the neural chunking mode. It cannot transcribe audio.",
+  "vadPreview": "Speech preview",
+  "vadPreviewRun": "Preview",
+  "vadPreviewAgain": "Preview again",
+  "vadPreviewing": "Analysing speech…",
+  "vadPreviewSummary": "{windows} window(s), {speech} s of speech",
+  "@vadPreviewSummary": {
+    "placeholders": {
+      "windows": { "type": "int" },
+      "speech": { "type": "String" }
+    }
+  },
+  "vadPreviewWindow": "Window {index}",
+  "@vadPreviewWindow": {
+    "placeholders": {
+      "index": { "type": "int" }
+    }
+  },
+  "vadPreviewSegment": "{start} – {end} s",
+  "@vadPreviewSegment": {
+    "placeholders": {
+      "start": { "type": "String" },
+      "end": { "type": "String" }
+    }
+  },
+  "vadPreviewStale": "Settings changed since this preview. Preview again.",
+  "transcribeCancel": "Cancel",
   "comingSoon": "Coming soon"
 }

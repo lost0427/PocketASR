@@ -283,6 +283,29 @@ void main() {
     },
   );
 
+  test(
+    'planVad is not gated by a prior cancel, but transcribe is',
+    () async {
+      // The VAD worker never loads an ASR model, so `cancel` does not block a
+      // later planVad: the app replaces a cancelled VAD worker on retry rather
+      // than relying on this call to reset the flag.
+      final e = engine('slow');
+      await e.cancel();
+      final plan = await e.planVad(
+        const TranscribeRequest(audioPath: 'x.wav'),
+        const NeuralVadSettings(modelPath: 'vad.onnx'),
+      );
+      expect(plan.segments, hasLength(1));
+
+      // transcribe, by contrast, refuses until a load clears the flag.
+      await expectLater(
+        e.transcribe(const TranscribeRequest(audioPath: 'x.wav')),
+        emitsError(isA<EngineCancelledException>()),
+      );
+      await e.dispose();
+    },
+  );
+
   test('dispose before spawn completes without ever starting a worker', () async {
     final e = engine('never');
     await e.dispose();

@@ -82,19 +82,20 @@ class SearchRepo {
   /// Merges the two ranked lists with Reciprocal Rank Fusion (k = 60), which
   /// needs no score calibration between FTS5 rank and cosine similarity. With
   /// no [Embedder] this is [searchLiteral] re-ranked by the same formula.
-  /// Trash scoping works as in [searchLiteral].
-  List<Transcript> searchHybrid(
+  /// Trash scoping works as in [searchLiteral]. Asynchronous only because the
+  /// semantic leg awaits the query embed (a worker round-trip).
+  Future<List<Transcript>> searchHybrid(
     String query, {
     int topK = 20,
     bool includeTrash = false,
     bool onlyTrash = false,
-  }) {
+  }) async {
     final literal = searchLiteral(
       query,
       includeTrash: includeTrash,
       onlyTrash: onlyTrash,
     );
-    final semantic = searchSemantic(
+    final semantic = await searchSemantic(
       query,
       topK: topK,
       includeTrash: includeTrash,
@@ -123,17 +124,19 @@ class SearchRepo {
   /// Semantic search over the `embedding` table, best match first.
   ///
   /// Embeds [query] with the configured [Embedder]'s *query* prompt
-  /// ([Embedder.embedQuery]) and ranks stored vectors by cosine similarity.
-  /// Rows from a different model/dimension are skipped, so a half-migrated
-  /// table cannot mix incomparable vectors, and rows whose blob is shorter
-  /// than `dim` floats are skipped as not-indexable. Returns nothing when no
-  /// embedder is configured. Trash scoping works as in [searchLiteral].
-  List<Transcript> searchSemantic(
+  /// ([Embedder.embedQuery]) — awaited, because the production embedder runs
+  /// the native encode on its worker isolate — and ranks stored vectors by
+  /// cosine similarity. Rows from a different model/dimension are skipped, so
+  /// a half-migrated table cannot mix incomparable vectors, and rows whose
+  /// blob is shorter than `dim` floats are skipped as not-indexable. Returns
+  /// nothing when no embedder is configured. Trash scoping works as in
+  /// [searchLiteral].
+  Future<List<Transcript>> searchSemantic(
     String query, {
     int topK = 20,
     bool includeTrash = false,
     bool onlyTrash = false,
-  }) {
+  }) async {
     final embedder = this.embedder;
     if (embedder == null) return const [];
 
@@ -159,9 +162,9 @@ class SearchRepo {
       byId[id] = transcriptFromRow(row);
     }
 
+    final queryVector = await embedder.embedQuery(query);
     return [
-      for (final hit in index.search(embedder.embedQuery(query), topK: topK))
-        byId[hit.id]!,
+      for (final hit in index.search(queryVector, topK: topK)) byId[hit.id]!,
     ];
   }
 

@@ -1,11 +1,14 @@
 /// Native CrispEmbed [Embedder] adapter (plan §2 / Phase 8).
 ///
-/// Thin wrapper over `package:crispembed`'s synchronous FFI API. Constructing
-/// one loads the native library and the GGUF model immediately; a missing
-/// `.so`/`.dll` or an unreadable model throws [EmbedderUnavailableException]
-/// rather than falling back to [DeterministicEmbedder]. This build ships no
-/// `libcrispembed`, so construction currently fails loudly — which is the
-/// point: semantic search must never fake meaning.
+/// Thin wrapper over `package:crispembed`'s synchronous FFI API. Because every
+/// call here blocks the calling isolate, this class is constructed **only
+/// inside the embedding worker isolate** (see embedding_worker.dart); the UI
+/// thread talks to [WorkerEmbedder], a mailbox. Constructing one loads the
+/// native library and the GGUF model immediately; a missing `.so`/`.dll` or an
+/// unreadable model throws [EmbedderUnavailableException] rather than falling
+/// back to [DeterministicEmbedder]. This build ships no `libcrispembed`, so
+/// construction currently fails loudly — which is the point: semantic search
+/// must never fake meaning.
 library;
 
 import 'dart:io';
@@ -16,6 +19,9 @@ import 'package:crispembed/crispembed.dart' as crisp;
 import 'embedder.dart';
 
 /// [Embedder] backed by the native `libcrispembed` / `crispembed.dll`.
+///
+/// Worker-isolate-only: do not construct on the root isolate (see class docs
+/// and [WorkerEmbedder.crisp] for the sanctioned construction site).
 class CrispEmbedder implements Embedder {
   /// Loads [modelPath] now. [threads] is the native CPU thread count (0 lets
   /// the library auto-detect); [libPath] overrides the platform default library

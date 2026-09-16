@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../app/app_state.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/model_catalog.dart';
 import '../../features/transcribe/transcription_service.dart';
@@ -27,6 +28,7 @@ class BenchPage extends StatefulWidget {
     this.service,
     this.entries,
     this.store,
+    this.state,
     this.pickAudio,
     this.exportFile,
   });
@@ -42,6 +44,10 @@ class BenchPage extends StatefulWidget {
 
   /// Local file facts seam; production resolves the app-private models dir.
   final ModelStore? store;
+
+  /// App-wide chunking/VAD settings, so a benchmark cuts audio exactly like the
+  /// transcribe and queue flows. Null in tests that do not care.
+  final AppState? state;
 
   /// Picks the fixed input audio; production uses the file selector.
   final Future<String?> Function()? pickAudio;
@@ -85,7 +91,12 @@ class _BenchPageState extends State<BenchPage> {
       if (store != null) {
         downloaded = [
           for (final entry in entries)
-            if (entry.type != 'embedding' && store.isDownloaded(entry)) entry,
+            // VAD and embedding bundles are not speech recognizers; a matrix
+            // cell must be an ASR bundle or the numbers would be meaningless.
+            if (entry.type != 'embedding' &&
+                entry.type != 'vad' &&
+                store.isDownloaded(entry))
+              entry,
         ];
       }
     } catch (_) {
@@ -138,9 +149,20 @@ class _BenchPageState extends State<BenchPage> {
   Future<void> _run(List<ModelEntry> downloaded, ModelStore store) async {
     final audioPath = _audioPath;
     if (_running || audioPath == null) return;
+    final state = widget.state;
+    state?.resetVadEngine(); // a previous cancel must not poison this run
     final service =
-        widget.service ?? TranscriptionService(engine: widget.engine);
-    final runner = BenchmarkRunner(widget.engine, service);
+        widget.service ??
+        TranscriptionService(
+          engine: widget.engine,
+          vadEngine: state?.activeVadEngine,
+        );
+    final runner = BenchmarkRunner(
+      widget.engine,
+      service,
+      chunkSettings: state?.chunkSettings,
+      neuralVad: state?.neuralVadSettings,
+    );
 
     setState(() {
       _running = true;
@@ -198,6 +220,8 @@ class _BenchPageState extends State<BenchPage> {
     setState(() => _cancelRequested = true);
     final engine = widget.engine;
     if (engine is CancellableAsrEngine) engine.cancel();
+    // Neural VAD plans on its own worker, so the cancel must reach that too.
+    widget.state?.cancelVad();
   }
 
   Future<void> _export(bool asJson) async {
@@ -250,11 +274,18 @@ class _BenchPageState extends State<BenchPage> {
 
   Widget _buildBody(AppLocalizations l10n, _BenchSetup setup) {
     final store = setup.store;
+    final state = widget.state;
+    // Neural mode without a real VAD model cannot run, exactly like the pages.
+    final needsVad =
+        (state?.chunkStrategy ?? ChunkStrategy.fixed) ==
+            ChunkStrategy.neural &&
+        !(state?.neuralVadReady ?? false);
     final canRun = setup.engineAvailable &&
         _audioName != null &&
         setup.downloaded.isNotEmpty &&
         store != null &&
-        !_running;
+        !_running &&
+        !needsVad;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -353,6 +384,10 @@ class _BenchPageState extends State<BenchPage> {
         if (_audioName == null) ...[
           const SizedBox(height: 8),
           _Muted(l10n.benchAudioRequired),
+        ],
+        if (needsVad) ...[
+          const SizedBox(height: 8),
+          _Muted(l10n.vadModelRequired),
         ],
         const SizedBox(height: 16),
         if (_results.isEmpty)

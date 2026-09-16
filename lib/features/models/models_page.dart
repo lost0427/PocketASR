@@ -151,11 +151,15 @@ class _ModelsPageState extends State<ModelsPage> {
     if (confirmed != true) return;
 
     await store.delete(entry);
-    // Deleting the selected bundle leaves nothing to run: clear just that
-    // selection (other models keep their files) and let the pages fall back.
+    // Deleting the selected bundle leaves nothing to run: clear just the
+    // selection that pointed at this bundle (ASR, VAD and embedding are
+    // independent choices) and let the pages fall back.
     final state = widget.state;
-    if (state != null && state.modelSpec?.path == store.pathFor(entry)) {
-      state.clearModelSelection();
+    if (state != null) {
+      final path = store.pathFor(entry);
+      if (state.modelSpec?.path == path) state.clearModelSelection();
+      if (state.embeddingPath == path) state.clearEmbedding();
+      if (state.vadModelPath == path) state.clearVadSelection();
     }
     if (mounted) setState(() {});
   }
@@ -171,6 +175,19 @@ class _ModelsPageState extends State<ModelsPage> {
       family: entry.family,
       quant: entry.quant,
     );
+  }
+
+  /// Routes a tile's Use button to the selection it actually changes. A VAD
+  /// bundle is *never* adopted as the ASR model.
+  void _adopt(_ModelKind kind, ModelEntry entry, ModelStore store, AppState state) {
+    switch (kind) {
+      case _ModelKind.asr:
+        _use(entry, store, state);
+      case _ModelKind.embedding:
+        state.selectEmbedding(path: store.pathFor(entry));
+      case _ModelKind.vad:
+        state.selectVad(path: store.pathFor(entry));
+    }
   }
 
   @override
@@ -234,23 +251,30 @@ class _ModelsPageState extends State<ModelsPage> {
     final runner = _runnerFor(store);
     final state = widget.state;
     final scheme = Theme.of(context).colorScheme;
-    final asr = [for (final e in entries) if (e.type != 'embedding') e];
+    final asr = [
+      for (final e in entries)
+        if (e.type != 'embedding' && e.type != 'vad') e,
+    ];
+    final vad = [for (final e in entries) if (e.type == 'vad') e];
     final embedding = [for (final e in entries) if (e.type == 'embedding') e];
 
     Widget tile(
       ModelEntry entry, {
+      required _ModelKind kind,
       required bool selectable,
-      bool embedding = false,
     }) {
       final canSelect =
           selectable && store != null && state != null && store.isDownloaded(entry);
+      final path = store?.pathFor(entry);
       final selected =
           state != null &&
           store != null &&
           store.isDownloaded(entry) &&
-          (embedding
-              ? state.embeddingPath == store.pathFor(entry)
-              : state.modelSpec?.path == store.pathFor(entry));
+          switch (kind) {
+            _ModelKind.asr => state.modelSpec?.path == path,
+            _ModelKind.embedding => state.embeddingPath == path,
+            _ModelKind.vad => state.vadModelPath == path,
+          };
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: _ModelTile(
@@ -262,15 +286,7 @@ class _ModelsPageState extends State<ModelsPage> {
           selectable: canSelect,
           selected: selected,
           busy: state?.engineBusy ?? false,
-          onUse: canSelect
-              ? () {
-                  if (embedding) {
-                    state.selectEmbedding(path: store.pathFor(entry));
-                  } else {
-                    _use(entry, store, state);
-                  }
-                }
-              : null,
+          onUse: canSelect ? () => _adopt(kind, entry, store, state) : null,
           onDownload: (store == null || runner == null)
               ? null
               : () => _startDownload(entry, store, runner),
@@ -287,6 +303,14 @@ class _ModelsPageState extends State<ModelsPage> {
           _Notice(
             icon: Icons.warning_amber_rounded,
             text: l10n.modelSelectionMissing,
+            color: scheme.error,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (state?.vadSelectionMissing ?? false) ...[
+          _Notice(
+            icon: Icons.warning_amber_rounded,
+            text: l10n.vadModelRequired,
             color: scheme.error,
           ),
           const SizedBox(height: 12),
@@ -318,7 +342,21 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 24),
           _SectionLabel(l10n.modelsAsrSection),
           const SizedBox(height: 12),
-          for (final entry in asr) tile(entry, selectable: true),
+          for (final entry in asr) tile(entry, kind: _ModelKind.asr, selectable: true),
+        ],
+        if (vad.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _SectionLabel(l10n.modelsVadSection),
+          const SizedBox(height: 6),
+          Text(
+            l10n.modelsVadNote,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final entry in vad) tile(entry, kind: _ModelKind.vad, selectable: true),
         ],
         if (embedding.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -332,12 +370,16 @@ class _ModelsPageState extends State<ModelsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          for (final entry in embedding) tile(entry, selectable: true, embedding: true),
+          for (final entry in embedding)
+            tile(entry, kind: _ModelKind.embedding, selectable: true),
         ],
       ],
     );
   }
 }
+
+/// Which independent selection a model tile's Use button changes.
+enum _ModelKind { asr, embedding, vad }
 
 /// One in-flight download. Mutable by design; the page owns its transitions.
 class _DownloadJob {

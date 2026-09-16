@@ -235,9 +235,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.embeddingPath, store.pathFor(embedding));
     expect(state.modelPath, isNull);
-    // This build has no native CrispEmbed library: the page says so rather
-    // than silently falling back to the deterministic test embedder.
+    // This build has no native CrispEmbed library. The embedder loads on its
+    // worker isolate (real async I/O), so wait outside the fake clock for the
+    // honest failure — the page says so rather than silently falling back to
+    // the deterministic test embedder.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 250 && state.embeddingError == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
     expect(state.embeddingReady, isFalse);
+    expect(state.embeddingError, isNotNull);
     expect(
       find.textContaining('Could not load the embedding model'),
       findsOneWidget,

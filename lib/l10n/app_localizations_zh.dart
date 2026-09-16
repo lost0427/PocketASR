@@ -568,5 +568,77 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchExitHint => '连续点击标题七次可退出。';
 
   @override
+  String get settingsChunkNeural => '神经 VAD';
+
+  @override
+  String get settingsVadHint =>
+      '神经 VAD 在独立的 sherpa-onnx worker 上运行真实 Silero 模型，按模型听到的内容切分语音，而不是按响度；它不是 ASR 模型。';
+
+  @override
+  String get settingsVadModel => 'VAD 模型';
+
+  @override
+  String get settingsVadModelNone => '未选择';
+
+  @override
+  String get settingsVadThreshold => '语音阈值';
+
+  @override
+  String get settingsVadMinSilence => '最短静音';
+
+  @override
+  String get settingsVadMinSpeech => '最短语音';
+
+  @override
+  String get settingsVadMaxSeconds => '单段上限';
+
+  @override
+  String settingsVadSecondsValue(String seconds) {
+    return '$seconds 秒';
+  }
+
+  @override
+  String get vadModelRequired => '请先在“模型”页选择已下载的 VAD 模型，才能使用神经 VAD。';
+
+  @override
+  String get modelsVadSection => 'VAD 模型';
+
+  @override
+  String get modelsVadNote => 'VAD 模型为神经切割模式检测语音边界，不能用于转录。';
+
+  @override
+  String get vadPreview => '语音预览';
+
+  @override
+  String get vadPreviewRun => '预览';
+
+  @override
+  String get vadPreviewAgain => '重新预览';
+
+  @override
+  String get vadPreviewing => '正在分析语音…';
+
+  @override
+  String vadPreviewSummary(int windows, String speech) {
+    return '$windows 个窗口，共 $speech 秒语音';
+  }
+
+  @override
+  String vadPreviewWindow(int index) {
+    return '窗口 $index';
+  }
+
+  @override
+  String vadPreviewSegment(String start, String end) {
+    return '$start – $end 秒';
+  }
+
+  @override
+  String get vadPreviewStale => '参数已更改，本次预览已过期，请重新预览。';
+
+  @override
+  String get transcribeCancel => '取消';
+
+  @override
   String get comingSoon => '即将推出';
 }

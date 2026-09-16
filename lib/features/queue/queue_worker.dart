@@ -18,6 +18,7 @@ class QueueWorker {
     this.model, {
     this.transcriptRepo,
     this.chunkSettings,
+    this.neuralVad,
     this.backend = Backend.cpu,
   });
 
@@ -26,8 +27,13 @@ class QueueWorker {
   final EngineModelSpec model;
   final TranscriptRepo? transcriptRepo;
 
-  /// Chunking handed to every job; null keeps the service's single-request path.
+  /// Chunking handed to every job; null keeps the service's single-request path
+  /// (or, in neural mode, is null because [neuralVad] is set instead).
   final ChunkSettings? chunkSettings;
+
+  /// Real neural VAD settings handed to every job. Mutually exclusive with
+  /// [chunkSettings] — the service rejects both at once.
+  final NeuralVadSettings? neuralVad;
 
   final Backend backend;
   bool _running = false;
@@ -50,6 +56,7 @@ class QueueWorker {
             model: model,
             backend: backend,
             chunkSettings: chunkSettings,
+            neuralVad: neuralVad,
             isCancelled: () => queue.isCancelling(id),
           );
           // A cancel that landed after the engine returned: discard the text

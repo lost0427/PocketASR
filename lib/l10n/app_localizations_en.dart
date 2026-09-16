@@ -587,5 +587,80 @@ class AppLocalizationsEn extends AppLocalizations {
   String get benchExitHint => 'Tap the title seven times to leave.';
 
   @override
+  String get settingsChunkNeural => 'Neural VAD';
+
+  @override
+  String get settingsVadHint =>
+      'Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.';
+
+  @override
+  String get settingsVadModel => 'VAD model';
+
+  @override
+  String get settingsVadModelNone => 'None selected';
+
+  @override
+  String get settingsVadThreshold => 'Speech threshold';
+
+  @override
+  String get settingsVadMinSilence => 'Min silence';
+
+  @override
+  String get settingsVadMinSpeech => 'Min speech';
+
+  @override
+  String get settingsVadMaxSeconds => 'Max speech';
+
+  @override
+  String settingsVadSecondsValue(String seconds) {
+    return '$seconds s';
+  }
+
+  @override
+  String get vadModelRequired =>
+      'Select a downloaded VAD model in the Models tab to use neural VAD.';
+
+  @override
+  String get modelsVadSection => 'VAD models';
+
+  @override
+  String get modelsVadNote =>
+      'A VAD model detects speech boundaries for the neural chunking mode. It cannot transcribe audio.';
+
+  @override
+  String get vadPreview => 'Speech preview';
+
+  @override
+  String get vadPreviewRun => 'Preview';
+
+  @override
+  String get vadPreviewAgain => 'Preview again';
+
+  @override
+  String get vadPreviewing => 'Analysing speech…';
+
+  @override
+  String vadPreviewSummary(int windows, String speech) {
+    return '$windows window(s), $speech s of speech';
+  }
+
+  @override
+  String vadPreviewWindow(int index) {
+    return 'Window $index';
+  }
+
+  @override
+  String vadPreviewSegment(String start, String end) {
+    return '$start – $end s';
+  }
+
+  @override
+  String get vadPreviewStale =>
+      'Settings changed since this preview. Preview again.';
+
+  @override
+  String get transcribeCancel => 'Cancel';
+
+  @override
   String get comingSoon => 'Coming soon';
 }

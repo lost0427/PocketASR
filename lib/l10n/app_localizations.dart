@@ -1184,6 +1184,132 @@ abstract class AppLocalizations {
   /// **'Tap the title seven times to leave.'**
   String get benchExitHint;
 
+  /// No description provided for @settingsChunkNeural.
+  ///
+  /// In en, this message translates to:
+  /// **'Neural VAD'**
+  String get settingsChunkNeural;
+
+  /// No description provided for @settingsVadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.'**
+  String get settingsVadHint;
+
+  /// No description provided for @settingsVadModel.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD model'**
+  String get settingsVadModel;
+
+  /// No description provided for @settingsVadModelNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None selected'**
+  String get settingsVadModelNone;
+
+  /// No description provided for @settingsVadThreshold.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech threshold'**
+  String get settingsVadThreshold;
+
+  /// No description provided for @settingsVadMinSilence.
+  ///
+  /// In en, this message translates to:
+  /// **'Min silence'**
+  String get settingsVadMinSilence;
+
+  /// No description provided for @settingsVadMinSpeech.
+  ///
+  /// In en, this message translates to:
+  /// **'Min speech'**
+  String get settingsVadMinSpeech;
+
+  /// No description provided for @settingsVadMaxSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Max speech'**
+  String get settingsVadMaxSeconds;
+
+  /// No description provided for @settingsVadSecondsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} s'**
+  String settingsVadSecondsValue(String seconds);
+
+  /// No description provided for @vadModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a downloaded VAD model in the Models tab to use neural VAD.'**
+  String get vadModelRequired;
+
+  /// No description provided for @modelsVadSection.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD models'**
+  String get modelsVadSection;
+
+  /// No description provided for @modelsVadNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A VAD model detects speech boundaries for the neural chunking mode. It cannot transcribe audio.'**
+  String get modelsVadNote;
+
+  /// No description provided for @vadPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech preview'**
+  String get vadPreview;
+
+  /// No description provided for @vadPreviewRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get vadPreviewRun;
+
+  /// No description provided for @vadPreviewAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview again'**
+  String get vadPreviewAgain;
+
+  /// No description provided for @vadPreviewing.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysing speech…'**
+  String get vadPreviewing;
+
+  /// No description provided for @vadPreviewSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{windows} window(s), {speech} s of speech'**
+  String vadPreviewSummary(int windows, String speech);
+
+  /// No description provided for @vadPreviewWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window {index}'**
+  String vadPreviewWindow(int index);
+
+  /// No description provided for @vadPreviewSegment.
+  ///
+  /// In en, this message translates to:
+  /// **'{start} – {end} s'**
+  String vadPreviewSegment(String start, String end);
+
+  /// No description provided for @vadPreviewStale.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings changed since this preview. Preview again.'**
+  String get vadPreviewStale;
+
+  /// No description provided for @transcribeCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get transcribeCancel;
+
   /// No description provided for @comingSoon.
   ///
   /// In en, this message translates to:

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
-import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
@@ -30,20 +29,20 @@ void main() {
 
     final path = write('sensevoice.onnx', [1, 2, 3]);
     AppState(database: db)
-      ..chunkMode = ChunkMode.energy
+      ..chunkStrategy = ChunkStrategy.energy
       ..chunkSeconds = 12
       ..energyThreshold = 0.02
       ..speechPadMs = 40
       ..modelPath = path;
 
     final restored = AppState(database: db);
-    expect(restored.chunkMode, ChunkMode.energy);
+    expect(restored.chunkStrategy, ChunkStrategy.energy);
     expect(restored.chunkSeconds, 12);
     expect(restored.energyThreshold, 0.02);
     expect(restored.speechPadMs, 40);
     expect(restored.modelPath, path);
     // Overlap is never exposed and stays off by default.
-    expect(restored.chunkSettings.overlapSeconds, 0);
+    expect(restored.chunkSettings!.overlapSeconds, 0);
   });
 
   test('invalid stored values fall back to the defaults', () {
@@ -55,7 +54,7 @@ void main() {
     db.setSetting('chunk_pad_ms', '99999');
 
     final state = AppState(database: db);
-    expect(state.chunkMode, ChunkMode.fixed);
+    expect(state.chunkStrategy, ChunkStrategy.fixed);
     expect(state.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
     expect(state.energyThreshold, AppState.defaultChunkSettings.energyThreshold);
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
@@ -65,15 +64,15 @@ void main() {
     final db = AppDatabase.open();
     addTearDown(db.close);
     final state = AppState(database: db)
-      ..chunkMode = ChunkMode.energy
+      ..chunkStrategy = ChunkStrategy.energy
       ..chunkSeconds = 10;
 
     state.resetChunkSettings();
 
-    expect(state.chunkMode, ChunkMode.fixed);
+    expect(state.chunkStrategy, ChunkStrategy.fixed);
     expect(state.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
     final restored = AppState(database: db);
-    expect(restored.chunkMode, ChunkMode.fixed);
+    expect(restored.chunkStrategy, ChunkStrategy.fixed);
     expect(restored.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
   });
 
