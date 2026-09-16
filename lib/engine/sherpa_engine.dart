@@ -7,7 +7,7 @@
 /// failures always surface as [EngineUnavailableException].
 library;
 
-import 'dart:typed_data';
+import '../core/audio/wav.dart';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
@@ -215,20 +215,7 @@ class SherpaEngine implements AsrEngine {
     _ensureInitialized();
     if (_initError != null) throw EngineUnavailableException(_initError!);
 
-    final wave = sherpa.readWave(request.audioPath);
-    final samples = wave.samples;
-    final sampleRate = wave.sampleRate;
-    if (samples.isEmpty || sampleRate <= 0) {
-      throw EngineUnavailableException(
-        'sherpa-onnx VAD could not read WAV audio "${request.audioPath}" '
-        '(missing, unreadable or not a WAV).',
-      );
-    }
-    if (sampleRate != 16000) {
-      throw EngineUnavailableException(
-        'Silero VAD runs at 16000 Hz; "${request.audioPath}" is $sampleRate Hz.',
-      );
-    }
+    const sampleRate = 16000;
 
     final sherpa.VoiceActivityDetector detector;
     try {
@@ -274,15 +261,9 @@ class SherpaEngine implements AsrEngine {
     }
 
     try {
-      var i = 0;
-      for (; i + _vadWindow <= samples.length; i += _vadWindow) {
-        detector.acceptWaveform(
-          Float32List.sublistView(samples, i, i + _vadWindow),
-        );
+      await for (final samples in readCanonicalWave(request.audioPath, blockSize: _vadWindow)) {
+        detector.acceptWaveform(samples);
         drain();
-      }
-      if (i < samples.length) {
-        detector.acceptWaveform(Float32List.sublistView(samples, i));
       }
       detector.flush();
       drain();

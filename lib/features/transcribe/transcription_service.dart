@@ -1,12 +1,11 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
-import '../../core/audio/audio_buffer.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/audio/chunk_planner.dart';
-import '../../core/audio/wav.dart';
+import '../../core/audio/pcm_file.dart';
+import '../../core/audio/loudness.dart';
 import '../../engine/asr_engine.dart';
 
 class TranscriptionJobResult {
@@ -82,6 +81,20 @@ class TranscriptionService {
   final AudioSource _source;
   final AudioPreprocessor _preprocessor;
 
+  Future<PcmFile> _decode(String path, Directory dir, bool Function()? cancelled) async {
+    final source = _source;
+    if (source is FileAudioSource) {
+      return source.decodeToDisk(path, dir, isCancelled: cancelled);
+    }
+    // Injected sources used by tests already own their small in-memory input.
+    return PcmFile.fromBuffer(await source.read(path), '${dir.path}/decoded.f32');
+  }
+
+  Future<({double lufs, double gainDb})> _measure(PcmFile audio, bool Function()? cancelled) =>
+      _preprocessor.enabled
+          ? LoudnessNormalizer(targetLufs: _preprocessor.targetLufs).measureFile(audio, isCancelled: cancelled)
+          : Future.value((lufs: double.nan, gainDb: 0.0));
+
   /// Runs one file through [engine].
   ///
   /// When [chunkSettings] is given, the normalized PCM is sliced per
@@ -93,8 +106,8 @@ class TranscriptionService {
   /// ([ChunkSettings.overlapSeconds] > 0) duplicates boundary text on purpose
   /// or not at all: no deduplication is implemented here, so the default is 0.
   ///
-  /// Leaving [chunkSettings] null keeps the historic behavior: exactly one
-  /// request with the whole file. [onProgress] is optional and never changes
+  /// Leaving [chunkSettings] null uses default 30-second windows.
+  /// [onProgress] is optional and never changes
   /// the returned result. A failing or silent engine throws
   /// [EngineUnavailableException]; no placeholder text is ever returned.
   ///
@@ -132,16 +145,19 @@ class TranscriptionService {
       );
     }
     neuralVad?.validate(); // fail before any IO, like planner validation
-    final sourceAudio = await _source.read(audioPath);
-    final processed = await _preprocessor.processAsync(sourceAudio);
-    final audio = processed.audio;
+    chunkSettings?.validate();
+    final dir = await Directory.systemTemp.createTemp('pocket_asr_');
+    try {
+    final audio = await _decode(audioPath, dir, isCancelled);
+    final measured = await _measure(audio, isCancelled);
+    final gain = math.pow(10, measured.gainDb / 20).toDouble();
     List<List<AudioChunk>> windows = const [];
     if (neuralVad == null) {
       // Fixed/energy windows are planned before the temp dir exists, so an
       // invalid or speechless plan leaves no debris.
       final chunks = chunkSettings == null
-          ? [AudioChunk(start: Duration.zero, end: audio.duration)]
-          : ChunkPlanner(settings: chunkSettings).plan(audio);
+          ? await const ChunkPlanner().planFile(audio, gain: gain, isCancelled: isCancelled)
+          : await ChunkPlanner(settings: chunkSettings).planFile(audio, gain: gain, isCancelled: isCancelled);
       if (chunks.isEmpty) {
         throw const EngineUnavailableException(
           'Chunk planner found no speech to transcribe (energy gate, not a '
@@ -153,13 +169,12 @@ class TranscriptionService {
     // One directory for the whole job; every chunk WAV lives in it and the
     // directory itself (not just the files) is removed in `finally`, on
     // success and on failure alike.
-    final dir = await Directory.systemTemp.createTemp('pocket_asr_');
-    try {
       if (neuralVad != null) {
         // Real VAD needs a file for the (worker) engine; plan first, so the
         // ASR model is only loaded once there is known speech to send.
         windows = await _planNeuralWindows(
           audio: audio,
+          gain: gain,
           vad: neuralVad,
           dir: dir,
           isCancelled: isCancelled,
@@ -193,9 +208,8 @@ class TranscriptionService {
         }
         final window = windows[i];
         final chunkUs = math.max(1, _windowSpeechUs(window));
-        final slice = _windowPcm(window, audio);
         final file = File('${dir.path}${Platform.pathSeparator}chunk$i.wav');
-        await writePcm16Wav(file, slice, audio.sampleRate);
+        await audio.writeWave(file, spans: window, gain: gain, isCancelled: isCancelled);
         TranscribeProgress? last;
         await for (final progress in engine.transcribe(
           TranscribeRequest(
@@ -235,6 +249,7 @@ class TranscriptionService {
           tokensSoFar += result.tokens!;
         }
         doneUs += chunkUs;
+        await file.delete();
       }
       if (isCancelled?.call() ?? false) {
         // Cancel can land while the *final* native call drains — the loop
@@ -251,8 +266,8 @@ class TranscriptionService {
         engine: engine.id,
         model: model,
         backend: backend,
-        originalLufs: processed.originalLufs,
-        gainDb: processed.gainDb,
+        originalLufs: measured.lufs,
+        gainDb: measured.gainDb,
         tokens: tokensSoFar,
       );
     } finally {
@@ -265,7 +280,8 @@ class TranscriptionService {
   /// single planning call if the job was already cancelled. The VAD input WAV
   /// is removed as soon as planning returns, whatever the outcome.
   Future<List<List<AudioChunk>>> _planNeuralWindows({
-    required AudioBuffer audio,
+    required PcmFile audio,
+    required double gain,
     required NeuralVadSettings vad,
     required Directory dir,
     required bool Function()? isCancelled,
@@ -277,7 +293,7 @@ class TranscriptionService {
       );
     }
     final file = File('${dir.path}${Platform.pathSeparator}vad_input.wav');
-    await writePcm16Wav(file, audio.samples, audio.sampleRate);
+    await audio.writeWave(file, gain: gain, isCancelled: isCancelled);
     final VadPlan plan;
     try {
       plan = await (vadEngine ?? engine).planVad(
@@ -292,7 +308,8 @@ class TranscriptionService {
         for (final segment in plan.segments)
           AudioChunk(start: segment.start, end: segment.end),
       ],
-      audio: audio,
+      sampleRate: audio.sampleRate,
+      sampleCount: audio.count,
       speechPadMs: vad.speechPadMs,
       maxSpeechSeconds: vad.maxSpeechSeconds,
     );
@@ -303,36 +320,6 @@ class TranscriptionService {
     0,
     (sum, span) => sum + span.duration.inMicroseconds,
   );
-
-  /// The window's PCM: span slices concatenated, so the silence between
-  /// spans is never sent — a first-to-last slice would smuggle it back in.
-  static Float32List _windowPcm(List<AudioChunk> window, AudioBuffer audio) {
-    final rate = audio.sampleRate;
-    if (window.length == 1) {
-      final span = window.single;
-      return Float32List.sublistView(
-        audio.samples,
-        span.startSampleAt(rate),
-        span.endSampleAt(rate),
-      );
-    }
-    // Allocate by the summed sample counts themselves: converting speech
-    // microseconds through the sample rate floors per-span rounding errors
-    // and under-allocates (RangeError) for odd boundaries.
-    final bounds = [
-      for (final span in window)
-        (span.startSampleAt(rate), span.endSampleAt(rate)),
-    ];
-    final out = Float32List(
-      bounds.fold(0, (int total, (int, int) b) => total + b.$2 - b.$1),
-    );
-    var at = 0;
-    for (final (start, end) in bounds) {
-      out.setRange(at, at + end - start, audio.samples, start);
-      at += end - start;
-    }
-    return out;
-  }
 
   /// Real neural-VAD boundaries for [audioPath] without touching the ASR
   /// engine at all — no [AsrEngine.load], no transcribe call.
@@ -348,13 +335,13 @@ class TranscriptionService {
     bool Function()? isCancelled,
   }) async {
     neuralVad.validate();
-    final sourceAudio = await _source.read(audioPath);
-    final processed = await _preprocessor.processAsync(sourceAudio);
-    final audio = processed.audio;
     final dir = await Directory.systemTemp.createTemp('pocket_asr_vad_');
     try {
+      final audio = await _decode(audioPath, dir, isCancelled);
+      final measured = await _measure(audio, isCancelled);
       final windows = await _planNeuralWindows(
         audio: audio,
+        gain: math.pow(10, measured.gainDb / 20).toDouble(),
         vad: neuralVad,
         dir: dir,
         isCancelled: isCancelled,

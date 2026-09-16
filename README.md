@@ -14,15 +14,20 @@ batch queues, searchable history, model downloads and a hidden benchmark page.
 3. Results are saved in History. Select an embedding model for semantic search;
    literal search works without one. Configure loudness and chunking in Settings.
 
-Android decodes formats supported by the device codecs; Windows currently
-accepts PCM/float WAV. Microphone capture requests mono 16 kHz WAV on both.
+Android decodes formats supported by the device codecs. Windows uses bundled
+FFmpeg for WAV, MP3, M4A and FLAC. Microphone capture requests mono 16 kHz WAV on both.
 Tap the version seven times in Settings to open benchmarks using your own audio.
 
 ## Current limits
 
-- Desktop WAV decoding and loudness processing run off the UI thread. WAV output
-  is written in bounded blocks, but decoded PCM is still held in memory: long
-  recordings are **not** processed with bounded total memory yet.
+- Decoded audio stays in a temporary PCM file. Loudness scans, energy detection,
+  VAD input and output use bounded buffers; ASR reads one configured window at a
+  time (30 seconds by default). Audio-buffer memory no longer scales with file
+  duration. Segment metadata and transcript text still grow with content, and
+  temporary disk space grows with duration (16 kHz float32 is about 230 MB/hour).
+- Cancellation is cooperative during Android decoding and an active native VAD
+  or ASR call; the result is discarded and files cleaned after the call returns.
+  Windows FFmpeg is terminated on cancellation.
 - Windows bundles Sherpa's native runtime; CrispASR/CrispEmbed DLLs are not
   bundled by the release workflow. Their features require those native libraries.
 - CPU is the supported inference backend. Vulkan and NPU are not implemented.
@@ -43,6 +48,17 @@ flutter run         # run on a connected Android device or emulator
 flutter analyze     # static analysis
 flutter test        # run tests
 ```
+
+For local Windows runs, stage the decoder after building (CI does this for both
+debug artifacts and release ZIPs):
+
+```powershell
+flutter build windows --debug
+./scripts/ci/stage_ffmpeg_windows.ps1 -Destination build/windows/x64/runner/Debug
+```
+
+The staging script verifies a pinned LGPL shared build's SHA-256 and bundles its
+complete archive contents. See `native/FFMPEG-NOTICE.txt` for version and sources.
 
 ## Native libraries
 

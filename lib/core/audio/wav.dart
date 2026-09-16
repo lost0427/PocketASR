@@ -4,6 +4,38 @@ import 'dart:io';
 import 'audio_buffer.dart';
 import 'pcm.dart';
 
+/// Streams the canonical PCM16 WAV produced by our pipeline, not arbitrary WAV.
+Stream<Float32List> readCanonicalWave(String path, {int blockSize = 512}) async* {
+  final file = await File(path).open();
+  try {
+    final header = await file.read(44);
+    if (header.length != 44 || String.fromCharCodes(header.sublist(0, 4)) != 'RIFF' ||
+        String.fromCharCodes(header.sublist(8, 16)) != 'WAVEfmt ' ||
+        String.fromCharCodes(header.sublist(36, 40)) != 'data') {
+      throw const FormatException('Expected canonical PCM16 WAV');
+    }
+    final fields = ByteData.sublistView(header);
+    if (fields.getUint32(16, Endian.little) != 16 || fields.getUint16(20, Endian.little) != 1 ||
+        fields.getUint16(22, Endian.little) != 1 || fields.getUint32(24, Endian.little) != 16000 ||
+        fields.getUint16(34, Endian.little) != 16) {
+      throw const FormatException('Expected mono 16000 Hz PCM16 WAV');
+    }
+    final bytes = fields.getUint32(40, Endian.little);
+    if (bytes % 2 != 0 || await file.length() != bytes + 44 || blockSize <= 0) {
+      throw const FormatException('Invalid WAV length or block size');
+    }
+    for (var at = 0; at < bytes; at += blockSize * 2) {
+      final length = (bytes - at).clamp(0, blockSize * 2);
+      final block = await file.read(length);
+      if (block.length != length) throw const FormatException('Truncated WAV');
+      final data = ByteData.sublistView(block);
+      yield Float32List.fromList(List.generate(length ~/ 2, (i) => data.getInt16(i * 2, Endian.little) / 32768));
+    }
+  } finally {
+    await file.close();
+  }
+}
+
 /// Writes bounded PCM blocks, including for a full-length VAD input.
 Future<void> writePcm16Wav(File file, Float32List samples, int sampleRate) async {
   if (samples.length > (0xffffffff - 36) ~/ 2) {

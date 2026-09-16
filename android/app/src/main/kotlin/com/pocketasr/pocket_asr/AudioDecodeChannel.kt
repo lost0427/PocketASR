@@ -35,11 +35,10 @@ import kotlin.math.max
  * rate, streaming into a little-endian float32 temp file in the app cache.
  * The reply is only `{path, sampleRate, count}` — bulk PCM never crosses
  * the channel. On any failure the temp file is deleted and the extractor,
- * descriptor and codec are released; Dart deletes the file after reading it.
+ * descriptor and codec are released; Dart retains PCM on disk until job cleanup.
  *
  * Memory is per codec buffer, not per file: two hours of audio touches the
- * same few KB of decode scratch (the full f32 temp file and the eventual
- * Dart-side Float32List are the O(duration) costs).
+ * same few KB of decode scratch. The f32 temporary disk file grows with duration.
  */
 class AudioDecodeChannel(
     messenger: BinaryMessenger,

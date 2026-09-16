@@ -17,6 +17,14 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build windows --debug
+      - name: Bundle FFmpeg
+        shell: pwsh
+        run: ./scripts/ci/stage_ffmpeg_windows.ps1 -Destination build/windows/x64/runner/Debug
+      - name: Test bundled audio decoder
+        shell: pwsh
+        run: |
+          $env:POCKETASR_TEST_FFMPEG = "$PWD/build/windows/x64/runner/Debug/ffmpeg/bin/ffmpeg.exe"
+          flutter test test/ffmpeg_decoder_test.dart
       - uses: actions/upload-artifact@v4
         with:
           name: windows-debug

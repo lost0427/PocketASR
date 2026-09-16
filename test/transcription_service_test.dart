@@ -188,6 +188,19 @@ AudioBuffer _stereoLevels() {
 const _oneSecondFixed = ChunkSettings(chunkSeconds: 1, maxSpeechSeconds: 1);
 
 void main() {
+  test('default windows bound ASR input and remove previous chunks', () async {
+    final engine = _ChunkedEngine(List.generate(3, (_) => const [
+      TranscribeProgress(elapsed: Duration(milliseconds: 1), ratio: 1, partialText: 'speech'),
+    ]));
+    final audio = AudioBuffer(samples: Float32List(16000 * 65), sampleRate: 16000);
+    final result = await _service(engine, audio).transcribe(
+      audioPath: 'ignored.wav', model: const EngineModelSpec(path: 'model.gguf'));
+    expect(engine.chunkSamples.map((s) => s.length), [480000, 480000, 80000]);
+    expect(result.audioDuration, const Duration(seconds: 65));
+    for (final request in engine.requests) {
+      expect(File(request).existsSync(), isFalse);
+    }
+  });
   test('forwards every engine progress update to the optional callback', () async {
     final engine = _FakeEngine(const [
       TranscribeProgress(

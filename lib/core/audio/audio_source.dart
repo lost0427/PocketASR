@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'audio_buffer.dart';
 import 'wav.dart';
+import 'pcm_file.dart';
+import 'ffmpeg_decoder.dart';
 
 abstract interface class AudioSource {
   Future<AudioBuffer> read(String path);
@@ -36,6 +38,36 @@ class FileAudioSource implements AudioSource {
   final WavDecoder decoder;
   final MethodChannel channel;
   final bool Function() usesNativeDecoder;
+
+  /// Production processing retains the native output on disk until job cleanup.
+  Future<PcmFile> decodeToDisk(String path, Directory directory, {
+    bool Function()? isCancelled,
+  }) async {
+    checkAudioCancellation(isCancelled);
+    if (!usesNativeDecoder()) {
+      return decodeWithFfmpeg(path, '${directory.path}/decoded.f32', isCancelled: isCancelled);
+    }
+    final result = await channel.invokeMethod<Object?>('decodeToPcm',
+      {'path': path, 'targetSampleRate': 16000});
+    if (result is! Map || result['path'] is! String) {
+      throw const FormatException('Invalid native PCM response');
+    }
+    final temp = File(result['path'] as String);
+    try {
+      checkAudioCancellation(isCancelled);
+      final count = result['count'];
+      if (result['sampleRate'] != 16000 || count is! int || count <= 0 ||
+          await temp.length() != count * 4) {
+        throw const FormatException('Invalid native PCM size or rate');
+      }
+      final destination = '${directory.path}/decoded.f32';
+      // Cache and job directories may be on different filesystems.
+      await temp.copy(destination);
+      return PcmFile(destination, count);
+    } finally {
+      await _tryDelete(temp);
+    }
+  }
 
   @override
   Future<AudioBuffer> read(String path) async {

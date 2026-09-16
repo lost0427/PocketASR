@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'audio_buffer.dart';
+import 'pcm_file.dart';
 
 /// Chunking strategy used by [ChunkPlanner].
 enum ChunkMode {
@@ -110,6 +111,38 @@ class ChunkPlanner {
 
   final ChunkSettings settings;
 
+  Future<List<AudioChunk>> planFile(PcmFile file, {double gain = 1,
+    bool Function()? isCancelled}) async {
+    settings.validate();
+    final rate = file.sampleRate;
+    final chunks = <AudioChunk>[];
+    if (settings.mode == ChunkMode.fixed) {
+      final size = math.max(1, (settings.chunkSeconds * rate).round());
+      for (var start = 0; start < file.count; start += size) {
+        chunks.add(_at(start, math.min(file.count, start + size), rate));
+      }
+    } else {
+      final frame = math.max(1, (rate * 0.02).round());
+      var at = 0;
+      int? start;
+      final pad = settings.speechPadMs * rate ~/ 1000;
+      await for (final samples in file.blocks(blockSize: frame, gain: gain, isCancelled: isCancelled)) {
+        final end = at + samples.length;
+        final active = samples.fold(0.0, (sum, s) => sum + s.abs()) / samples.length >= settings.energyThreshold;
+        if (active && start == null) start = at;
+        if ((!active || end == file.count) && start != null) {
+          final stop = active ? end : at;
+          if (stop - start >= settings.minSpeechMs * rate / 1000) {
+            chunks.add(_at(math.max(0, start - pad), math.min(file.count, stop + pad), rate));
+          }
+          start = null;
+        }
+        at = end;
+      }
+    }
+    return _limitBounds(settings.mode == ChunkMode.energy ? _mergeAdjacent(chunks) : chunks, rate, file.count);
+  }
+
   /// Plans ascending, non-overlapping-by-default blocks for [audio].
   ///
   /// Returns `[]` when energy mode finds no speech; never returns blocks
@@ -197,13 +230,16 @@ class ChunkPlanner {
   /// stepping back by overlapSeconds. [step] is forced >= 1 so the loop
   /// always terminates even if validation were bypassed.
   List<AudioChunk> _limit(List<AudioChunk> input, AudioBuffer audio) {
-    final rate = audio.sampleRate;
+    return _limitBounds(input, audio.sampleRate, audio.samples.length);
+  }
+
+  List<AudioChunk> _limitBounds(List<AudioChunk> input, int rate, int count) {
     final maxSamples = math.max(1, (settings.maxSpeechSeconds * rate).round());
     final overlapSamples = (settings.overlapSeconds * rate).round();
     final step = math.max(1, maxSamples - overlapSamples);
     final out = <AudioChunk>[];
     for (final chunk in input) {
-      final end = chunk.endSampleAt(rate).clamp(0, audio.samples.length);
+      final end = chunk.endSampleAt(rate).clamp(0, count);
       var start = chunk.startSampleAt(rate).clamp(0, end);
       while (end - start > maxSamples) {
         out.add(_at(start, start + maxSamples, rate));
@@ -233,7 +269,9 @@ class ChunkPlanner {
   /// Time coordinates stay on the original audio timeline.
   static List<List<AudioChunk>> groupVad({
     required List<AudioChunk> segments,
-    required AudioBuffer audio,
+    AudioBuffer? audio,
+    int? sampleRate,
+    int? sampleCount,
     required int speechPadMs,
     required double maxSpeechSeconds,
   }) {
@@ -247,11 +285,11 @@ class ChunkPlanner {
         'must be finite and > 0',
       );
     }
-    final rate = audio.sampleRate;
+    final rate = audio?.sampleRate ?? sampleRate!;
     if (rate <= 0) {
       throw ArgumentError.value(rate, 'audio.sampleRate', 'must be > 0');
     }
-    final total = audio.samples.length;
+    final total = audio?.samples.length ?? sampleCount!;
     if (total == 0) return const [];
     final pad = speechPadMs * rate ~/ 1000;
 

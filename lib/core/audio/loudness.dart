@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'pcm_file.dart';
 
 /// BS.1770-4 integrated loudness measurement and gain normalization.
 ///
@@ -29,6 +30,37 @@ class LoudnessNormalizer {
 
   /// Estimated true peak is not allowed above this after gain.
   final double truePeakCeilingDb;
+
+  /// Two bounded scans retain filter history and apply one gain to the file.
+  Future<({double lufs, double gainDb})> measureFile(PcmFile file, {
+    bool Function()? isCancelled,
+  }) async {
+    Future<double> gated(double gate) async {
+      var sum = 0.0;
+      var count = 0;
+      await for (final energy in _fileEnergies(file, isCancelled)) {
+        if (_lufs(energy) > gate) { sum += energy; count++; }
+      }
+      return count == 0 ? double.negativeInfinity : _lufs(sum / count);
+    }
+    final absolute = await gated(_absoluteGateLufs);
+    if (!absolute.isFinite) return (lufs: absolute, gainDb: 0.0);
+    final integrated = await gated(math.max(_absoluteGateLufs, absolute - _relativeGateLu));
+    var peak = double.negativeInfinity;
+    // Halo keeps the true-peak interpolator continuous across read boundaries.
+    const size = 16384;
+    for (var at = 0; at < file.count; at += size) {
+      await for (final block in file.blocks(start: math.max(0, at - 8),
+          end: math.min(file.count, at + size + 8), blockSize: size + 16,
+          isCancelled: isCancelled)) {
+        final amplitude = _truePeak(block, start: at == 0 ? 0 : 8,
+          end: math.min(block.length, (at == 0 ? 0 : 8) + math.min(size, file.count - at)));
+        if (amplitude > 0) peak = math.max(peak, 20 * _log10(amplitude));
+      }
+    }
+    return (lufs: integrated, gainDb: math.min(math.min(targetLufs - integrated, maxGainDb),
+      peak.isFinite ? truePeakCeilingDb - peak : double.infinity));
+  }
 
   /// BS.1770-4 integrated loudness in LUFS. [double.negativeInfinity] when the
   /// signal is silent / entirely below the -70 LUFS absolute gate.
@@ -75,6 +107,27 @@ const double _absoluteGateLufs = -70.0;
 const double _relativeGateLu = 10.0;
 const double _blockSeconds = 0.4;
 const double _hopSeconds = 0.1;
+
+Stream<double> _fileEnergies(PcmFile file, bool Function()? cancelled) async* {
+  final pre = _preFilter(file.sampleRate.toDouble());
+  final rlb = _rlbHighPass(file.sampleRate.toDouble());
+  final size = (file.sampleRate * _blockSeconds).round();
+  final hop = (file.sampleRate * _hopSeconds).round();
+  final ring = Float64List(size);
+  var sum = 0.0;
+  var seen = 0;
+  await for (final block in file.blocks(isCancelled: cancelled)) {
+    for (final sample in block) {
+      final y = rlb.process(pre.process(sample));
+      final slot = seen % size;
+      sum += y * y - ring[slot];
+      ring[slot] = y * y;
+      seen++;
+      if (seen >= size && (seen - size) % hop == 0) yield math.max(0, sum / size);
+    }
+  }
+  if (seen > 0 && seen < size) yield sum / seen;
+}
 
 double _log10(double x) => math.log(x) / math.ln10;
 
@@ -209,12 +262,13 @@ double truePeakDb(Float32List samples) {
 
 /// ponytail: O(48n) windowed-sinc interpolation. Fine for clips (30 s -> ~23M
 /// ops). Stretch to a polyphase FIR if multi-hour files ever go through here.
-double _truePeak(Float32List x) {
+double _truePeak(Float32List x, {int start = 0, int? end}) {
   final n = x.length;
+  final stop = end ?? n;
   if (n == 0) return 0;
 
   var peak = 0.0;
-  for (var i = 0; i < n; i++) {
+  for (var i = start; i < stop; i++) {
     final a = x[i].abs();
     if (a > peak) peak = a;
   }
@@ -224,7 +278,7 @@ double _truePeak(Float32List x) {
   const span = 2 * half;
   for (var p = 1; p < 4; p++) {
     final taps = _tpCoef[p];
-    for (var m = 0; m < n; m++) {
+    for (var m = start; m < stop; m++) {
       var acc = 0.0;
       for (var i = 0; i < span; i++) {
         final k = m + i - (half - 1);

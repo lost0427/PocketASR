@@ -23,6 +23,14 @@ jobs:
       # "no ASR": SherpaEngine works there — the sherpa_onnx plugin bundles its
       # own Windows DLLs (sherpa_onnx_windows).
       - run: flutter build windows --release
+      - name: Bundle FFmpeg
+        shell: pwsh
+        run: ./scripts/ci/stage_ffmpeg_windows.ps1 -Destination build/windows/x64/runner/Release
+      - name: Test bundled audio decoder
+        shell: pwsh
+        run: |
+          $env:POCKETASR_TEST_FFMPEG = "$PWD/build/windows/x64/runner/Release/ffmpeg/bin/ffmpeg.exe"
+          flutter test test/ffmpeg_decoder_test.dart
       - name: Package Windows release
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath pocket-asr-windows-${{ github.ref_name }}.zip
