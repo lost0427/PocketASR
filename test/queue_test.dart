@@ -163,12 +163,17 @@ void main() {
   });
 
   test('worker sends the family, quant, backend and chunk settings it was given', () async {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final repo = TranscriptRepo(db);
+
     final queue = TranscriptionQueue()..add(job('a'));
     final service = _RecordingService();
     final worker = QueueWorker(
       queue,
       service,
       const EngineModelSpec(path: 'm.onnx', family: 'sensevoice', quant: 'q4_k'),
+      transcriptRepo: repo,
       backend: Backend.cpu,
       chunkSettings: const ChunkSettings(
         mode: ChunkMode.energy,
@@ -186,6 +191,8 @@ void main() {
     expect(service.lastBackend, Backend.cpu);
     expect(service.lastChunkSettings?.mode, ChunkMode.energy);
     expect(service.lastChunkSettings?.chunkSeconds, 12);
+    // The saved row records the run's model family, not just its path.
+    expect(repo.list().single.modelFamily, 'sensevoice');
   });
 
   test('a cancelled job is never persisted and ends as cancelled', () async {

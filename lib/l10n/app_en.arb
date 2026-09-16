@@ -250,5 +250,6 @@
   },
   "vadPreviewStale": "Settings changed since this preview. Preview again.",
   "transcribeCancel": "Cancel",
+  "transcribeCancelling": "Cancelling…",
   "comingSoon": "Coming soon"
 }

@@ -44,6 +44,16 @@ class _HistoryPageState extends State<HistoryPage> {
 
   bool get _hasEmbedder => widget.search.embedder != null;
 
+  /// The literal terms to mark in results. Only a literal search has words that
+  /// really occur in the text, so semantic/hybrid mark nothing: a semantic hit
+  /// that shares no word with the query must not look like a literal one.
+  List<String> get _hitTerms {
+    if (_mode != SearchMode.literal) return const [];
+    final query = _query.text.trim();
+    if (query.isEmpty) return const [];
+    return query.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -215,6 +225,7 @@ class _HistoryPageState extends State<HistoryPage> {
       MaterialPageRoute<void>(
         builder: (_) => _TranscriptDetailPage(
           row: row,
+          highlightTerms: _hitTerms,
           onCopy: () => _copy(row),
           actionLabel:
               _trash ? l10n.historyRestore : l10n.historyMoveToTrash,
@@ -236,6 +247,9 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    // Literal hit terms to mark in each row; empty for semantic/hybrid.
+    final terms = _hitTerms;
+    final mark = _markStyle(theme.colorScheme);
 
     return Column(
       children: [
@@ -343,13 +357,13 @@ class _HistoryPageState extends State<HistoryPage> {
                     final row = _rows[index];
                     return Card(
                       child: ListTile(
-                        title: Text(
-                          row.title,
+                        title: Text.rich(
+                          TextSpan(children: _highlight(row.title, terms, mark)),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(
-                          row.text,
+                        subtitle: Text.rich(
+                          TextSpan(children: _highlight(row.text, terms, mark)),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -405,12 +419,17 @@ class _TranscriptDetailPage extends StatelessWidget {
     required this.onCopy,
     required this.actionLabel,
     required this.onAction,
+    this.highlightTerms = const [],
   });
 
   final Transcript row;
   final VoidCallback onCopy;
   final String actionLabel;
   final VoidCallback onAction;
+
+  /// Literal search terms to mark in the body; empty for a plain open, so the
+  /// full text reads normally when it was not reached through a literal search.
+  final List<String> highlightTerms;
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +445,10 @@ class _TranscriptDetailPage extends StatelessWidget {
 
     final metrics = <(String, String)>[
       (l10n.historyDetailCreated, created),
+      // Total wall clock for the run, shown with the same shape and label as
+      // the transcribe page's elapsed tile.
+      if (row.totalMs != null)
+        (l10n.metricElapsed, _elapsedLabel(row.totalMs!)),
       if (row.engine != null) (l10n.transcribeEngineSection, row.engine!),
       if (row.backend != null) (l10n.transcribeBackend, row.backend!),
       if (row.modelPath != null)
@@ -510,8 +533,14 @@ class _TranscriptDetailPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: scheme.outlineVariant),
             ),
-            child: SelectableText(
-              row.text,
+            child: SelectableText.rich(
+              TextSpan(
+                children: _highlight(
+                  row.text,
+                  highlightTerms,
+                  _markStyle(scheme),
+                ),
+              ),
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ),
@@ -520,3 +549,55 @@ class _TranscriptDetailPage extends StatelessWidget {
     );
   }
 }
+
+/// Marker for a literal search hit: a soft accent behind the real text, merged
+/// with whatever style the surrounding text already has.
+TextStyle _markStyle(ColorScheme scheme) => TextStyle(
+  backgroundColor: scheme.tertiaryContainer,
+  color: scheme.onTertiaryContainer,
+  fontWeight: FontWeight.w600,
+);
+
+/// Splits [text] into spans, marking every occurrence of a literal search
+/// [term]. Matching is a plain, case-insensitive substring scan of the original
+/// string — no regex, so query text can never become a pattern, and the
+/// original casing is kept in the output. Nothing is marked when nothing
+/// matches, so a semantic hit that shares no word with the query stays plain.
+List<TextSpan> _highlight(String text, List<String> terms, TextStyle mark) {
+  if (terms.isEmpty) return [TextSpan(text: text)];
+  final lower = text.toLowerCase();
+  final hits = <(int, int)>[];
+  for (final term in terms) {
+    final needle = term.toLowerCase();
+    if (needle.isEmpty) continue;
+    for (
+      var at = lower.indexOf(needle);
+      at >= 0;
+      at = lower.indexOf(needle, at + needle.length)
+    ) {
+      hits.add((at, at + needle.length));
+    }
+  }
+  if (hits.isEmpty) return [TextSpan(text: text)];
+  hits.sort((a, b) => a.$1.compareTo(b.$1));
+
+  final spans = <TextSpan>[];
+  var cursor = 0;
+  for (final (start, end) in hits) {
+    if (start < cursor) continue; // already covered by an earlier hit
+    if (start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, start)));
+    }
+    spans.add(TextSpan(text: text.substring(start, end), style: mark));
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    spans.add(TextSpan(text: text.substring(cursor)));
+  }
+  return spans;
+}
+
+/// Wall clock as `500ms` or `2.0s` — the same shape the transcribe page's
+/// elapsed tile uses, so one run reads the same in both places.
+String _elapsedLabel(int millis) =>
+    millis < 1000 ? '${millis}ms' : '${(millis / 1000).toStringAsFixed(1)}s';

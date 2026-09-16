@@ -72,6 +72,7 @@ class QueueWorker {
             audioPath: job.audioPath,
             audioSeconds: result.audioDuration.inMilliseconds / 1000,
             engine: result.engine,
+            modelFamily: result.model.family,
             modelPath: result.model.path,
             backend: result.backend.name,
             rtf: result.rtf,

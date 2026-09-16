@@ -202,5 +202,6 @@
   "vadPreviewSegment": "{start} – {end} 秒",
   "vadPreviewStale": "参数已更改，本次预览已过期，请重新预览。",
   "transcribeCancel": "取消",
+  "transcribeCancelling": "正在取消…",
   "comingSoon": "即将推出"
 }

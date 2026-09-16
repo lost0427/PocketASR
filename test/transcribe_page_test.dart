@@ -158,6 +158,29 @@ class _SlowService extends TranscriptionService {
   }
 }
 
+/// Returns a real [VadPreview] only once [release] completes, so a preview can
+/// be observed mid-plan and cancelled before its late plan lands.
+class _GatedPreviewService extends TranscriptionService {
+  _GatedPreviewService() : super(engine: const _FakeEngine(_availableCaps));
+
+  final release = Completer<void>();
+
+  @override
+  Future<VadPreview> previewVad({
+    required String audioPath,
+    required NeuralVadSettings neuralVad,
+    bool Function()? isCancelled,
+  }) async {
+    await release.future;
+    return const VadPreview(
+      windows: [
+        [AudioChunk(start: Duration.zero, end: Duration(seconds: 2))],
+      ],
+      sampleRate: 16000,
+    );
+  }
+}
+
 void main() {
   testWidgets('reports the engine as unavailable instead of faking a result', (
     tester,
@@ -328,6 +351,10 @@ void main() {
     state.energyThreshold = 0.02;
     state.speechPadMs = 40;
 
+    final database = AppDatabase.open();
+    addTearDown(database.close);
+    final repo = TranscriptRepo(database);
+
     final service = _ScriptedService(const [
       TranscribeProgress(elapsed: Duration(seconds: 1), ratio: 1, partialText: 'hi'),
     ]);
@@ -336,6 +363,7 @@ void main() {
       _app(
         engine: const _FakeEngine(_availableCaps),
         state: state,
+        transcriptRepo: repo,
         service: service,
       ),
     );
@@ -362,6 +390,8 @@ void main() {
     expect(service.lastChunkSettings!.overlapSeconds, 0);
     // The pick was shared into AppState so the queue page sees the same model.
     expect(state.modelPath, 'model.onnx');
+    // The saved row records the run's model family, not just its path.
+    expect(repo.list().single.modelFamily, 'sensevoice');
   });
 
   testWidgets('refuses a whisper selection that needs a missing decoder', (
@@ -502,5 +532,104 @@ void main() {
     final callsAtEnd = sampler.calls;
     await tester.pump(const Duration(seconds: 3));
     expect(sampler.calls, callsAtEnd);
+  });
+
+  testWidgets('cancelling shows the real wait and drops the late result', (
+    tester,
+  ) async {
+    final picks = <List<String>>[
+      ['meeting.wav'],
+      ['model.onnx'],
+    ];
+    var pick = 0;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return picks[pick++];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final database = AppDatabase.open();
+    addTearDown(database.close);
+    final repo = TranscriptRepo(database);
+    final service = _SlowService();
+
+    await tester.pumpWidget(
+      _app(
+        engine: const _FakeEngine(_availableCaps),
+        transcriptRepo: repo,
+        service: service,
+        metricsSamplerFactory: _FakeSampler.new,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose model file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start transcription'));
+    await tester.pump();
+
+    // Ask to stop while the "engine" is still in flight.
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+
+    // The abort is cooperative, so the page says it is still winding down
+    // instead of pretending the run already stopped.
+    expect(find.text('Cancelling…'), findsWidgets);
+    expect(repo.list(), isEmpty);
+
+    // The engine returns *after* the cancel: the late text is thrown away.
+    service.release.complete();
+    await tester.pumpAndSettle();
+
+    expect(repo.list(), isEmpty);
+    expect(find.text('hello'), findsNothing);
+    expect(find.text('Cancelling…'), findsNothing);
+  });
+
+  testWidgets('a cancelled preview never shows its late plan', (tester) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_selectorChannel, (call) async {
+      if (call.method == 'openFile') return ['meeting.wav'];
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+
+    final state = AppState();
+    addTearDown(state.dispose);
+    state.selectVad(path: 'vad.onnx');
+    state.chunkStrategy = ChunkStrategy.neural;
+    final service = _GatedPreviewService();
+
+    await tester.pumpWidget(
+      _app(
+        engine: const _FakeEngine(_availableCaps),
+        state: state,
+        service: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose audio file').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Preview'));
+    await tester.pump();
+    expect(find.text('Analysing speech…'), findsOneWidget);
+
+    // Cancel mid-plan, then let the plan land.
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    service.release.complete();
+    await tester.pumpAndSettle();
+
+    // The late plan is dropped: no windows, no summary.
+    expect(find.textContaining('window(s)'), findsNothing);
+    expect(find.textContaining('Window '), findsNothing);
+    expect(find.text('Preview'), findsOneWidget);
   });
 }

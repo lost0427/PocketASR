@@ -662,5 +662,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeCancel => 'Cancel';
 
   @override
+  String get transcribeCancelling => 'Cancelling…';
+
+  @override
   String get comingSoon => 'Coming soon';
 }

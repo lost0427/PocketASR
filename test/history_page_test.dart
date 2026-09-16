@@ -79,6 +79,22 @@ void main() {
       tester.getTopLeft(find.text('Alpha')).dy <
       tester.getTopLeft(find.text('Beta')).dy;
 
+  /// The runs a text widget marks as a literal hit (the bold accent spans)
+  /// inside the widget whose plain text is exactly [plain]. Empty when that
+  /// text is unmarked.
+  List<String> marksFor(WidgetTester tester, String plain) {
+    final widget = tester.widget<Text>(
+      find.byWidgetPredicate(
+        (w) => w is Text && w.textSpan?.toPlainText() == plain,
+      ),
+    );
+    final span = widget.textSpan! as TextSpan;
+    return [
+      for (final child in span.children!.whereType<TextSpan>())
+        if (child.style?.fontWeight == FontWeight.w600) child.text ?? '',
+    ];
+  }
+
   late AppDatabase db;
   late TranscriptRepo repo;
   late SearchRepo search;
@@ -163,6 +179,56 @@ void main() {
     expect(find.text('2.5 s'), findsOneWidget);
   });
 
+  testWidgets('detail shows the recorded total wall clock', (tester) async {
+    repo.insert(title: 'Meeting', text: 'body', totalMs: 2500);
+    await pumpHistory(tester);
+
+    await tester.tap(find.text('Meeting'));
+    await tester.pumpAndSettle();
+
+    // Same label and shape as the transcribe page's elapsed metric.
+    expect(find.text('Elapsed'), findsOneWidget);
+    expect(find.text('2.5s'), findsOneWidget);
+  });
+
+  testWidgets('a literal search marks only the words that really match', (
+    tester,
+  ) async {
+    repo.insert(title: 'Meeting', text: 'hello world');
+    await pumpHistory(tester);
+
+    // Upper-case query, lower-case text: matching is case-insensitive and the
+    // original casing is kept.
+    await tester.enterText(find.byType(TextField), 'WORLD');
+    await tester.pumpAndSettle();
+
+    expect(marksFor(tester, 'hello world'), ['world']);
+    // The body still reads as one string; only its styling is split.
+    expect(find.text('hello world'), findsOneWidget);
+  });
+
+  testWidgets('semantic results are never dressed up as literal hits', (
+    tester,
+  ) async {
+    final embedder = _QueryEmbedder();
+    final indexer = SemanticIndexer(db, embedder: embedder);
+    addTearDown(indexer.dispose);
+    final semanticSearch = SearchRepo(db, embedder: embedder);
+
+    repo.insert(title: 'WiFi', text: 'connect to the wifi network');
+    await tester.runAsync(() => indexer.indexPending());
+    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
+
+    await tester.enterText(find.byType(TextField), 'wifi network');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Semantic'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('WiFi'), findsOneWidget);
+    // The query words are present, but this was not a literal search.
+    expect(marksFor(tester, 'connect to the wifi network'), isEmpty);
+  });
+
   testWidgets('copy puts the transcript on the clipboard', (tester) async {
     final copied = <String>[];
     final messenger =
@@ -187,6 +253,37 @@ void main() {
 
     expect(copied, ['copy me']);
     expect(find.text('Copied to clipboard'), findsOneWidget);
+  });
+
+  testWidgets('a marked search result still copies the plain original text', (
+    tester,
+  ) async {
+    final copied = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    repo.insert(title: 'Meeting', text: 'hello world');
+    await pumpHistory(tester);
+    await tester.enterText(find.byType(TextField), 'world');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Meeting'));
+    await tester.pumpAndSettle();
+
+    // The full text is intact behind the marks, and that is what gets copied.
+    expect(find.text('hello world'), findsOneWidget);
+    await tester.tap(find.byTooltip('Copy'));
+    await tester.pumpAndSettle();
+    expect(copied, ['hello world']);
   });
 
   testWidgets('trash scope lists only trashed rows, purge asks first', (

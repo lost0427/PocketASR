@@ -640,5 +640,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeCancel => '取消';
 
   @override
+  String get transcribeCancelling => '正在取消…';
+
+  @override
   String get comingSoon => '即将推出';
 }

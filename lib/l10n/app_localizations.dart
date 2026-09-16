@@ -1310,6 +1310,12 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get transcribeCancel;
 
+  /// No description provided for @transcribeCancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling…'**
+  String get transcribeCancelling;
+
   /// No description provided for @comingSoon.
   ///
   /// In en, this message translates to:

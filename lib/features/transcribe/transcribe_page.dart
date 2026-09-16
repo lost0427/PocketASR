@@ -246,6 +246,9 @@ class _TranscribePageState extends State<TranscribePage> {
         onProgress: _onProgress,
         isCancelled: () => _cancelRequested,
       );
+      // A cancel that landed after the engine returned is still a cancel: the
+      // late text is dropped, never persisted and never shown as a success.
+      if (_cancelRequested) return;
       // Saving the successful result is unchanged; only the live view grew.
       widget.transcriptRepo?.insert(
         title: _fileName ?? _filePath!,
@@ -253,6 +256,7 @@ class _TranscribePageState extends State<TranscribePage> {
         audioPath: _filePath,
         audioSeconds: result.audioDuration.inMilliseconds / 1000,
         engine: result.engine,
+        modelFamily: result.model.family,
         modelPath: result.model.path,
         backend: result.backend.name,
         rtf: result.rtf,
@@ -275,7 +279,11 @@ class _TranscribePageState extends State<TranscribePage> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      // A user cancel is a state, not a failure; it must not turn into a red
+      // error once the cooperative abort finally lands.
+      if (mounted && !_cancelRequested) {
+        setState(() => _error = error.toString());
+      }
     } finally {
       _metricsTimer?.cancel();
       _metricsTimer = null;
@@ -318,13 +326,17 @@ class _TranscribePageState extends State<TranscribePage> {
         neuralVad: neuralVad,
         isCancelled: () => _previewCancelRequested,
       );
-      if (!mounted) return;
+      // A cancel that landed while planning drops the late plan, and a
+      // disposed page has nowhere to show it.
+      if (!mounted || _previewCancelRequested) return;
       setState(() {
         _vadPreview = preview;
         _vadPreviewSignature = state?.neuralVadSignature;
       });
     } catch (error) {
-      if (mounted) setState(() => _vadPreviewError = error.toString());
+      if (mounted && !_previewCancelRequested) {
+        setState(() => _vadPreviewError = error.toString());
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -602,7 +614,11 @@ class _TranscribePageState extends State<TranscribePage> {
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 52),
                           ),
-                          child: Text(l10n.transcribeCancel),
+                          child: Text(
+                            _cancelRequested
+                                ? l10n.transcribeCancelling
+                                : l10n.transcribeCancel,
+                          ),
                         ),
                       ],
                     ],
@@ -611,9 +627,13 @@ class _TranscribePageState extends State<TranscribePage> {
                   _SectionLabel(l10n.transcribeMetrics),
                   const SizedBox(height: 12),
                   _ProgressPanel(
-                    label: running
-                        ? l10n.transcribeProgress
-                        : l10n.transcribeProgressIdle,
+                    // A cooperative cancel is not instant: say so while the
+                    // abort is still landing, instead of faking a stopped run.
+                    label: !running
+                        ? l10n.transcribeProgressIdle
+                        : _cancelRequested
+                        ? l10n.transcribeCancelling
+                        : l10n.transcribeProgress,
                     value: _progress ?? 0,
                   ),
                   const SizedBox(height: 12),
