@@ -777,12 +777,13 @@ void main() {
           isA<EngineCancelledException>().having(
             (e) => e.message,
             'message',
-            contains('chunk 1 of'),
+            contains('before loading'),
           ),
         ),
       );
 
       // Planning happened, transcription did not, temp input is gone.
+      expect(asr.loadCount, 0);
       expect(vad.requests, hasLength(1));
       expect(File(vad.requests.single.audioPath).existsSync(), isFalse);
       expect(asr.requests, isEmpty);

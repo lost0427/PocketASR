@@ -133,7 +133,7 @@ class TranscriptionService {
     }
     neuralVad?.validate(); // fail before any IO, like planner validation
     final sourceAudio = await _source.read(audioPath);
-    final processed = _preprocessor.process(sourceAudio);
+    final processed = await _preprocessor.processAsync(sourceAudio);
     final audio = processed.audio;
     List<List<AudioChunk>> windows = const [];
     if (neuralVad == null) {
@@ -170,6 +170,9 @@ class TranscriptionService {
             'the engine.',
           );
         }
+      }
+      if (isCancelled?.call() ?? false) {
+        throw const EngineCancelledException('Cancelled before loading the ASR model.');
       }
       await engine.load(model, backend);
       final totalUs = windows.fold<int>(
@@ -346,7 +349,7 @@ class TranscriptionService {
   }) async {
     neuralVad.validate();
     final sourceAudio = await _source.read(audioPath);
-    final processed = _preprocessor.process(sourceAudio);
+    final processed = await _preprocessor.processAsync(sourceAudio);
     final audio = processed.audio;
     final dir = await Directory.systemTemp.createTemp('pocket_asr_vad_');
     try {

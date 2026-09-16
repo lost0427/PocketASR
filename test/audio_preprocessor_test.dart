@@ -6,6 +6,20 @@ import 'package:pocket_asr/core/audio/audio_buffer.dart';
 import 'package:pocket_asr/core/audio/audio_preprocessor.dart';
 
 void main() {
+  test('worker normalization matches synchronous processing without mutating input', () async {
+    final audio = AudioBuffer(
+      samples: Float32List.fromList(List.generate(8000,
+        (i) => 0.05 * math.sin(2 * math.pi * 400 * i / 16000))),
+      sampleRate: 16000,
+    );
+    final original = Float32List.fromList(audio.samples);
+    const processor = AudioPreprocessor();
+    final expected = processor.process(audio);
+    final actual = await processor.processAsync(audio);
+    expect(actual.audio.samples, orderedEquals(expected.audio.samples));
+    expect(actual.gainDb, expected.gainDb);
+    expect(audio.samples, orderedEquals(original));
+  });
   test('normalizes a quiet signal and reports applied gain', () {
     final samples = Float32List.fromList(List.generate(
       16000,

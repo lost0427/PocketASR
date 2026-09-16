@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:isolate';
 
 import 'audio_buffer.dart';
 import 'loudness.dart';
@@ -22,6 +23,13 @@ class AudioPreprocessor {
 
   final bool enabled;
   final double targetLufs;
+
+  /// Only plain PCM and options cross this boundary, never an engine handle
+  /// or MethodChannel. Disabled processing avoids spawning a worker.
+  Future<ProcessedAudio> processAsync(AudioBuffer input) {
+    if (!enabled) return Future.value(process(input));
+    return _processInWorker(input, targetLufs);
+  }
 
   ProcessedAudio process(AudioBuffer input) {
     if (!enabled) {
@@ -50,3 +58,6 @@ class AudioPreprocessor {
     );
   }
 }
+
+Future<ProcessedAudio> _processInWorker(AudioBuffer input, double target) =>
+    Isolate.run(() => AudioPreprocessor(targetLufs: target).process(input));
