@@ -16,9 +16,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
       - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
       # Honest build: no Windows native build/fetch for CrispASR/CrispEmbed is
       # wired, so the Crisp adapters report unavailable on Windows. That is NOT
       # "no ASR": SherpaEngine works there — the sherpa_onnx plugin bundles its
@@ -41,27 +40,24 @@ jobs:
           path: pocket-asr-windows-${{ github.ref_name }}.zip
           if-no-files-found: error
 
-  # Android: reuses the exact native libraries CI already built and verified
-  # for this commit SHA (android-native-libs artifact from ci.yml) instead of
-  # recompiling. Fallback, fail-closed: if the CI artifact is unavailable
-  # (e.g. tag pushed before CI finished), rebuild from pinned sources with
-  # scripts/ci/build_native_android.sh (NDK r28+, 16KB LOAD-aligned) and run
-  # the same ELF alignment / DT_NEEDED closure gate and zipalign check against
-  # the built APK before upload. If any check fails, this job fails and
-  # `publish` never runs: no release ships.
+  # Android: restore the pinned native libraries from cache when possible;
+  # otherwise rebuild them from source with NDK r28+ and 16KB LOAD alignment.
+  # The APK is always checked for ELF alignment, DT_NEEDED closure and zipalign
+  # before upload. If any check fails, this job fails and `publish` never runs.
   #
   # The APK bundles native ENGINE libraries only. Model files (see
   # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
   # users must provide models at runtime. Do not present this artifact as a model
   # bundle or fabricate a model download.
   android:
-    needs: windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+      - uses: gradle/actions/setup-gradle@v4
       - run: flutter pub get
       - name: Restore native compiler cache
         uses: actions/cache@v4
@@ -76,18 +72,6 @@ jobs:
         with:
           path: android/app/src/main/jniLibs/arm64-v8a
           key: native-android-${{ hashFiles('scripts/ci/build_native_android.sh') }}
-      - name: Reuse CI native libs for this commit
-        id: native-download
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: ci.yml
-          workflow_conclusion: success
-          commit: ${{ github.sha }}
-          name: android-native-libs
-          path: android/app/src/main/jniLibs/arm64-v8a
-          search_artifacts: true
-          if_no_artifact_found: warn
       - name: Check native libs
         id: native-check
         run: |

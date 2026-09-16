@@ -101,7 +101,7 @@ and hardware AAC/MP3 via the Android Media NDK are unaffected).
   `jniLibs` inputs): `libc++_shared.so` / `libomp.so` are copied from the NDK
   sysroot only if a built library's `DT_NEEDED` actually requests one.
 
-### Gates (both ci.yml and release.yml, before any artifact upload)
+### Release gates (before any artifact upload)
 
 1. `scripts/ci/verify_apk_native.py <apk>` — every `lib/arm64-v8a/*.so`:
    `PT_LOAD` `p_align >= 16384` and `p_offset ≡ p_vaddr (mod 16384)`; full
@@ -115,9 +115,9 @@ and hardware AAC/MP3 via the Android Media NDK are unaffected).
    can `mmap` it in place).
 
 Any failure fails the job — `release.yml`'s `publish` job needs `android`, so a
-failing gate means **no release is published**. The workflow caches
-`jniLibs/arm64-v8a` keyed on the build script's own hash, shared between CI
-and release runs, so the large C++ builds happen once per pin change.
+failing gate means **no release is published**. The release workflow caches
+`jniLibs/arm64-v8a` keyed on the build script's own hash. A cache hit reuses
+those outputs; a miss rebuilds every native library from pinned source.
 
 Historical prebuilt assets (audit record — **not** used by any current
 workflow): `crispasr-android-arm64-v8a.tar.gz` (v0.8.32) sha256
