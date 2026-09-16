@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
+import '../../engine/metrics.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_preprocessor.dart';
+import '../../core/text/token_counter.dart';
 import 'transcription_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -44,16 +46,47 @@ class _TranscribePageState extends State<TranscribePage> {
   String? _filePath;
   String? _modelPath;
 
-  // Phase 4 replaces these with live run state (progress stream + result text).
+  /// Rolling tokens/s across engine-reported true token counts. Its `tokens`
+  /// also carries the latest cumulative token count for the run.
+  final TokenRateTracker _tokenRates = TokenRateTracker();
+
+  // Live run state, all rewritten from real engine progress.
   String _result = '';
+  String _partialText = '';
   double? _progress;
   bool _running = false;
   String? _error;
+
+  double? _tokensPerSec;
+  double? _charsPerSec;
+  Duration? _elapsed;
+  double? _rtf;
+  Backend? _runBackend;
 
   @override
   void initState() {
     super.initState();
     _capabilities = widget.engine.capabilities();
+  }
+
+  /// Mirrors one engine progress update into the live metrics. A negative or
+  /// missing token count is ignored by [TokenRateTracker], so nothing is
+  /// invented; unknown figures stay null and render as `—`.
+  void _onProgress(TranscribeProgress progress) {
+    if (!mounted) return;
+    if (progress.tokens != null) {
+      _tokenRates.add(progress.tokens!, progress.elapsed);
+    }
+    final partial = progress.partialText.trim();
+    setState(() {
+      if (progress.ratio >= 0) _progress = progress.ratio;
+      _elapsed = progress.elapsed;
+      _tokensPerSec = _tokenRates.tokensPerSecond;
+      if (partial.isNotEmpty) {
+        _partialText = partial;
+        _charsPerSec = graphemesPerSecond(partial, progress.elapsed);
+      }
+    });
   }
 
   void _notify(String message) {
@@ -81,7 +114,19 @@ class _TranscribePageState extends State<TranscribePage> {
       _notify(AppLocalizations.of(context).transcribeStartUnavailable);
       return;
     }
-    setState(() { _running = true; _error = null; _progress = 0; });
+    _tokenRates.reset();
+    setState(() {
+      _running = true;
+      _error = null;
+      _progress = 0;
+      _result = '';
+      _partialText = '';
+      _tokensPerSec = null;
+      _charsPerSec = null;
+      _elapsed = null;
+      _rtf = null;
+      _runBackend = null;
+    });
     try {
       final result = await (widget.service ?? TranscriptionService(
         engine: widget.engine,
@@ -92,7 +137,9 @@ class _TranscribePageState extends State<TranscribePage> {
       )).transcribe(
         audioPath: _filePath!,
         model: EngineModelSpec(path: _modelPath!),
+        onProgress: _onProgress,
       );
+      // Saving the successful result is unchanged; only the live view grew.
       widget.transcriptRepo?.insert(
         title: _fileName ?? _filePath!,
         text: result.text,
@@ -106,7 +153,20 @@ class _TranscribePageState extends State<TranscribePage> {
         totalMs: result.elapsed.inMilliseconds,
         avgTokensPerSec: result.avgTokensPerSec,
       );
-      if (mounted) setState(() { _result = result.text; _progress = 1; });
+      if (mounted) {
+        setState(() {
+          _result = result.text;
+          _partialText = '';
+          _progress = 1;
+          _elapsed = result.elapsed;
+          _rtf = result.rtf;
+          _runBackend = result.backend;
+          _tokensPerSec = result.avgTokensPerSec ?? _tokensPerSec;
+          _charsPerSec = result.text.isEmpty
+              ? null
+              : graphemesPerSecond(result.text, result.elapsed);
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -134,6 +194,9 @@ class _TranscribePageState extends State<TranscribePage> {
   }
 
   String _backendLabel(EngineCapabilities? capabilities, AppLocalizations l10n) {
+    // Once a run finished, the tile shows the backend that actually ran.
+    final ran = _runBackend;
+    if (ran != null) return ran.name.toUpperCase();
     final backends = capabilities?.backends ?? const <Backend>{};
     if (backends.isEmpty) return l10n.metricUnavailable;
     return backends.map((b) => b.name.toUpperCase()).join(', ');
@@ -153,6 +216,9 @@ class _TranscribePageState extends State<TranscribePage> {
         final running = _running;
         final canStart = engineAvailable && _fileName != null && !running;
         final hasResult = _result.isNotEmpty;
+        // While running the panel echoes the engine's own partial text; it is
+        // replaced by the finished transcript, never fabricated.
+        final transcript = _result.isNotEmpty ? _result : _partialText;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -191,12 +257,21 @@ class _TranscribePageState extends State<TranscribePage> {
                   Row(
                     children: [
                       Expanded(
+                        flex: 2,
                         child: _StatusTile(
                           icon: Icons.layers_outlined,
                           label: l10n.transcribeModel,
                           value: _modelPath == null
                               ? l10n.transcribeModelNone
                               : _modelPath!.split(RegExp(r'[\\/]')).last,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _StatusTile(
+                          icon: Icons.memory_outlined,
+                          label: l10n.transcribeEngineSection,
+                          value: widget.engine.id,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -240,7 +315,12 @@ class _TranscribePageState extends State<TranscribePage> {
                     value: _progress ?? 0,
                   ),
                   const SizedBox(height: 12),
-                  const _MetricsGrid(),
+                  _MetricsGrid(
+                    tokensPerSec: _tokensPerSec,
+                    charsPerSec: _charsPerSec,
+                    rtf: _rtf,
+                    elapsed: _elapsed,
+                  ),
                   const SizedBox(height: 28),
                   Row(
                     children: [
@@ -255,9 +335,9 @@ class _TranscribePageState extends State<TranscribePage> {
                   ),
                   const SizedBox(height: 4),
                   _Panel(
-                    child: hasResult
+                    child: transcript.isNotEmpty
                         ? SelectableText(
-                            _result,
+                            transcript,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               height: 1.5,
                             ),
@@ -453,10 +533,14 @@ class _StatusTile extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -521,21 +605,46 @@ class _ProgressPanel extends StatelessWidget {
   }
 }
 
-/// Six metric tiles. Values stay `—` until Phase 6 feeds real samples in; the
-/// page never invents numbers.
+/// Formats a real rate with one decimal, or null when it was never measured.
+String? _rate(double? value) => value?.toStringAsFixed(1);
+
+/// Wall clock as `500ms` or `2.0s`, or null when no progress was seen.
+String? _elapsed(Duration? value) {
+  if (value == null) return null;
+  final millis = value.inMilliseconds;
+  return millis < 1000 ? '${millis}ms' : '${(millis / 1000).toStringAsFixed(1)}s';
+}
+
+/// Six metric tiles fed by the live run. CPU and memory have no engine source
+/// yet, and every unknown value stays `—` — the page never invents numbers.
 class _MetricsGrid extends StatelessWidget {
-  const _MetricsGrid();
+  const _MetricsGrid({
+    required this.tokensPerSec,
+    required this.charsPerSec,
+    required this.rtf,
+    required this.elapsed,
+  });
+
+  final double? tokensPerSec;
+  final double? charsPerSec;
+  final double? rtf;
+  final Duration? elapsed;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final metrics = <(String, IconData)>[
-      (l10n.metricTokensPerSec, Icons.speed),
-      (l10n.metricCharsPerSec, Icons.abc),
-      (l10n.metricRtf, Icons.timer_outlined),
-      (l10n.metricElapsed, Icons.schedule),
-      (l10n.metricCpu, Icons.memory),
-      (l10n.metricMemory, Icons.storage),
+    final unknown = l10n.metricUnavailable;
+    final metrics = <(String, IconData, String)>[
+      (l10n.metricTokensPerSec, Icons.speed, _rate(tokensPerSec) ?? unknown),
+      (l10n.metricCharsPerSec, Icons.abc, _rate(charsPerSec) ?? unknown),
+      (
+        l10n.metricRtf,
+        Icons.timer_outlined,
+        rtf?.toStringAsFixed(2) ?? unknown,
+      ),
+      (l10n.metricElapsed, Icons.schedule, _elapsed(elapsed) ?? unknown),
+      (l10n.metricCpu, Icons.memory, unknown),
+      (l10n.metricMemory, Icons.storage, unknown),
     ];
 
     return GridView.count(
@@ -546,8 +655,8 @@ class _MetricsGrid extends StatelessWidget {
       mainAxisSpacing: 12,
       childAspectRatio: 1.9,
       children: [
-        for (final (label, icon) in metrics)
-          _MetricTile(label: label, icon: icon, value: l10n.metricUnavailable),
+        for (final (label, icon, value) in metrics)
+          _MetricTile(label: label, icon: icon, value: value),
       ],
     );
   }

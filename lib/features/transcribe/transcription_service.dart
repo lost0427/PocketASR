@@ -49,11 +49,18 @@ class TranscriptionService {
   final AudioSource _source;
   final AudioPreprocessor _preprocessor;
 
+  /// Runs one file through [engine].
+  ///
+  /// [onProgress] is invoked for every [TranscribeProgress] the engine emits
+  /// (progress ratio, partial text, cumulative true token count and elapsed),
+  /// so a caller can show live metrics without re-implementing the stream
+  /// consumption. It is optional and never changes the returned result.
   Future<TranscriptionJobResult> transcribe({
     required String audioPath,
     required EngineModelSpec model,
     Backend backend = Backend.cpu,
     String? language,
+    void Function(TranscribeProgress progress)? onProgress,
   }) async {
     final sourceAudio = await _source.read(audioPath);
     final processed = _preprocessor.process(sourceAudio);
@@ -65,6 +72,7 @@ class TranscriptionService {
         TranscribeRequest(audioPath: temp.path, backend: backend, language: language),
       )) {
         last = progress;
+        onProgress?.call(progress);
       }
       final result = last;
       if (result == null || result.partialText.trim().isEmpty) {
