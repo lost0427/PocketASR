@@ -92,6 +92,12 @@ TOOLCHAIN="$NDK/build/cmake/android.toolchain.cmake"
 BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 READELF="$BIN/llvm-readelf"
+# OpenMP is a clang resource-dir artifact, NOT a sysroot library:
+#   <resource-dir>/lib/linux/aarch64/libomp.so
+# (libc++_shared.so, by contrast, really does live in the sysroot.) The
+# resource dir is version/host-dependent (`lib` vs `lib64`, clang 12 vs 21),
+# so ask the compiler instead of guessing the path.
+CLANG_RESOURCE_DIR="$("$BIN/clang++" -print-resource-dir)"
 common_cmake=(
   -G Ninja
   -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN"
@@ -162,11 +168,13 @@ for lib in "$OUT"/*.so; do
   "$READELF" --dynamic "$lib" | grep -oE '\(NEEDED\) +Shared library: \[[^]]+\]' || true
 done > "$WORK/needed.txt"
 for dep in libc++_shared.so libomp.so; do
-  if grep -q "\[$dep\]" "$WORK/needed.txt"; then
-    src="$SYSROOT/usr/lib/aarch64-linux-android/$dep"
-    log "staging NDK runtime dependency $dep"
-    cp -Lf "$src" "$OUT/$dep"
-  fi
+  grep -q "\[$dep\]" "$WORK/needed.txt" || continue
+  case "$dep" in
+    libc++_shared.so) src="$SYSROOT/usr/lib/aarch64-linux-android/$dep" ;;
+    libomp.so)        src="$CLANG_RESOURCE_DIR/lib/linux/aarch64/$dep" ;;
+  esac
+  log "staging NDK runtime dependency $dep"
+  cp -Lf "$src" "$OUT/$dep"
 done
 
 log "staged:"
