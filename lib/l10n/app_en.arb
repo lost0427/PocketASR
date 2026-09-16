@@ -42,6 +42,23 @@
   "historyBody": "Every transcript is stored locally, so you can search it, copy it again, or restore it from the trash.",
   "modelsTitle": "Models",
   "modelsBody": "Manage the speech models kept on the device, with size and quantization shown before you download.",
+  "modelsDownload": "Download",
+  "modelsDownloading": "Downloading",
+  "modelsCancel": "Cancel",
+  "modelsNotDownloadable": "Not available for download",
+  "modelsDownloaded": "Downloaded",
+  "modelsNotDownloaded": "Not downloaded",
+  "modelsDelete": "Delete",
+  "modelsDeleteConfirmTitle": "Delete downloaded model?",
+  "modelsDeleteConfirmBody": "{name} will be removed from this device. You can download it again later.",
+  "@modelsDeleteConfirmBody": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "modelsDownloadFailed": "Download failed",
+  "modelsTotalUsage": "On this device",
+  "modelsNoModels": "No models available",
   "settingsTitle": "Settings",
   "settingsAppearance": "Appearance",
   "settingsLanguage": "Language",

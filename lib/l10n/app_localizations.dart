@@ -350,6 +350,78 @@ abstract class AppLocalizations {
   /// **'Manage the speech models kept on the device, with size and quantization shown before you download.'**
   String get modelsBody;
 
+  /// No description provided for @modelsDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get modelsDownload;
+
+  /// No description provided for @modelsDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get modelsDownloading;
+
+  /// No description provided for @modelsCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get modelsCancel;
+
+  /// No description provided for @modelsNotDownloadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available for download'**
+  String get modelsNotDownloadable;
+
+  /// No description provided for @modelsDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get modelsDownloaded;
+
+  /// No description provided for @modelsNotDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded'**
+  String get modelsNotDownloaded;
+
+  /// No description provided for @modelsDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get modelsDelete;
+
+  /// No description provided for @modelsDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete downloaded model?'**
+  String get modelsDeleteConfirmTitle;
+
+  /// No description provided for @modelsDeleteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will be removed from this device. You can download it again later.'**
+  String modelsDeleteConfirmBody(String name);
+
+  /// No description provided for @modelsDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get modelsDownloadFailed;
+
+  /// No description provided for @modelsTotalUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device'**
+  String get modelsTotalUsage;
+
+  /// No description provided for @modelsNoModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No models available'**
+  String get modelsNoModels;
+
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:

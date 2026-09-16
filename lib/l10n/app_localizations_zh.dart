@@ -137,6 +137,44 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelsBody => '管理设备上的语音模型，下载前先看清体积与量化档。';
 
   @override
+  String get modelsDownload => '下载';
+
+  @override
+  String get modelsDownloading => '下载中';
+
+  @override
+  String get modelsCancel => '取消';
+
+  @override
+  String get modelsNotDownloadable => '不可下载';
+
+  @override
+  String get modelsDownloaded => '已下载';
+
+  @override
+  String get modelsNotDownloaded => '未下载';
+
+  @override
+  String get modelsDelete => '删除';
+
+  @override
+  String get modelsDeleteConfirmTitle => '删除已下载的模型？';
+
+  @override
+  String modelsDeleteConfirmBody(String name) {
+    return '$name 将从本机删除，之后可以重新下载。';
+  }
+
+  @override
+  String get modelsDownloadFailed => '下载失败';
+
+  @override
+  String get modelsTotalUsage => '本机占用';
+
+  @override
+  String get modelsNoModels => '没有可用模型';
+
+  @override
   String get settingsTitle => '设置';
 
   @override

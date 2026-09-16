@@ -142,6 +142,44 @@ class AppLocalizationsEn extends AppLocalizations {
       'Manage the speech models kept on the device, with size and quantization shown before you download.';
 
   @override
+  String get modelsDownload => 'Download';
+
+  @override
+  String get modelsDownloading => 'Downloading';
+
+  @override
+  String get modelsCancel => 'Cancel';
+
+  @override
+  String get modelsNotDownloadable => 'Not available for download';
+
+  @override
+  String get modelsDownloaded => 'Downloaded';
+
+  @override
+  String get modelsNotDownloaded => 'Not downloaded';
+
+  @override
+  String get modelsDelete => 'Delete';
+
+  @override
+  String get modelsDeleteConfirmTitle => 'Delete downloaded model?';
+
+  @override
+  String modelsDeleteConfirmBody(String name) {
+    return '$name will be removed from this device. You can download it again later.';
+  }
+
+  @override
+  String get modelsDownloadFailed => 'Download failed';
+
+  @override
+  String get modelsTotalUsage => 'On this device';
+
+  @override
+  String get modelsNoModels => 'No models available';
+
+  @override
   String get settingsTitle => 'Settings';
 
   @override

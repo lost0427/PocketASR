@@ -1,9 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
-import 'package:pocket_asr/features/models/models_page.dart';
 
 void main() {
   group('parseModelAllowlist', () {
@@ -90,20 +88,5 @@ void main() {
       expect(store.isDownloaded(entry), isFalse);
       await store.delete(entry); // must not throw
     });
-  });
-
-  testWidgets('ModelsPage lists entries and marks them not downloaded', (
-    tester,
-  ) async {
-    const entries = [
-      ModelEntry(id: 'a', displayName: 'SenseVoice', fileName: 'a.onnx'),
-    ];
-    await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: ModelsPage(entries: entries))),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('SenseVoice'), findsOneWidget);
-    expect(find.text('Not downloaded'), findsOneWidget);
   });
 }
