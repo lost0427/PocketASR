@@ -157,8 +157,13 @@ class SettingsPage extends StatelessWidget {
   }
 
   void _openBench(BuildContext context) {
+    // The benchmark runs the same engine the rest of the app would; it builds
+    // its own service so a benchmark never writes a transcript.
+    final state = AppStateScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const BenchPage()),
+      MaterialPageRoute<void>(
+        builder: (_) => BenchPage(engine: state.engine),
+      ),
     );
   }
 }

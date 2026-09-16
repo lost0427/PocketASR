@@ -1,64 +1,227 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
 
 import '../../engine/asr_engine.dart';
+import '../../engine/model_catalog.dart';
+import '../../features/transcribe/transcription_service.dart';
 import '../../l10n/app_localizations.dart';
+import 'benchmark_runner.dart';
 import 'seven_tap.dart';
-
-/// Fixed sample every matrix cell must run on, or the numbers are not
-/// comparable. Missing in this build — the page says so instead of guessing.
-const String benchSampleAsset = 'assets/test/sample_16k.wav';
-
-/// Families in the first-release CPU matrix (plan Phase 10 / D17).
-const List<String> benchFamilies = <String>[
-  'sensevoice',
-  'whisper',
-  'qwen3',
-  'funasr',
-];
-
-/// Quantization tags the first release compares.
-const List<String> benchQuants = <String>['q8_0', 'q4_k'];
 
 /// Hidden benchmark page (requirement 15), reached by tapping the version row
 /// seven times in Settings and left the same way on this page's title.
 ///
-/// The first release only compares the CPU matrix. This build bundles no native
-/// engine and no fixed sample, so the page shows the full matrix plus an honest
-/// empty state — it never prints a figure that no run produced. A real runner
-/// fills the same cells using `engine/metrics.dart` (`TranscriptionMetrics`) and
-/// `core/text/token_counter.dart` (`graphemesPerSecond`) so the numbers match
-/// the transcribe page.
+/// Runs the *real* [BenchmarkRunner] over every speech bundle actually present
+/// on disk, on one audio file the user picks, and reports the median of three
+/// runs per bundle. This build bundles no fixed sample — there is no licensed
+/// audio to ship — so the user supplies the input; every row in one matrix uses
+/// that same file, which is what keeps the numbers comparable. A row whose runs
+/// all fail shows the failure, never a fabricated figure.
 class BenchPage extends StatefulWidget {
-  const BenchPage({super.key, this.engine = const UnavailableAsrEngine()});
+  const BenchPage({
+    super.key,
+    this.engine = const UnavailableAsrEngine(),
+    this.service,
+    this.entries,
+    this.store,
+    this.pickAudio,
+    this.exportFile,
+  });
 
-  /// Engine the matrix would load; defaults to the "no native library" stand-in.
+  /// Engine the matrix loads; production passes `AppState.engine`.
   final AsrEngine engine;
+
+  /// Service seam; production builds one from [engine] (no history writes).
+  final TranscriptionService? service;
+
+  /// Catalog seam; production reads the allowlist asset.
+  final List<ModelEntry>? entries;
+
+  /// Local file facts seam; production resolves the app-private models dir.
+  final ModelStore? store;
+
+  /// Picks the fixed input audio; production uses the file selector.
+  final Future<String?> Function()? pickAudio;
+
+  /// Writes an export; production asks the user where to save it.
+  final Future<void> Function(String suggestedName, String contents)? exportFile;
 
   @override
   State<BenchPage> createState() => _BenchPageState();
 }
 
 class _BenchPageState extends State<BenchPage> {
-  late final Future<_BenchProbe> _probe = _runProbe();
+  static const int _repeats = 3;
 
-  Future<_BenchProbe> _runProbe() async {
-    final capabilities = await widget.engine.capabilities();
-    return _BenchProbe(
-      engineAvailable: capabilities.available,
-      sampleAvailable: await _assetExists(benchSampleAsset),
+  late final Future<_BenchSetup> _setup = _loadSetup();
+
+  String? _audioPath;
+  String? _audioName;
+
+  final Map<String, _Cell> _cells = {};
+  bool _running = false;
+  bool _cancelRequested = false;
+  List<BenchmarkResult> _results = const [];
+
+  Future<_BenchSetup> _loadSetup() async {
+    var engineAvailable = false;
+    String? engineReason;
+    try {
+      final caps = await widget.engine.capabilities();
+      engineAvailable = caps.available;
+      engineReason = caps.unavailableReason;
+    } catch (error) {
+      engineReason = error.toString();
+    }
+
+    var downloaded = const <ModelEntry>[];
+    ModelStore? store;
+    try {
+      final entries = widget.entries ?? await loadModelAllowlist();
+      store = widget.store ?? await _resolveStore();
+      if (store != null) {
+        downloaded = [
+          for (final entry in entries)
+            if (entry.type != 'embedding' && store.isDownloaded(entry)) entry,
+        ];
+      }
+    } catch (_) {
+      // No catalog or no directory: the page says "nothing to run" rather than
+      // inventing rows.
+    }
+
+    return _BenchSetup(
+      engineAvailable: engineAvailable,
+      engineReason: engineReason,
+      downloaded: downloaded,
+      store: store,
     );
   }
 
-  /// True only when the asset is really bundled; an unreadable asset is a
-  /// missing one, and a missing sample means no comparable run.
-  Future<bool> _assetExists(String asset) async {
+  Future<ModelStore?> _resolveStore() async {
     try {
-      await rootBundle.load(asset);
-      return true;
+      final base = await getApplicationSupportDirectory();
+      return LocalModelStore(
+        Directory('${base.path}${Platform.pathSeparator}models'),
+      );
     } catch (_) {
-      return false;
+      return null;
     }
+  }
+
+  Future<void> _pickAudio() async {
+    if (_running) return;
+    final picker = widget.pickAudio ?? _defaultPickAudio;
+    final path = await picker();
+    if (!mounted || path == null) return;
+    setState(() {
+      _audioPath = path;
+      _audioName = path.split(RegExp(r'[\\/]')).last;
+    });
+  }
+
+  Future<String?> _defaultPickAudio() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: 'Audio',
+          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
+        ),
+      ],
+    );
+    return file?.path;
+  }
+
+  Future<void> _run(List<ModelEntry> downloaded, ModelStore store) async {
+    final audioPath = _audioPath;
+    if (_running || audioPath == null) return;
+    final service =
+        widget.service ?? TranscriptionService(engine: widget.engine);
+    final runner = BenchmarkRunner(widget.engine, service);
+
+    setState(() {
+      _running = true;
+      _cancelRequested = false;
+      _results = const [];
+      _cells.clear();
+    });
+
+    final collected = <BenchmarkResult>[];
+    try {
+      for (final entry in downloaded) {
+        if (_cancelRequested) break;
+        setState(
+          () => _cells[entry.id] = const _Cell(_CellStatus.running),
+        );
+        final result = await runner.run(
+          BenchmarkCase(
+            id: entry.id,
+            family: entry.family ?? '',
+            quant: entry.quant ?? '',
+            modelPath: store.pathFor(entry),
+          ),
+          audioPath,
+          repeats: _repeats,
+          isCancelled: () => _cancelRequested,
+        );
+        collected.add(result);
+        if (!mounted) return;
+        setState(
+          () => _cells[entry.id] = _Cell(
+            result.isFailure ? _CellStatus.failed : _CellStatus.done,
+            result: result,
+          ),
+        );
+      }
+    } on EngineCancelledException {
+      // A cancel is not a failure cell: the in-flight row is marked cancelled.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _running = false;
+          _results = collected;
+          for (final entry in _cells.keys.toList()) {
+            if (_cells[entry]!.status == _CellStatus.running) {
+              _cells[entry] = const _Cell(_CellStatus.cancelled);
+            }
+          }
+        });
+      }
+    }
+  }
+
+  void _cancel() {
+    if (!_running || _cancelRequested) return;
+    setState(() => _cancelRequested = true);
+    final engine = widget.engine;
+    if (engine is CancellableAsrEngine) engine.cancel();
+  }
+
+  Future<void> _export(bool asJson) async {
+    if (_results.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final saver = widget.exportFile ?? _defaultExport;
+    final contents = asJson
+        ? BenchmarkRunner.toJson(_results)
+        : BenchmarkRunner.toCsv(_results);
+    try {
+      await saver(asJson ? 'pocketasr_benchmark.json' : 'pocketasr_benchmark.csv',
+          contents);
+    } catch (error) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('${l10n.benchExportFailed}: $error')));
+    }
+  }
+
+  Future<void> _defaultExport(String suggestedName, String contents) async {
+    final location = await getSaveLocation(suggestedName: suggestedName);
+    if (location == null) return;
+    await File(location.path).writeAsString(contents);
   }
 
   @override
@@ -72,74 +235,184 @@ class _BenchPageState extends State<BenchPage> {
           child: Text(l10n.benchTitle),
         ),
       ),
-      body: FutureBuilder<_BenchProbe>(
-        future: _probe,
+      body: FutureBuilder<_BenchSetup>(
+        future: _setup,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final probe = snapshot.data!;
-          final canRun = probe.engineAvailable && probe.sampleAvailable;
+          final setup = snapshot.data!;
+          return _buildBody(l10n, setup);
+        },
+      ),
+    );
+  }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+  Widget _buildBody(AppLocalizations l10n, _BenchSetup setup) {
+    final store = setup.store;
+    final canRun = setup.engineAvailable &&
+        _audioName != null &&
+        setup.downloaded.isNotEmpty &&
+        store != null &&
+        !_running;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        _Muted(l10n.benchIntro, height: 1.5),
+        if (!setup.engineAvailable) ...[
+          const SizedBox(height: 16),
+          _UnavailableBanner(
+            title: l10n.benchUnavailableTitle,
+            lines: [
+              setup.engineReason == null
+                  ? l10n.benchUnavailableEngine
+                  : '${l10n.benchUnavailableEngine} (${setup.engineReason})',
+            ],
+            honesty: l10n.benchHonesty,
+          ),
+        ],
+        const SizedBox(height: 20),
+        _SectionLabel(l10n.benchSample),
+        const SizedBox(height: 8),
+        _Card(
+          child: Row(
             children: [
-              _Muted(l10n.benchIntro, height: 1.5),
-              if (!canRun) ...[
-                const SizedBox(height: 16),
-                _UnavailableBanner(
-                  title: l10n.benchUnavailableTitle,
-                  lines: [
-                    if (!probe.engineAvailable) l10n.benchUnavailableEngine,
-                    if (!probe.sampleAvailable)
-                      l10n.benchUnavailableSample(benchSampleAsset),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _audioName ?? l10n.benchNoAudio,
+                      style: Theme.of(context).textTheme.titleSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.benchSampleHint,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                    ),
                   ],
-                  honesty: l10n.benchHonesty,
                 ),
-              ],
-              const SizedBox(height: 24),
-              _SectionLabel(l10n.benchMatrix),
-              const SizedBox(height: 8),
-              _Muted(l10n.benchCpuOnly),
-              const SizedBox(height: 12),
-              _MatrixCard(canRun: canRun),
-              const SizedBox(height: 28),
-              _SectionLabel(l10n.benchResults),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                // ponytail: enabled once a real engine + sample land; a button
-                // that could not produce a number stays disabled on purpose.
-                onPressed: null,
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(
+                onPressed: _running ? null : _pickAudio,
+                child: Text(
+                  _audioName == null
+                      ? l10n.benchChooseAudio
+                      : l10n.benchChangeAudio,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        _SectionLabel(l10n.benchMatrix),
+        const SizedBox(height: 8),
+        _Muted(l10n.benchCpuOnly),
+        const SizedBox(height: 12),
+        if (setup.downloaded.isEmpty)
+          _EmptyResults(
+            title: l10n.benchNoModelsTitle,
+            body: l10n.benchNoModelsBody,
+          )
+        else
+          _MatrixCard(
+            downloaded: setup.downloaded,
+            cells: _cells,
+          ),
+        const SizedBox(height: 24),
+        _SectionLabel(l10n.benchResults),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: canRun ? () => _run(setup.downloaded, store) : null,
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: Text(l10n.benchRun),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                 ),
               ),
-              const SizedBox(height: 16),
-              _EmptyResults(
-                title: l10n.benchNoResultsTitle,
-                body: l10n.benchNoResultsBody,
+            ),
+            if (_running) ...[
+              const SizedBox(width: 12),
+              OutlinedButton(
+                onPressed: _cancelRequested ? null : _cancel,
+                child: Text(l10n.benchCancel),
               ),
-              const SizedBox(height: 20),
-              _Muted(l10n.benchExitHint),
             ],
-          );
-        },
-      ),
+          ],
+        ),
+        if (_audioName == null) ...[
+          const SizedBox(height: 8),
+          _Muted(l10n.benchAudioRequired),
+        ],
+        const SizedBox(height: 16),
+        if (_results.isEmpty)
+          _EmptyResults(
+            title: l10n.benchNoResultsTitle,
+            body: l10n.benchNoResultsBody,
+          )
+        else ...[
+          for (final result in _results) _ResultCard(result: result),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _export(true),
+                  icon: const Icon(Icons.data_object, size: 18),
+                  label: Text(l10n.benchExportJson),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _export(false),
+                  icon: const Icon(Icons.table_chart_outlined, size: 18),
+                  label: Text(l10n.benchExportCsv),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 20),
+        _Muted(l10n.benchExitHint),
+      ],
     );
   }
 }
 
 /// The two facts the page needs before it may claim anything.
-class _BenchProbe {
-  const _BenchProbe({
+class _BenchSetup {
+  const _BenchSetup({
     required this.engineAvailable,
-    required this.sampleAvailable,
+    required this.downloaded,
+    required this.store,
+    this.engineReason,
   });
 
   final bool engineAvailable;
-  final bool sampleAvailable;
+  final String? engineReason;
+
+  /// Speech bundles actually on disk; only these can run.
+  final List<ModelEntry> downloaded;
+  final ModelStore? store;
+}
+
+enum _CellStatus { running, done, failed, cancelled }
+
+class _Cell {
+  const _Cell(this.status, {this.result});
+  final _CellStatus status;
+  final BenchmarkResult? result;
 }
 
 /// Rounded card matching the models/transcribe surfaces.
@@ -165,72 +438,56 @@ class _Card extends StatelessWidget {
 }
 
 class _MatrixCard extends StatelessWidget {
-  const _MatrixCard({required this.canRun});
+  const _MatrixCard({required this.downloaded, required this.cells});
 
-  final bool canRun;
+  final List<ModelEntry> downloaded;
+  final Map<String, _Cell> cells;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+        );
 
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _MatrixHeader(l10n: l10n),
-          Divider(height: 20, color: scheme.outlineVariant),
-          for (final family in benchFamilies)
-            for (final quant in benchQuants) ...[
-              _MatrixRow(family: family, quant: quant, canRun: canRun),
-              if (!(family == benchFamilies.last && quant == benchQuants.last))
-                Divider(height: 20, color: scheme.outlineVariant),
+          Row(
+            children: [
+              Expanded(flex: 4, child: Text(l10n.benchFamily, style: style)),
+              Expanded(flex: 2, child: Text(l10n.benchQuant, style: style)),
+              Expanded(flex: 2, child: Text(l10n.transcribeBackend, style: style)),
+              Expanded(
+                flex: 4,
+                child: Text(
+                  l10n.benchStatus,
+                  textAlign: TextAlign.right,
+                  style: style,
+                ),
+              ),
             ],
+          ),
+          Divider(height: 20, color: scheme.outlineVariant),
+          for (var i = 0; i < downloaded.length; i++) ...[
+            _MatrixRow(entry: downloaded[i], cell: cells[downloaded[i].id]),
+            if (i != downloaded.length - 1)
+              Divider(height: 20, color: scheme.outlineVariant),
+          ],
         ],
       ),
     );
   }
 }
 
-class _MatrixHeader extends StatelessWidget {
-  const _MatrixHeader({required this.l10n});
-
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w600,
-    );
-    return Row(
-      children: [
-        Expanded(flex: 4, child: Text(l10n.benchFamily, style: style)),
-        Expanded(flex: 2, child: Text(l10n.benchQuant, style: style)),
-        Expanded(flex: 2, child: Text(l10n.transcribeBackend, style: style)),
-        Expanded(
-          flex: 4,
-          child: Text(
-            l10n.benchStatus,
-            textAlign: TextAlign.right,
-            style: style,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _MatrixRow extends StatelessWidget {
-  const _MatrixRow({
-    required this.family,
-    required this.quant,
-    required this.canRun,
-  });
+  const _MatrixRow({required this.entry, required this.cell});
 
-  final String family;
-  final String quant;
-  final bool canRun;
+  final ModelEntry entry;
+  final _Cell? cell;
 
   @override
   Widget build(BuildContext context) {
@@ -240,29 +497,32 @@ class _MatrixRow extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
 
+    final (String label, bool blocked) = switch (cell?.status) {
+      _CellStatus.running => (l10n.benchStatusRunning, false),
+      _CellStatus.done => (l10n.benchStatusDone, false),
+      _CellStatus.failed => (l10n.benchStatusFailed, true),
+      _CellStatus.cancelled => (l10n.benchStatusCancelled, true),
+      null => (l10n.benchStatusNotRun, false),
+    };
+
     return Row(
       children: [
         Expanded(
           flex: 4,
           child: Text(
-            family,
+            entry.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall,
           ),
         ),
-        Expanded(flex: 2, child: Text(quant, style: muted)),
+        Expanded(flex: 2, child: Text(entry.quant ?? '—', style: muted)),
         Expanded(flex: 2, child: Text(l10n.transcribeBackendCpu, style: muted)),
         Expanded(
           flex: 4,
           child: Align(
             alignment: Alignment.centerRight,
-            child: _StatusPill(
-              label: canRun
-                  ? l10n.benchStatusNotRun
-                  : l10n.benchStatusUnavailable,
-              blocked: !canRun,
-            ),
+            child: _StatusPill(label: label, blocked: blocked),
           ),
         ),
       ],
@@ -294,6 +554,92 @@ class _StatusPill extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// One finished cell: the medians it really measured, or the failure.
+class _ResultCard extends StatelessWidget {
+  const _ResultCard({required this.result});
+
+  final BenchmarkResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${result.caseSpec.family} · ${result.caseSpec.quant}',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            if (result.isFailure)
+              Text(
+                '${l10n.benchStatusFailed}: ${result.error ?? ''}',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              )
+            else ...[
+              _metric(context, l10n.metricElapsed, _ms(result.elapsed)),
+              _metric(
+                context,
+                l10n.metricRtf,
+                result.rtf?.toStringAsFixed(2) ?? l10n.metricUnavailable,
+              ),
+              _metric(
+                context,
+                l10n.metricTokensPerSec,
+                result.tokensPerSecond?.toStringAsFixed(1) ??
+                    l10n.metricUnavailable,
+              ),
+            ],
+            // The real success count is shown for a failure too: it is a fact,
+            // not a performance number.
+            _metric(
+              context,
+              l10n.benchRuns,
+              '${result.attempts - result.failures}/${result.attempts}',
+            ),
+            if (!result.isFailure && result.error != null)
+              Text(
+                result.error!,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metric(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  static String _ms(Duration? value) {
+    if (value == null) return '—';
+    final ms = value.inMilliseconds;
+    return ms < 1000 ? '${ms}ms' : '${(ms / 1000).toStringAsFixed(2)}s';
   }
 }
 

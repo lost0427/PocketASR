@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/engine/asr_engine.dart';
+import 'package:pocket_asr/engine/engine_registry.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
 import 'package:pocket_asr/features/settings/settings_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
@@ -77,7 +79,13 @@ void main() {
   testWidgets('the version row opens the benchmark on the seventh tap', (
     tester,
   ) async {
-    final state = AppState();
+    // An engine override keeps the benchmark off the native worker isolate and
+    // its fast probe settles the page in the test's fake-async clock.
+    final state = AppState(
+      engineRegistry: EngineRegistry(
+        asrBuilders: {'sherpa': () => const UnavailableAsrEngine()},
+      ),
+    );
     await pumpSettings(tester, state);
 
     final version = find.textContaining(settingsAppVersion);
@@ -87,7 +95,10 @@ void main() {
       await tester.tap(version);
       await tester.pump();
     }
-    await tester.pumpAndSettle();
+    // The benchmark route is pushed; its own async setup is left to run (it may
+    // show a progress spinner), so pump a frame instead of settling.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(BenchPage), findsOneWidget);
   });

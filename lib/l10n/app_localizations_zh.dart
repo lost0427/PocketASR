@@ -470,27 +470,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchTitle => '性能基准';
 
   @override
-  String get benchIntro => '对同一段固定素材跑完整个 CPU 矩阵，数字才可比较。每格都复用转录页的同一套指标口径。';
+  String get benchIntro =>
+      '对每个已下载的语音模型，在你选定的一段音频上各跑三次，数字才可比较。每行都复用转录页的同一套引擎路径与指标口径。';
 
   @override
   String get benchUnavailableTitle => '当前构建无法运行';
 
   @override
-  String get benchUnavailableEngine => '未打包本地语音引擎，因此无法产生真实数据。';
-
-  @override
-  String benchUnavailableSample(String asset) {
-    return '缺少固定素材 $asset，跑出来的结果无法比较。';
-  }
+  String get benchUnavailableEngine => '本地语音引擎不可用，因此无法产生真实数据。';
 
   @override
   String get benchHonesty => '没有真实运行之前，不显示任何性能数字。';
 
   @override
+  String get benchSample => '固定输入';
+
+  @override
+  String get benchNoAudio => '尚未选择音频';
+
+  @override
+  String get benchSampleHint => '整个矩阵共用同一个文件，行与行之间才可比较。不会运行任何追踪模型。';
+
+  @override
+  String get benchChooseAudio => '选择音频';
+
+  @override
+  String get benchChangeAudio => '更换音频';
+
+  @override
+  String get benchAudioRequired => '运行前请先选择音频文件。';
+
+  @override
   String get benchMatrix => 'CPU 矩阵';
 
   @override
-  String get benchCpuOnly => '仅 CPU——GPU 与 NPU 暂缓。';
+  String get benchCpuOnly => '仅 CPU——本构建不对 GPU 或 NPU 做基准。';
 
   @override
   String get benchFamily => '家族';
@@ -502,10 +516,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchStatus => '状态';
 
   @override
-  String get benchStatusUnavailable => '不可用';
+  String get benchStatusNotRun => '未运行';
 
   @override
-  String get benchStatusNotRun => '未运行';
+  String get benchStatusRunning => '运行中';
+
+  @override
+  String get benchStatusDone => '已完成';
+
+  @override
+  String get benchStatusFailed => '失败';
+
+  @override
+  String get benchStatusCancelled => '已取消';
+
+  @override
+  String get benchNoModelsTitle => '没有已下载的语音模型';
+
+  @override
+  String get benchNoModelsBody => '请先在“模型”页下载语音模型；只有本机已有的模型才会参与基准测试。';
 
   @override
   String get benchResults => '结果';
@@ -514,10 +543,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchRun => '运行基准测试';
 
   @override
+  String get benchCancel => '取消';
+
+  @override
+  String get benchRuns => '有效次数';
+
+  @override
   String get benchNoResultsTitle => '暂无结果';
 
   @override
-  String get benchNoResultsBody => '运行后会填上加载耗时、墙钟、RTF、tokens/s 与峰值内存。在此之前保持为空。';
+  String get benchNoResultsBody =>
+      '运行后会列出每个模型三次运行的中位墙钟、RTF 与 tokens/s。在此之前保持为空。';
+
+  @override
+  String get benchExportJson => '导出 JSON';
+
+  @override
+  String get benchExportCsv => '导出 CSV';
+
+  @override
+  String get benchExportFailed => '导出失败';
 
   @override
   String get benchExitHint => '连续点击标题七次可退出。';

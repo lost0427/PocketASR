@@ -486,29 +486,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get benchIntro =>
-      'Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.';
+      'Runs every downloaded speech model three times on one audio file you pick, so the numbers stay comparable. Each row uses the same engine path and metrics as the transcribe page.';
 
   @override
   String get benchUnavailableTitle => 'Nothing can run in this build';
 
   @override
   String get benchUnavailableEngine =>
-      'The native speech engine is not bundled, so no run could produce real numbers.';
-
-  @override
-  String benchUnavailableSample(String asset) {
-    return 'The fixed sample $asset is missing, so runs would not be comparable.';
-  }
+      'The native speech engine is not available, so no run could produce real numbers.';
 
   @override
   String get benchHonesty =>
       'No performance figure is shown until a real run produces one.';
 
   @override
+  String get benchSample => 'Fixed input';
+
+  @override
+  String get benchNoAudio => 'No audio selected';
+
+  @override
+  String get benchSampleHint =>
+      'One file is used for the whole matrix so the rows can be compared. No tracking model ever runs.';
+
+  @override
+  String get benchChooseAudio => 'Choose audio';
+
+  @override
+  String get benchChangeAudio => 'Change audio';
+
+  @override
+  String get benchAudioRequired => 'Choose an audio file before running.';
+
+  @override
   String get benchMatrix => 'CPU matrix';
 
   @override
-  String get benchCpuOnly => 'CPU only — GPU and NPU are deferred.';
+  String get benchCpuOnly => 'CPU only — this build benchmarks no GPU or NPU.';
 
   @override
   String get benchFamily => 'Family';
@@ -520,10 +534,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get benchStatus => 'Status';
 
   @override
-  String get benchStatusUnavailable => 'Unavailable';
+  String get benchStatusNotRun => 'Not run';
 
   @override
-  String get benchStatusNotRun => 'Not run';
+  String get benchStatusRunning => 'Running';
+
+  @override
+  String get benchStatusDone => 'Done';
+
+  @override
+  String get benchStatusFailed => 'Failed';
+
+  @override
+  String get benchStatusCancelled => 'Cancelled';
+
+  @override
+  String get benchNoModelsTitle => 'No downloaded speech models';
+
+  @override
+  String get benchNoModelsBody =>
+      'Download a speech model in the Models tab first; only models already on this device are benchmarked.';
 
   @override
   String get benchResults => 'Results';
@@ -532,11 +562,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get benchRun => 'Run benchmark';
 
   @override
+  String get benchCancel => 'Cancel';
+
+  @override
+  String get benchRuns => 'Successful runs';
+
+  @override
   String get benchNoResultsTitle => 'No results yet';
 
   @override
   String get benchNoResultsBody =>
-      'A run fills this table with load time, wall clock, RTF, tokens/s and peak memory. Until then it stays empty.';
+      'A run fills this list with the median wall clock, RTF and tokens/s of three runs per model. Until then it stays empty.';
+
+  @override
+  String get benchExportJson => 'Export JSON';
+
+  @override
+  String get benchExportCsv => 'Export CSV';
+
+  @override
+  String get benchExportFailed => 'Export failed';
 
   @override
   String get benchExitHint => 'Tap the title seven times to leave.';

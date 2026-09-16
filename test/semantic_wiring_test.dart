@@ -17,6 +17,7 @@ class _FakeEmbedder implements Embedder {
 
   final List<String> documents = [];
   final List<String> queries = [];
+  bool disposed = false;
 
   @override
   Float32List embed(String text) => embedDocument(text);
@@ -37,7 +38,7 @@ class _FakeEmbedder implements Embedder {
   Float32List _vector(String text) => Float32List.fromList([1, 0]);
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async => disposed = true;
 }
 
 /// Factory that hands back one [_FakeEmbedder] per path, or throws.
@@ -68,7 +69,7 @@ void main() {
     final db = AppDatabase.open();
     addTearDown(db.close);
     final factory = _Factory();
-    final state = AppState(database: db, embedderFactory: factory);
+    final state = AppState(database: db, embedderFactory: factory.call);
 
     expect(state.embeddingReady, isFalse);
     expect(state.searchRepo.embedder, isNull);
@@ -90,7 +91,7 @@ void main() {
     final db = AppDatabase.open();
     addTearDown(db.close);
     final factory = _Factory();
-    final state = AppState(database: db, embedderFactory: factory);
+    final state = AppState(database: db, embedderFactory: factory.call);
     state.selectEmbedding(path: 'e5.gguf');
     await settle();
 
@@ -107,14 +108,14 @@ void main() {
     final factory = _Factory();
     final first = AppState(
       database: AppDatabase.open(path: dbPath()),
-      embedderFactory: factory,
+      embedderFactory: factory.call,
     );
     first.selectEmbedding(path: 'e5.gguf');
     await settle();
 
     final second = AppState(
       database: AppDatabase.open(path: dbPath()),
-      embedderFactory: factory,
+      embedderFactory: factory.call,
     );
     addTearDown(second.dispose);
     addTearDown(first.dispose);
@@ -127,7 +128,7 @@ void main() {
     final db = AppDatabase.open();
     addTearDown(db.close);
     final factory = _Factory()..fail = true;
-    final state = AppState(database: db, embedderFactory: factory);
+    final state = AppState(database: db, embedderFactory: factory.call);
 
     state.selectEmbedding(path: 'broken.gguf');
 
@@ -141,7 +142,7 @@ void main() {
   test('clearing the embedding drops the indexer and search embedder', () async {
     final db = AppDatabase.open();
     addTearDown(db.close);
-    final state = AppState(database: db, embedderFactory: _Factory());
+    final state = AppState(database: db, embedderFactory: _Factory().call);
     state.selectEmbedding(path: 'e5.gguf');
     await settle();
 
@@ -154,21 +155,21 @@ void main() {
     expect(db.getSetting('embedding_path'), '');
   });
 
-  test('dispose unsubscribes the indexer and ignores later calls', () async {
+  test('dispose releases the embedder and ignores later calls', () async {
     final db = AppDatabase.open();
-    final state = AppState(
-      database: db,
-      embedderFactory: _Factory(),
-    );
+    final factory = _Factory();
+    final state = AppState(database: db, embedderFactory: factory.call);
     state.selectEmbedding(path: 'e5.gguf');
     await settle();
-    expect(state.transcriptRepo.hasListeners, isTrue);
+    final embedder = factory.created['e5.gguf']!;
+    final created = factory.created.length;
 
     state.dispose();
 
-    expect(state.transcriptRepo.hasListeners, isFalse);
-    // Post-dispose calls are no-ops, not setState-after-dispose crashes.
+    expect(embedder.disposed, isTrue); // the live model was released
+    // A call after dispose is a no-op, not a setState-after-dispose crash and
+    // not a rebuild that would re-open the closed database.
     state.selectEmbedding(path: 'other.gguf');
-    expect(state.transcriptRepo.hasListeners, isFalse);
+    expect(factory.created.length, created);
   });
 }

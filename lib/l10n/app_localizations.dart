@@ -995,7 +995,7 @@ abstract class AppLocalizations {
   /// No description provided for @benchIntro.
   ///
   /// In en, this message translates to:
-  /// **'Runs the same fixed sample across the CPU matrix so the numbers stay comparable. Each cell uses the same metrics as the transcribe page.'**
+  /// **'Runs every downloaded speech model three times on one audio file you pick, so the numbers stay comparable. Each row uses the same engine path and metrics as the transcribe page.'**
   String get benchIntro;
 
   /// No description provided for @benchUnavailableTitle.
@@ -1007,20 +1007,50 @@ abstract class AppLocalizations {
   /// No description provided for @benchUnavailableEngine.
   ///
   /// In en, this message translates to:
-  /// **'The native speech engine is not bundled, so no run could produce real numbers.'**
+  /// **'The native speech engine is not available, so no run could produce real numbers.'**
   String get benchUnavailableEngine;
-
-  /// No description provided for @benchUnavailableSample.
-  ///
-  /// In en, this message translates to:
-  /// **'The fixed sample {asset} is missing, so runs would not be comparable.'**
-  String benchUnavailableSample(String asset);
 
   /// No description provided for @benchHonesty.
   ///
   /// In en, this message translates to:
   /// **'No performance figure is shown until a real run produces one.'**
   String get benchHonesty;
+
+  /// No description provided for @benchSample.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed input'**
+  String get benchSample;
+
+  /// No description provided for @benchNoAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio selected'**
+  String get benchNoAudio;
+
+  /// No description provided for @benchSampleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'One file is used for the whole matrix so the rows can be compared. No tracking model ever runs.'**
+  String get benchSampleHint;
+
+  /// No description provided for @benchChooseAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose audio'**
+  String get benchChooseAudio;
+
+  /// No description provided for @benchChangeAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Change audio'**
+  String get benchChangeAudio;
+
+  /// No description provided for @benchAudioRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an audio file before running.'**
+  String get benchAudioRequired;
 
   /// No description provided for @benchMatrix.
   ///
@@ -1031,7 +1061,7 @@ abstract class AppLocalizations {
   /// No description provided for @benchCpuOnly.
   ///
   /// In en, this message translates to:
-  /// **'CPU only — GPU and NPU are deferred.'**
+  /// **'CPU only — this build benchmarks no GPU or NPU.'**
   String get benchCpuOnly;
 
   /// No description provided for @benchFamily.
@@ -1052,17 +1082,47 @@ abstract class AppLocalizations {
   /// **'Status'**
   String get benchStatus;
 
-  /// No description provided for @benchStatusUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Unavailable'**
-  String get benchStatusUnavailable;
-
   /// No description provided for @benchStatusNotRun.
   ///
   /// In en, this message translates to:
   /// **'Not run'**
   String get benchStatusNotRun;
+
+  /// No description provided for @benchStatusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get benchStatusRunning;
+
+  /// No description provided for @benchStatusDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get benchStatusDone;
+
+  /// No description provided for @benchStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get benchStatusFailed;
+
+  /// No description provided for @benchStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get benchStatusCancelled;
+
+  /// No description provided for @benchNoModelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No downloaded speech models'**
+  String get benchNoModelsTitle;
+
+  /// No description provided for @benchNoModelsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a speech model in the Models tab first; only models already on this device are benchmarked.'**
+  String get benchNoModelsBody;
 
   /// No description provided for @benchResults.
   ///
@@ -1076,6 +1136,18 @@ abstract class AppLocalizations {
   /// **'Run benchmark'**
   String get benchRun;
 
+  /// No description provided for @benchCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get benchCancel;
+
+  /// No description provided for @benchRuns.
+  ///
+  /// In en, this message translates to:
+  /// **'Successful runs'**
+  String get benchRuns;
+
   /// No description provided for @benchNoResultsTitle.
   ///
   /// In en, this message translates to:
@@ -1085,8 +1157,26 @@ abstract class AppLocalizations {
   /// No description provided for @benchNoResultsBody.
   ///
   /// In en, this message translates to:
-  /// **'A run fills this table with load time, wall clock, RTF, tokens/s and peak memory. Until then it stays empty.'**
+  /// **'A run fills this list with the median wall clock, RTF and tokens/s of three runs per model. Until then it stays empty.'**
   String get benchNoResultsBody;
+
+  /// No description provided for @benchExportJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Export JSON'**
+  String get benchExportJson;
+
+  /// No description provided for @benchExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV'**
+  String get benchExportCsv;
+
+  /// No description provided for @benchExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed'**
+  String get benchExportFailed;
 
   /// No description provided for @benchExitHint.
   ///

@@ -30,7 +30,9 @@ class AppState extends ChangeNotifier {
   AppState({
     AppDatabase? database,
     EmbedderFactory? embedderFactory,
+    EngineRegistry? engineRegistry,
   }) : database = database ?? AppDatabase.open(),
+       engineRegistry = engineRegistry ?? EngineRegistry(),
        _embedderFactory = embedderFactory ?? _crispEmbedder {
     _loadSettings();
   }
@@ -125,8 +127,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Builds engines by id. Held here so the app picks a real adapter without a
-  /// DI package; tests can override [engineRegistry] before touching [engine].
-  final EngineRegistry engineRegistry = EngineRegistry();
+  /// DI package; tests can inject one so no native worker is spawned.
+  final EngineRegistry engineRegistry;
 
   /// Real engine preferred by default: sherpa-onnx's Flutter plugin bundles its
   /// own natives, so it is the one adapter that can be genuinely available on a
