@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'db.dart';
@@ -78,7 +79,14 @@ Transcript transcriptFromRow(Row row) => Transcript(
 
 /// CRUD over the `transcript` and `segment` tables, including the trash flow
 /// (soft delete → restore, or purge to erase).
-class TranscriptRepo {
+///
+/// Notifies listeners after every successful mutation ([insert],
+/// [softDelete], [restore], [purge], [purgeAll]) so the History page can
+/// refresh and the semantic indexer can react to new, restored, and trashed
+/// rows. Reuses Flutter's [ChangeNotifier] rather than inventing a second
+/// event bus; a spurious refresh after a no-op delete is harmless and not
+/// worth a row-count probe.
+class TranscriptRepo extends ChangeNotifier {
   TranscriptRepo(this._database);
 
   final AppDatabase _database;
@@ -86,7 +94,8 @@ class TranscriptRepo {
   Database get _db => _database.db;
 
   /// Inserts a transcript and its [segments] in one transaction. Returns the
-  /// new transcript id.
+  /// new transcript id and, after the commit lands, [notifyListeners] fires —
+  /// the single hook History and the semantic indexer hang off repo changes.
   int insert({
     required String title,
     required String text,
@@ -140,6 +149,7 @@ class TranscriptRepo {
       }
 
       _db.execute('COMMIT');
+      notifyListeners();
       return id;
     } catch (_) {
       _db.execute('ROLLBACK');
@@ -157,17 +167,21 @@ class TranscriptRepo {
     'WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC',
   );
 
-  /// Moves a transcript to the trash.
+  /// Moves a transcript to the trash. Notifies on success; the indexer's
+  /// next pass simply skips the trashed row (it never embeds dead rows).
   void softDelete(int id, {DateTime? at}) {
     _db.execute('UPDATE transcript SET deleted_at = ? WHERE id = ?', [
       (at ?? DateTime.now()).millisecondsSinceEpoch,
       id,
     ]);
+    notifyListeners();
   }
 
-  /// Takes a transcript back out of the trash.
+  /// Takes a transcript back out of the trash. Notifies so the indexer can
+  /// pick up a restored row that has (or lost) no vector.
   void restore(int id) {
     _db.execute('UPDATE transcript SET deleted_at = NULL WHERE id = ?', [id]);
+    notifyListeners();
   }
 
   /// Permanently deletes one trashed transcript (segments and embedding go with
@@ -177,11 +191,13 @@ class TranscriptRepo {
       'DELETE FROM transcript WHERE id = ? AND deleted_at IS NOT NULL',
       [id],
     );
+    notifyListeners();
   }
 
   /// Empties the trash.
   void purgeAll() {
     _db.execute('DELETE FROM transcript WHERE deleted_at IS NOT NULL');
+    notifyListeners();
   }
 
   List<Transcript> _select(String where) => [

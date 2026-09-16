@@ -117,15 +117,16 @@ void main() {
     expect(transcripts.list(), hasLength(1)); // table still there
   });
 
-  test('CJK text matches as one unicode61 token', () {
+  test('CJK whole-run queries match; substrings ride the LIKE pass', () {
     final id = transcripts.insert(
       title: 'Meeting notes',
       text: '连接无线网络设置',
     );
 
     expect(search.searchLiteral('连接无线网络设置').single.id, id);
-    // ponytail: whole CJK runs are one token, so substrings miss — see db.dart.
-    expect(search.searchLiteral('网络'), isEmpty);
+    // unicode61 still indexes one token per CJK run (see db.dart); SearchRepo
+    // supplements Han queries with a literal LIKE pass, so substrings match.
+    expect(search.searchLiteral('网络').single.id, id);
   });
 
   test('searchHybrid falls back to literal results with topK/trash shape', () {

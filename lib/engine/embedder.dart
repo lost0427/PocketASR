@@ -26,6 +26,15 @@ abstract class Embedder {
   /// Embeds [text]. The result may be unnormalized; the index normalizes it.
   Float32List embed(String text);
 
+  /// Embeds [text] as a search *query*. Identical to [embed] except for models
+  /// trained with a query-side prompt (e.g. E5's `query: ` prefix); those
+  /// overrides add the prompt only — never a different vector space.
+  Float32List embedQuery(String text) => embed(text);
+
+  /// Embeds [text] as an indexed *document* (e.g. E5's `passage: ` prefix).
+  /// Indexer writers must call this, not [embedQuery].
+  Float32List embedDocument(String text) => embed(text);
+
   /// Releases native resources.
   Future<void> dispose();
 }
@@ -72,6 +81,13 @@ class DeterministicEmbedder implements Embedder {
     }
     return vector;
   }
+
+  // No prompt concept: the hash treats query and document identically.
+  @override
+  Float32List embedQuery(String text) => embed(text);
+
+  @override
+  Float32List embedDocument(String text) => embed(text);
 
   @override
   Future<void> dispose() async {}

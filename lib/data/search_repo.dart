@@ -22,21 +22,59 @@ class SearchRepo {
   /// Literal (word) search backed by FTS5, best match first.
   ///
   /// Each whitespace-separated user term is quoted, so FTS5 operator syntax in
-  /// arbitrary input cannot raise a query error. Trashed transcripts are hidden
-  /// unless [includeTrash] is set.
-  List<Transcript> searchLiteral(String query, {bool includeTrash = false}) {
-    final match = _matchExpression(query);
-    if (match == null) return const [];
+  /// arbitrary input cannot raise a query error. When a query contains Han
+  /// characters, FTS's `unicode61` tokenizer has indexed them as one whole-run
+  /// token (see db.dart), so FTS alone cannot match a 2-char substring like
+  /// `网络`; a parameterized-`LIKE` pass supplements FTS for exactly that case
+  /// (English queries keep pure FTS semantics). FTS hits come first, LIKE-only
+  /// hits are appended newest-first.
+  ///
+  /// Trashed transcripts are hidden unless [includeTrash] is set;
+  /// [onlyTrash] inverts the scope to search the trash *alone* (no live rows
+  /// leak in). [onlyTrash] wins if both are set.
+  List<Transcript> searchLiteral(
+    String query, {
+    bool includeTrash = false,
+    bool onlyTrash = false,
+  }) {
+    final terms = _terms(query);
+    if (terms.isEmpty) return const [];
+    final trash = _trashFilter(includeTrash, onlyTrash);
+    final out = <Transcript>[];
+    final seen = <int>{};
+    void add(List<Row> rows) {
+      for (final row in rows) {
+        final transcript = transcriptFromRow(row);
+        if (seen.add(transcript.id)) out.add(transcript);
+      }
+    }
 
-    final rows = _db.select(
-      'SELECT t.* FROM transcript_fts '
-      'JOIN transcript t ON t.id = transcript_fts.rowid '
-      'WHERE transcript_fts MATCH ?'
-      '${includeTrash ? '' : ' AND t.deleted_at IS NULL'} '
-      'ORDER BY rank',
-      [match],
+    add(
+      _db.select(
+        'SELECT t.* FROM transcript_fts '
+        'JOIN transcript t ON t.id = transcript_fts.rowid '
+        'WHERE transcript_fts MATCH ?$trash ORDER BY rank',
+        [terms.map(_quoteTerm).join(' ')],
+      ),
     );
-    return [for (final row in rows) transcriptFromRow(row)];
+
+    if (terms.any(_isHan)) {
+      final like = List.filled(
+        terms.length,
+        r"(t.text LIKE ? ESCAPE '\' OR t.title LIKE ? ESCAPE '\')",
+      ).join(' AND ');
+      final params = [
+        for (final term in terms) ...[_likePattern(term), _likePattern(term)],
+      ];
+      add(
+        _db.select(
+          'SELECT t.* FROM transcript t WHERE $like$trash '
+          'ORDER BY t.created_at DESC, t.id DESC',
+          params,
+        ),
+      );
+    }
+    return out;
   }
 
   /// Combined literal + semantic search, best match first.
@@ -44,16 +82,23 @@ class SearchRepo {
   /// Merges the two ranked lists with Reciprocal Rank Fusion (k = 60), which
   /// needs no score calibration between FTS5 rank and cosine similarity. With
   /// no [Embedder] this is [searchLiteral] re-ranked by the same formula.
+  /// Trash scoping works as in [searchLiteral].
   List<Transcript> searchHybrid(
     String query, {
     int topK = 20,
     bool includeTrash = false,
+    bool onlyTrash = false,
   }) {
-    final literal = searchLiteral(query, includeTrash: includeTrash);
+    final literal = searchLiteral(
+      query,
+      includeTrash: includeTrash,
+      onlyTrash: onlyTrash,
+    );
     final semantic = searchSemantic(
       query,
       topK: topK,
       includeTrash: includeTrash,
+      onlyTrash: onlyTrash,
     );
 
     const k = 60;
@@ -77,14 +122,17 @@ class SearchRepo {
 
   /// Semantic search over the `embedding` table, best match first.
   ///
-  /// Embeds [query] with the configured [Embedder] and ranks stored vectors by
-  /// cosine similarity. Rows from a different model/dimension are skipped, so a
-  /// half-migrated table cannot mix incomparable vectors. Returns nothing when
-  /// no embedder is configured.
+  /// Embeds [query] with the configured [Embedder]'s *query* prompt
+  /// ([Embedder.embedQuery]) and ranks stored vectors by cosine similarity.
+  /// Rows from a different model/dimension are skipped, so a half-migrated
+  /// table cannot mix incomparable vectors, and rows whose blob is shorter
+  /// than `dim` floats are skipped as not-indexable. Returns nothing when no
+  /// embedder is configured. Trash scoping works as in [searchLiteral].
   List<Transcript> searchSemantic(
     String query, {
     int topK = 20,
     bool includeTrash = false,
+    bool onlyTrash = false,
   }) {
     final embedder = this.embedder;
     if (embedder == null) return const [];
@@ -92,8 +140,7 @@ class SearchRepo {
     final rows = _db.select(
       'SELECT e.transcript_id, e.vec, t.* FROM embedding e '
       'JOIN transcript t ON t.id = e.transcript_id '
-      'WHERE e.dim = ? AND e.model = ?'
-      '${includeTrash ? '' : ' AND t.deleted_at IS NULL'}',
+      'WHERE e.dim = ? AND e.model = ?${_trashFilter(includeTrash, onlyTrash, alias: 't')}',
       [embedder.dim, embedder.id],
     );
     if (rows.isEmpty) return const [];
@@ -102,24 +149,48 @@ class SearchRepo {
     final byId = <int, Transcript>{};
     for (final row in rows) {
       final blob = row['vec'] as Uint8List;
-      final vector = blob.buffer.asFloat32List(blob.offsetInBytes, embedder.dim);
+      if (blob.lengthInBytes < embedder.dim * 4) continue; // truncated blob
+      final vector = blob.buffer.asFloat32List(
+        blob.offsetInBytes,
+        embedder.dim,
+      );
       final id = row['transcript_id'] as int;
       index.put(id, vector);
       byId[id] = transcriptFromRow(row);
     }
 
     return [
-      for (final hit in index.search(embedder.embed(query), topK: topK))
+      for (final hit in index.search(embedder.embedQuery(query), topK: topK))
         byId[hit.id]!,
     ];
   }
 
-  static String? _matchExpression(String query) {
-    final terms = query
-        .split(RegExp(r'\s+'))
-        .where((term) => term.isNotEmpty)
-        .map((term) => '"${term.replaceAll('"', '""')}"')
-        .toList();
-    return terms.isEmpty ? null : terms.join(' ');
+  static List<String> _terms(String query) =>
+      query.split(RegExp(r'\s+')).where((term) => term.isNotEmpty).toList();
+
+  static String _quoteTerm(String term) => '"${term.replaceAll('"', '""')}"';
+
+  /// Han ideographs (BMP: Ext. A + Unified + the main block) — the script
+  /// `unicode61` collapses into one token and the LIKE fallback exists for.
+  /// Kana/Hangul and supplementary-plane rare ideographs keep whole-token FTS
+  /// semantics; normal 2-char Chinese queries are all BMP.
+  static final RegExp _han = RegExp(r'[㐀-䶿一-鿿]');
+
+  static bool _isHan(String term) => _han.hasMatch(term);
+
+  static String _likePattern(String term) =>
+      '%${term
+          .replaceAll(r'\', r'\\')
+          .replaceAll('%', r'\%')
+          .replaceAll('_', r'\_')}%';
+
+  /// `' AND t.deleted_at ...'` SQL suffix shared by all three search modes.
+  static String _trashFilter(
+    bool includeTrash,
+    bool onlyTrash, {
+    String alias = 't',
+  }) {
+    if (onlyTrash) return ' AND $alias.deleted_at IS NOT NULL';
+    return includeTrash ? '' : ' AND $alias.deleted_at IS NULL';
   }
 }

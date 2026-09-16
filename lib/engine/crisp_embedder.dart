@@ -8,6 +8,7 @@
 /// point: semantic search must never fake meaning.
 library;
 
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crispembed/crispembed.dart' as crisp;
@@ -21,14 +22,40 @@ class CrispEmbedder implements Embedder {
   /// location, for callers that stage the `.so`/`.dll` themselves.
   CrispEmbedder({required String modelPath, int threads = 0, String? libPath})
     : _model = _open(modelPath, threads: threads, libPath: libPath),
-      id = 'crispembed:${_basename(modelPath)}' {
-    dim = _probeDim(_model, modelPath);
+      id = identityFor(modelPath) {
+    try {
+      dim = _probeDim(_model, modelPath);
+      // Verified against crispembed 0.16.1 (the local package; the native
+      // binary is CI-fetched and not inspectable here): encode() applies only
+      // the settable ctx prefix — documented as "empty string if none", and
+      // the package's own example sets `query: ` manually to prefix outputs.
+      // E5 query/passage prefixes live in GGUF metadata and are exposed as
+      // *read-only* getters for the caller to apply, so encode() does not add
+      // them automatically. Prepending them below is therefore correct, and
+      // the `_model.prefix` check makes a double-prefix impossible if a future
+      // build starts pre-setting the ctx prefix on load.
+      if (_model.prefix.isEmpty) {
+        _queryPrefix = _model.ctxQueryPrefix;
+        _passagePrefix = _model.ctxPassagePrefix;
+      } else {
+        _queryPrefix = '';
+        _passagePrefix = '';
+      }
+    } catch (error) {
+      _model.dispose(); // the probe can fail after the native ctx was loaded
+      if (error is EmbedderUnavailableException) rethrow;
+      throw EmbedderUnavailableException(
+        'CrispEmbed failed to initialize "$modelPath": $error',
+      );
+    }
   }
 
   final crisp.CrispEmbed _model;
+  late final String _queryPrefix;
+  late final String _passagePrefix;
 
-  /// Model identity stored in the `embedding.model` column: the file name, so
-  /// vectors from a different model file never mix.
+  /// Model identity stored in the `embedding.model` column: the full requested
+  /// path plus file size — see [identityFor].
   @override
   final String id;
 
@@ -41,8 +68,39 @@ class CrispEmbedder implements Embedder {
   Float32List embed(String text) => _model.encode(text);
 
   @override
+  Float32List embedQuery(String text) => _encodePrefixed(text, _queryPrefix);
+
+  @override
+  Float32List embedDocument(String text) =>
+      _encodePrefixed(text, _passagePrefix);
+
+  Float32List _encodePrefixed(String text, String prefix) =>
+      prefix.isEmpty ? _model.encode(text) : _model.encode('$prefix$text');
+
+  @override
   Future<void> dispose() async {
     _model.dispose();
+  }
+
+  /// A model identity that does not collide across different model files.
+  ///
+  /// The basename alone conflates `a/e5.gguf` and `b/e5.gguf`, and survives an
+  /// in-place model swap, so vectors from different models would mix in one
+  /// `embedding.model` bucket. The full path plus size separates both cases.
+  /// Stated ceilings: a *name* (no path separators, which crispembed resolves
+  /// to its own cache download) is tracked by that name only, and a same-size
+  /// file at the same path is treated as the same model — content is not
+  /// hashed, since hashing a multi-GB GGUF at startup is not worth it.
+  static String identityFor(String modelPath) {
+    try {
+      final stat = File(modelPath).statSync();
+      if (stat.type == FileSystemEntityType.notFound) {
+        return 'crispembed:$modelPath';
+      }
+      return 'crispembed:$modelPath:${stat.size}';
+    } on FileSystemException {
+      return 'crispembed:$modelPath';
+    }
   }
 
   static crisp.CrispEmbed _open(
@@ -69,6 +127,4 @@ class CrispEmbedder implements Embedder {
     }
     return probe.length;
   }
-
-  static String _basename(String path) => path.split(RegExp(r'[\\/]')).last;
 }
