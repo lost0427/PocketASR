@@ -83,7 +83,7 @@ jobs:
       - name: Build 16KB-aligned native libraries from pinned sources
         if: steps.native-check.outputs.found != 'true'
         run: bash scripts/ci/build_native_android.sh
-      - run: flutter build apk --release
+      - run: flutter build apk --release --target-platform android-arm64
       - name: Verify APK native payload
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk

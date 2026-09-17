@@ -30,9 +30,20 @@ android {
 
         // PocketASR ships native ASR/embedding libraries for arm64 only.
         // They are BUILT FROM PINNED SOURCE by CI (scripts/ci/build_native_android.sh,
-        // see native/README.md) — never fetched or committed.
+        // see native/README.md) — never fetched or committed. This also filters
+        // plugin AARs (sherpa-onnx, dartjni, onnxruntime) down to arm64 —
+        // `--target-platform` alone does not.
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // Gradle 9 / AGP 9: built-in Kotlin ignores `ndk.abiFilters` for jniLibs
+    // merging, so enforce arm64-only packaging here. Without it, plugin AARs
+    // re-add armeabi-v7a/x86_64 and the APK grows ~65MB.
+    packaging {
+        jniLibs {
+            excludes += setOf("lib/armeabi-v7a/**", "lib/x86/**", "lib/x86_64/**")
         }
     }
 
