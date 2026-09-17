@@ -608,6 +608,30 @@ abstract class AppLocalizations {
   /// **'Copied to clipboard'**
   String get historyCopied;
 
+  /// No description provided for @historySelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String historySelectedCount(int count);
+
+  /// No description provided for @historySelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get historySelectAll;
+
+  /// No description provided for @historyDeselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get historyDeselectAll;
+
+  /// No description provided for @historyCopiedMany.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Copied 1 transcript to clipboard} other{Copied {count} transcripts to clipboard}}'**
+  String historyCopiedMany(int count);
+
   /// No description provided for @historyMoveToTrash.
   ///
   /// In en, this message translates to:
@@ -637,6 +661,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This transcript will be erased from this device and cannot be recovered.'**
   String get historyDeleteConfirmBody;
+
+  /// No description provided for @historyDeleteManyConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This transcript will be erased from this device and cannot be recovered.} other{These {count} transcripts will be erased from this device and cannot be recovered.}}'**
+  String historyDeleteManyConfirmBody(int count);
 
   /// No description provided for @historyDetailTitle.
   ///
@@ -1253,7 +1283,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsVadHint.
   ///
   /// In en, this message translates to:
-  /// **'Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.'**
+  /// **'Neural VAD runs the selected VAD model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.'**
   String get settingsVadHint;
 
   /// No description provided for @settingsVadModel.

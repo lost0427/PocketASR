@@ -87,11 +87,31 @@
   "historyTrashEmpty": "Trash is empty",
   "historyCopy": "Copy",
   "historyCopied": "Copied to clipboard",
+  "historySelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@historySelectedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "historySelectAll": "Select all",
+  "historyDeselectAll": "Deselect all",
+  "historyCopiedMany": "{count, plural, =1{Copied 1 transcript to clipboard} other{Copied {count} transcripts to clipboard}}",
+  "@historyCopiedMany": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "historyMoveToTrash": "Move to trash",
   "historyRestore": "Restore",
   "historyDeletePermanently": "Delete permanently",
   "historyDeleteConfirmTitle": "Delete permanently?",
   "historyDeleteConfirmBody": "This transcript will be erased from this device and cannot be recovered.",
+  "historyDeleteManyConfirmBody": "{count, plural, =1{This transcript will be erased from this device and cannot be recovered.} other{These {count} transcripts will be erased from this device and cannot be recovered.}}",
+  "@historyDeleteManyConfirmBody": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "historyDetailTitle": "Transcript",
   "historyDetailCreated": "Created",
   "historyDetailAudio": "Audio",
@@ -220,7 +240,7 @@
   "benchExportFailed": "Export failed",
   "benchExitHint": "Tap the title seven times to leave.",
   "settingsChunkNeural": "Neural VAD",
-  "settingsVadHint": "Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.",
+  "settingsVadHint": "Neural VAD runs the selected VAD model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.",
   "settingsVadModel": "VAD model",
   "settingsVadModelNone": "None selected",
   "settingsVadThreshold": "Speech threshold",

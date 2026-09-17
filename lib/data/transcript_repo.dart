@@ -77,9 +77,10 @@ Transcript transcriptFromRow(Row row) => Transcript(
 /// Notifies listeners after every successful mutation ([insert],
 /// [softDelete], [restore], [purge], [purgeAll]) so the History page can
 /// refresh and the semantic indexer can react to new, restored, and trashed
-/// rows. Reuses Flutter's [ChangeNotifier] rather than inventing a second
-/// event bus; a spurious refresh after a no-op delete is harmless and not
-/// worth a row-count probe.
+/// rows. Batch mutations run in one transaction and notify once. Reuses
+/// Flutter's [ChangeNotifier] rather than inventing a second event bus; a
+/// spurious refresh after a no-op delete is harmless and not worth a row-count
+/// probe.
 class TranscriptRepo extends ChangeNotifier {
   TranscriptRepo(this._database);
 
@@ -159,34 +160,67 @@ class TranscriptRepo extends ChangeNotifier {
 
   /// Moves a transcript to the trash. Notifies on success; the indexer's
   /// next pass simply skips the trashed row (it never embeds dead rows).
-  void softDelete(int id, {DateTime? at}) {
-    _db.execute('UPDATE transcript SET deleted_at = ? WHERE id = ?', [
-      (at ?? DateTime.now()).millisecondsSinceEpoch,
-      id,
-    ]);
-    notifyListeners();
+  void softDelete(int id, {DateTime? at}) => softDeleteMany([id], at: at);
+
+  /// Moves all [ids] to the trash atomically and refreshes listeners once.
+  void softDeleteMany(Iterable<int> ids, {DateTime? at}) {
+    _mutateMany(
+      ids,
+      'UPDATE transcript SET deleted_at = ? WHERE id = ?',
+      leadingParameters: [(at ?? DateTime.now()).millisecondsSinceEpoch],
+    );
   }
 
   /// Takes a transcript back out of the trash. Notifies so the indexer can
   /// pick up a restored row that has (or lost) no vector.
-  void restore(int id) {
-    _db.execute('UPDATE transcript SET deleted_at = NULL WHERE id = ?', [id]);
-    notifyListeners();
+  void restore(int id) => restoreMany([id]);
+
+  /// Restores all [ids] atomically and refreshes listeners once.
+  void restoreMany(Iterable<int> ids) {
+    _mutateMany(ids, 'UPDATE transcript SET deleted_at = NULL WHERE id = ?');
   }
 
   /// Permanently deletes one trashed transcript (segments and embedding go with
   /// it through `ON DELETE CASCADE`). No-op for live rows.
-  void purge(int id) {
-    _db.execute(
+  void purge(int id) => purgeMany([id]);
+
+  /// Permanently erases all trashed [ids] atomically and notifies once.
+  void purgeMany(Iterable<int> ids) {
+    _mutateMany(
+      ids,
       'DELETE FROM transcript WHERE id = ? AND deleted_at IS NOT NULL',
-      [id],
     );
-    notifyListeners();
   }
 
   /// Empties the trash.
   void purgeAll() {
     _db.execute('DELETE FROM transcript WHERE deleted_at IS NOT NULL');
+    notifyListeners();
+  }
+
+  void _mutateMany(
+    Iterable<int> ids,
+    String sql, {
+    List<Object?> leadingParameters = const [],
+  }) {
+    final uniqueIds = ids.toSet();
+    if (uniqueIds.isEmpty) return;
+
+    _db.execute('BEGIN');
+    try {
+      final statement = _db.prepare(sql);
+      try {
+        for (final id in uniqueIds) {
+          statement.execute([...leadingParameters, id]);
+        }
+      } finally {
+        statement.close();
+      }
+      _db.execute('COMMIT');
+    } catch (_) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
     notifyListeners();
   }
 

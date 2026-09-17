@@ -242,6 +242,26 @@ void main() {
     expect(find.text('CPU'), findsWidgets);
   });
 
+  testWidgets('stacks engine status tiles on a narrow screen', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app(engine: const _FakeEngine(_availableCaps)));
+    await tester.pumpAndSettle();
+
+    final modelTop = tester.getTopLeft(find.byIcon(Icons.layers_outlined)).dy;
+    final engineTop = tester.getTopLeft(find.byIcon(Icons.memory_outlined)).dy;
+    final backendTop = tester
+        .getTopLeft(find.byIcon(Icons.developer_board_outlined))
+        .dy;
+
+    expect(engineTop, greaterThan(modelTop));
+    expect(backendTop, engineTop);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a finished run shows real metrics and saves the transcript', (
     tester,
   ) async {

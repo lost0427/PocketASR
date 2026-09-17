@@ -281,6 +281,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyCopied => 'Copied to clipboard';
 
   @override
+  String historySelectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historySelectAll => 'Select all';
+
+  @override
+  String get historyDeselectAll => 'Deselect all';
+
+  @override
+  String historyCopiedMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Copied $count transcripts to clipboard',
+      one: 'Copied 1 transcript to clipboard',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get historyMoveToTrash => 'Move to trash';
 
   @override
@@ -295,6 +323,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get historyDeleteConfirmBody =>
       'This transcript will be erased from this device and cannot be recovered.';
+
+  @override
+  String historyDeleteManyConfirmBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'These $count transcripts will be erased from this device and cannot be recovered.',
+      one: 'This transcript will be erased from this device and cannot be recovered.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get historyDetailTitle => 'Transcript';
@@ -628,7 +668,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsVadHint =>
-      'Neural VAD runs a real Silero model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.';
+      'Neural VAD runs the selected VAD model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.';
 
   @override
   String get settingsVadModel => 'VAD model';

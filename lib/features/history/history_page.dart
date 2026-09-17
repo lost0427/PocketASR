@@ -42,8 +42,15 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _trash = false;
   SearchMode _mode = SearchMode.literal;
   List<Transcript> _rows = const [];
+  final Set<int> _selectedIds = {};
 
   bool get _hasEmbedder => widget.search.embedder != null;
+  bool get _selecting => _selectedIds.isNotEmpty;
+
+  List<Transcript> get _selectedRows => [
+    for (final row in _rows)
+      if (_selectedIds.contains(row.id)) row,
+  ];
 
   /// The literal terms to mark in results. Only a literal search has words that
   /// really occur in the text, so semantic/hybrid mark nothing: a semantic hit
@@ -70,6 +77,7 @@ class _HistoryPageState extends State<HistoryPage> {
     if (!identical(widget.repo, oldWidget.repo)) {
       oldWidget.repo.removeListener(_onRepoChanged);
       widget.repo.addListener(_onRepoChanged);
+      _selectedIds.clear();
       _reload();
     } else if (!identical(widget.search, oldWidget.search)) {
       // The embedder changed: a semantic/hybrid mode may no longer be valid.
@@ -98,20 +106,24 @@ class _HistoryPageState extends State<HistoryPage> {
   /// dropped instead of a setState-after-dispose crash.
   int _reloadSeq = 0;
 
+  void _showRows(List<Transcript> rows) {
+    final visibleIds = rows.map((row) => row.id).toSet();
+    setState(() {
+      _rows = rows;
+      _selectedIds.removeWhere((id) => !visibleIds.contains(id));
+    });
+  }
+
   void _reload() {
     final query = _query.text.trim();
     final mode = _hasEmbedder ? _mode : SearchMode.literal;
     final seq = ++_reloadSeq;
     if (query.isEmpty) {
-      setState(() {
-        _rows = _trash ? widget.repo.listTrash() : widget.repo.list();
-      });
+      _showRows(_trash ? widget.repo.listTrash() : widget.repo.list());
       return;
     }
     if (mode == SearchMode.literal) {
-      setState(() {
-        _rows = widget.search.searchLiteral(query, onlyTrash: _trash);
-      });
+      _showRows(widget.search.searchLiteral(query, onlyTrash: _trash));
       return;
     }
     // Semantic/hybrid embed on the worker isolate, so the rows land later.
@@ -120,7 +132,7 @@ class _HistoryPageState extends State<HistoryPage> {
           ? widget.search.searchSemantic(query, onlyTrash: _trash)
           : widget.search.searchHybrid(query, onlyTrash: _trash));
       if (!mounted || seq != _reloadSeq) return; // superseded or disposed
-      setState(() => _rows = rows);
+      _showRows(rows);
     }());
   }
 
@@ -189,6 +201,66 @@ class _HistoryPageState extends State<HistoryPage> {
       ..showSnackBar(SnackBar(content: Text(l10n.historyCopied)));
   }
 
+  void _startSelection(Transcript row) {
+    setState(() => _selectedIds.add(row.id));
+  }
+
+  void _toggleSelection(Transcript row) {
+    setState(() {
+      if (!_selectedIds.remove(row.id)) _selectedIds.add(row.id);
+    });
+  }
+
+  void _clearSelection() {
+    if (!_selecting) return;
+    setState(_selectedIds.clear);
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      final allSelected =
+          _rows.isNotEmpty &&
+          _rows.every((row) => _selectedIds.contains(row.id));
+      if (allSelected) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(_rows.map((row) => row.id));
+      }
+    });
+  }
+
+  Future<void> _copySelected() async {
+    final rows = _selectedRows;
+    if (rows.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(
+      ClipboardData(text: rows.map((row) => row.text).join('\n\n')),
+    );
+    if (!mounted) return;
+    _clearSelection();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(l10n.historyCopiedMany(rows.length))),
+      );
+  }
+
+  void _moveSelectedToTrash() {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    _clearSelection();
+    widget.repo.softDeleteMany(ids);
+  }
+
+  void _restoreSelected() {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    _clearSelection();
+    widget.repo.restoreMany(ids);
+  }
+
+
   void _moveToTrash(Transcript row) {
     widget.repo.softDelete(row.id);
   }
@@ -219,6 +291,95 @@ class _HistoryPageState extends State<HistoryPage> {
     );
     if (confirmed == true) widget.repo.purge(row.id);
   }
+
+  Future<void> _confirmPurgeSelected() async {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.historyDeleteConfirmTitle),
+        content: Text(l10n.historyDeleteManyConfirmBody(ids.length)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.modelsCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.historyDeletePermanently),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    _clearSelection();
+    widget.repo.purgeMany(ids);
+  }
+
+  Widget _selectionBar(AppLocalizations l10n) {
+    final scheme = Theme.of(context).colorScheme;
+    final allSelected =
+        _rows.isNotEmpty && _rows.every((row) => _selectedIds.contains(row.id));
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: l10n.modelsCancel,
+            onPressed: _clearSelection,
+            icon: const Icon(Icons.close),
+          ),
+          Expanded(
+            child: Semantics(
+              label: l10n.historySelectedCount(_selectedIds.length),
+              child: Text(
+                '${_selectedIds.length}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: allSelected
+                ? l10n.historyDeselectAll
+                : l10n.historySelectAll,
+            onPressed: _toggleSelectAll,
+            icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+          ),
+          IconButton(
+            tooltip: l10n.historyCopy,
+            onPressed: _copySelected,
+            icon: const Icon(Icons.copy_all_outlined),
+          ),
+          if (_trash) ...[
+            IconButton(
+              tooltip: l10n.historyRestore,
+              onPressed: _restoreSelected,
+              icon: const Icon(Icons.restore_from_trash_outlined),
+            ),
+            IconButton(
+              tooltip: l10n.historyDeletePermanently,
+              onPressed: _confirmPurgeSelected,
+              color: scheme.error,
+              icon: const Icon(Icons.delete_forever_outlined),
+            ),
+          ] else
+            IconButton(
+              tooltip: l10n.historyMoveToTrash,
+              onPressed: _moveSelectedToTrash,
+              icon: const Icon(Icons.delete_outline),
+            ),
+        ],
+      ),
+    );
+  }
+
 
   Future<void> _openDetail(Transcript row) async {
     final l10n = AppLocalizations.of(context);
@@ -252,9 +413,10 @@ class _HistoryPageState extends State<HistoryPage> {
     final terms = _hitTerms;
     final mark = _markStyle(theme.colorScheme);
 
-    return Column(
+    final body = Column(
       children: [
-        Padding(
+        if (_selecting) _selectionBar(l10n),
+        if (!_selecting) Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: TextField(
             controller: _query,
@@ -274,7 +436,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
           ),
         ),
-        Padding(
+        if (!_selecting) Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,29 +468,32 @@ class _HistoryPageState extends State<HistoryPage> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  SegmentedButton<SearchMode>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                        value: SearchMode.literal,
-                        label: Text(l10n.historySearchLiteral),
-                      ),
-                      ButtonSegment(
-                        value: SearchMode.semantic,
-                        enabled: _hasEmbedder,
-                        label: Text(l10n.historySearchSemantic),
-                      ),
-                      ButtonSegment(
-                        value: SearchMode.hybrid,
-                        enabled: _hasEmbedder,
-                        label: Text(l10n.historySearchHybrid),
-                      ),
-                    ],
-                    selected: {_mode},
-                    onSelectionChanged: (selection) {
-                      setState(() => _mode = selection.first);
-                      _reload();
-                    },
+                  Expanded(
+                    child: SegmentedButton<SearchMode>(
+                      expandedInsets: EdgeInsets.zero,
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(
+                          value: SearchMode.literal,
+                          label: Text(l10n.historySearchLiteral),
+                        ),
+                        ButtonSegment(
+                          value: SearchMode.semantic,
+                          enabled: _hasEmbedder,
+                          label: Text(l10n.historySearchSemantic),
+                        ),
+                        ButtonSegment(
+                          value: SearchMode.hybrid,
+                          enabled: _hasEmbedder,
+                          label: Text(l10n.historySearchHybrid),
+                        ),
+                      ],
+                      selected: {_mode},
+                      onSelectionChanged: (selection) {
+                        setState(() => _mode = selection.first);
+                        _reload();
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -356,8 +521,19 @@ class _HistoryPageState extends State<HistoryPage> {
                   itemCount: _rows.length,
                   itemBuilder: (context, index) {
                     final row = _rows[index];
+                    final selected = _selectedIds.contains(row.id);
                     return Card(
+                      color: selected
+                          ? theme.colorScheme.secondaryContainer
+                          : null,
                       child: ListTile(
+                        selected: selected,
+                        leading: _selecting
+                            ? Checkbox(
+                                value: selected,
+                                onChanged: (_) => _toggleSelection(row),
+                              )
+                            : null,
                         title: Text.rich(
                           TextSpan(children: _highlight(row.title, terms, mark)),
                           maxLines: 1,
@@ -368,8 +544,11 @@ class _HistoryPageState extends State<HistoryPage> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        onTap: () => _openDetail(row),
-                        trailing: PopupMenuButton<String>(
+                        onTap: () => _selecting
+                            ? _toggleSelection(row)
+                            : _openDetail(row),
+                        onLongPress: () => _startSelection(row),
+                        trailing: _selecting ? null : PopupMenuButton<String>(
                           onSelected: (action) {
                             switch (action) {
                               case 'copy':
@@ -409,6 +588,13 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
         ),
       ],
+    );
+    return PopScope<void>(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _clearSelection();
+      },
+      child: body,
     );
   }
 }

@@ -216,7 +216,11 @@ void main() {
 
     repo.insert(title: 'WiFi', text: 'connect to the wifi network');
     await tester.runAsync(() => indexer.indexPending());
-    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
+    await pumpHistory(
+      tester,
+      searchRepo: semanticSearch,
+      indexer: indexer,
+    );
 
     await tester.enterText(find.byType(TextField), 'wifi network');
     await tester.pumpAndSettle();
@@ -283,6 +287,115 @@ void main() {
     await tester.tap(find.byTooltip('Copy'));
     await tester.pumpAndSettle();
     expect(copied, ['hello world']);
+  });
+
+  testWidgets('long press selects history rows and moves them together', (
+    tester,
+  ) async {
+    final first = repo.insert(title: 'First', text: 'one');
+    final second = repo.insert(title: 'Second', text: 'two');
+    final keep = repo.insert(title: 'Keep', text: 'three');
+    await pumpHistory(tester);
+
+    await tester.longPress(find.text('First'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox), findsNWidgets(3));
+
+    await tester.tap(find.text('Second'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move to trash'));
+    await tester.pumpAndSettle();
+
+    expect(repo.list().map((row) => row.id), [keep]);
+    expect(repo.listTrash().map((row) => row.id).toSet(), {first, second});
+    expect(find.byType(Checkbox), findsNothing);
+  });
+
+  testWidgets('trash selection restores and permanently deletes in batches', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final restoreA = repo.insert(title: 'Restore A', text: 'a');
+    final restoreB = repo.insert(title: 'Restore B', text: 'b');
+    final deleteA = repo.insert(title: 'Delete A', text: 'c');
+    final deleteB = repo.insert(title: 'Delete B', text: 'd');
+    repo.softDeleteMany([restoreA, restoreB, deleteA, deleteB]);
+    await pumpHistory(tester);
+
+    await tester.tap(find.text('Trash'));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Restore A'));
+    await tester.tap(find.text('Restore B'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Restore'));
+    await tester.pumpAndSettle();
+
+    expect(repo.list().map((row) => row.id).toSet(), {restoreA, restoreB});
+    expect(repo.listTrash().map((row) => row.id).toSet(), {deleteA, deleteB});
+
+    await tester.longPress(find.text('Delete A'));
+    await tester.tap(find.text('Delete B'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Delete permanently'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'These 2 transcripts will be erased from this device and cannot be recovered.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+    await tester.pumpAndSettle();
+    expect(repo.listTrash(), isEmpty);
+  });
+
+  testWidgets('select all copies visible transcripts and exits selection', (
+    tester,
+  ) async {
+    final copied = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    repo.insert(title: 'First', text: 'first body');
+    repo.insert(title: 'Second', text: 'second body');
+    repo.insert(title: 'Hidden', text: 'not included');
+    await pumpHistory(tester);
+
+    await tester.enterText(find.byType(TextField), 'body');
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Second'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Select all'));
+    await tester.pumpAndSettle();
+    final firstIsAboveSecond =
+        tester.getTopLeft(find.text('First')).dy <
+        tester.getTopLeft(find.text('Second')).dy;
+    await tester.tap(find.byTooltip('Copy'));
+    await tester.pumpAndSettle();
+
+    expect(
+      copied,
+      [
+        firstIsAboveSecond
+            ? 'first body\n\nsecond body'
+            : 'second body\n\nfirst body',
+      ],
+    );
+    expect(find.text('Copied 2 transcripts to clipboard'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
   });
 
   testWidgets('trash scope lists only trashed rows, purge asks first', (
@@ -416,11 +529,7 @@ void main() {
 
     repo.insert(title: 'Alpha', text: 'alpha one');
     await tester.runAsync(() => indexer.indexPending());
-    await pumpHistory(
-      tester,
-      searchRepo: semanticSearch,
-      indexer: indexer,
-    );
+    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
     await tester.tap(find.text('Semantic'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'slow');

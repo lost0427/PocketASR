@@ -270,6 +270,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyCopied => '已复制到剪贴板';
 
   @override
+  String historySelectedCount(int count) {
+    return '已选择 $count 项';
+  }
+
+  @override
+  String get historySelectAll => '全选';
+
+  @override
+  String get historyDeselectAll => '取消全选';
+
+  @override
+  String historyCopiedMany(int count) {
+    return '已复制 $count 条转录到剪贴板';
+  }
+
+  @override
   String get historyMoveToTrash => '移入回收站';
 
   @override
@@ -283,6 +299,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyDeleteConfirmBody => '该转录将从本机彻底删除，无法恢复。';
+
+  @override
+  String historyDeleteManyConfirmBody(int count) {
+    return '这 $count 条转录将从本机彻底删除，无法恢复。';
+  }
 
   @override
   String get historyDetailTitle => '转录详情';
@@ -604,7 +625,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsVadHint =>
-      '神经 VAD 在独立的 sherpa-onnx worker 上运行真实 Silero 模型，按模型听到的内容切分语音，而不是按响度；它不是 ASR 模型。';
+      '神经 VAD 在独立的 sherpa-onnx worker 上运行所选 VAD 模型，按模型听到的内容切分语音，而不是按响度；它不是 ASR 模型。';
 
   @override
   String get settingsVadModel => 'VAD 模型';

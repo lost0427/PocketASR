@@ -533,45 +533,74 @@ class _TranscribePageState extends State<TranscribePage> {
                   const SizedBox(height: 32),
                   _SectionLabel(l10n.transcribeEngineSection),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: _StatusTile(
-                          icon: Icons.layers_outlined,
-                          label: l10n.transcribeModel,
-                          valueChild: state == null
-                              ? Text(
-                                  l10n.transcribeModelNone,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleMedium,
-                                )
-                              : SelectedModelName(
-                                  library: widget.modelLibrary,
-                                  state: state,
-                                  emptyLabel: l10n.transcribeModelNone,
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatusTile(
-                          icon: Icons.memory_outlined,
-                          label: l10n.transcribeEngineSection,
-                          value: widget.engine.id,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatusTile(
-                          icon: Icons.developer_board_outlined,
-                          label: l10n.transcribeBackend,
-                          value: _backendLabel(capabilities, l10n),
-                        ),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final modelTile = _StatusTile(
+                        icon: Icons.layers_outlined,
+                        label: l10n.transcribeModel,
+                        valueChild: state == null
+                            ? Text(
+                                l10n.transcribeModelNone,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium,
+                              )
+                            : SelectedModelName(
+                                library: widget.modelLibrary,
+                                state: state,
+                                emptyLabel: l10n.transcribeModelNone,
+                                style: theme.textTheme.titleMedium,
+                              ),
+                      );
+                      final engineTile = _StatusTile(
+                        icon: Icons.memory_outlined,
+                        label: l10n.transcribeEngineSection,
+                        value: widget.engine.id,
+                      );
+                      final backendTile = _StatusTile(
+                        icon: Icons.developer_board_outlined,
+                        label: l10n.transcribeBackend,
+                        value: _backendLabel(capabilities, l10n),
+                      );
+
+                      if (constraints.maxWidth >= 480) {
+                        return Row(
+                          children: [
+                            Expanded(flex: 2, child: modelTile),
+                            const SizedBox(width: 12),
+                            Expanded(child: engineTile),
+                            const SizedBox(width: 12),
+                            Expanded(child: backendTile),
+                          ],
+                        );
+                      }
+                      if (constraints.maxWidth >= 300) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            modelTile,
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(child: engineTile),
+                                const SizedBox(width: 12),
+                                Expanded(child: backendTile),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          modelTile,
+                          const SizedBox(height: 12),
+                          engineTile,
+                          const SizedBox(height: 12),
+                          backendTile,
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
