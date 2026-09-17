@@ -13,6 +13,11 @@ import '../../l10n/app_localizations.dart';
 import 'benchmark_runner.dart';
 import 'seven_tap.dart';
 
+typedef BenchmarkEngineFactory = AsrEngine Function(String engineId);
+typedef BenchmarkServiceFactory = TranscriptionService Function(
+  AsrEngine engine,
+);
+
 /// Hidden benchmark page (requirement 15), reached by tapping the version row
 /// seven times in Settings and left the same way on this page's title.
 ///
@@ -27,18 +32,27 @@ class BenchPage extends StatefulWidget {
     super.key,
     this.engine = const UnavailableAsrEngine(),
     this.service,
+    this.engineFactory,
+    this.serviceFactory,
     this.entries,
     this.store,
     this.state,
     this.pickAudio,
     this.exportFile,
-  });
+  }) : assert(engineFactory == null || service == null),
+       assert(engineFactory != null || serviceFactory == null);
 
-  /// Engine the matrix loads; production passes `AppState.engine`.
+  /// Single engine used when [engineFactory] is absent, primarily for tests.
   final AsrEngine engine;
 
-  /// Service seam; production builds one from [engine] (no history writes).
+  /// Single-engine service seam used when [engineFactory] is absent.
   final TranscriptionService? service;
+
+  /// Builds the matching engine for each catalog entry in a production run.
+  final BenchmarkEngineFactory? engineFactory;
+
+  /// Optional test seam for services built around [engineFactory] results.
+  final BenchmarkServiceFactory? serviceFactory;
 
   /// Catalog seam; production reads the allowlist asset.
   final List<ModelEntry>? entries;
@@ -71,17 +85,20 @@ class _BenchPageState extends State<BenchPage> {
   final Map<String, _Cell> _cells = {};
   bool _running = false;
   bool _cancelRequested = false;
+  AsrEngine? _activeEngine;
   List<BenchmarkResult> _results = const [];
 
   Future<_BenchSetup> _loadSetup() async {
-    var engineAvailable = false;
+    var engineAvailable = widget.engineFactory != null;
     String? engineReason;
-    try {
-      final caps = await widget.engine.capabilities();
-      engineAvailable = caps.available;
-      engineReason = caps.unavailableReason;
-    } catch (error) {
-      engineReason = error.toString();
+    if (widget.engineFactory == null) {
+      try {
+        final caps = await widget.engine.capabilities();
+        engineAvailable = caps.available;
+        engineReason = caps.unavailableReason;
+      } catch (error) {
+        engineReason = error.toString();
+      }
     }
 
     var downloaded = const <ModelEntry>[];
@@ -148,22 +165,42 @@ class _BenchPageState extends State<BenchPage> {
 
   Future<void> _run(List<ModelEntry> downloaded, ModelStore store) async {
     final audioPath = _audioPath;
-    if (_running || audioPath == null) return;
+    if (_running || audioPath == null || (widget.state?.engineBusy ?? false)) {
+      return;
+    }
     final state = widget.state;
     state?.resetVadEngine(); // a previous cancel must not poison this run
-    final service =
-        widget.service ??
-        TranscriptionService(
-          engine: widget.engine,
-          vadEngine: state?.activeVadEngine,
-        );
-    final runner = BenchmarkRunner(
-      widget.engine,
-      service,
-      chunkSettings: state?.chunkSettings,
-      neuralVad: state?.neuralVadSettings,
-    );
+    AsrEngine? ownedEngine;
+    String? ownedEngineId;
+    BenchmarkRunner? ownedRunner;
+    Future<void> disposeOwnedEngine() async {
+      final engine = ownedEngine;
+      ownedEngine = null;
+      ownedEngineId = null;
+      ownedRunner = null;
+      if (identical(_activeEngine, engine)) _activeEngine = null;
+      if (engine == null) return;
+      try {
+        await engine.dispose();
+      } catch (_) {
+        // Cleanup failure must not replace completed benchmark results.
+      }
+    }
 
+    final singleRunner = widget.engineFactory == null
+        ? BenchmarkRunner(
+            widget.engine,
+            widget.service ??
+                TranscriptionService(
+                  engine: widget.engine,
+                  vadEngine: state?.activeVadEngine,
+                ),
+            chunkSettings: state?.chunkSettings,
+            neuralVad: state?.neuralVadSettings,
+          )
+        : null;
+
+    state?.engineBusy = true;
     setState(() {
       _running = true;
       _cancelRequested = false;
@@ -172,23 +209,77 @@ class _BenchPageState extends State<BenchPage> {
     });
 
     final collected = <BenchmarkResult>[];
-    try {
+    final runOrder = <ModelEntry>[];
+    if (widget.engineFactory == null) {
+      runOrder.addAll(downloaded);
+    } else {
+      final groups = <String, List<ModelEntry>>{};
       for (final entry in downloaded) {
+        final engineId = entry.engine ??
+            AppState.engineIdForModelFile(store.pathFor(entry));
+        groups.putIfAbsent(engineId, () => []).add(entry);
+      }
+      for (final group in groups.values) {
+        runOrder.addAll(group);
+      }
+    }
+    try {
+      for (final entry in runOrder) {
         if (_cancelRequested) break;
+        final model = store.specFor(entry);
+        final engineId =
+            entry.engine ?? AppState.engineIdForModelFile(model.path);
+        final caseSpec = BenchmarkCase(id: entry.id, model: model);
         setState(
           () => _cells[entry.id] = const _Cell(_CellStatus.running),
         );
-        final result = await runner.run(
-          BenchmarkCase(
-            id: entry.id,
-            family: entry.family ?? '',
-            quant: entry.quant ?? '',
-            modelPath: store.pathFor(entry),
-          ),
-          audioPath,
-          repeats: _repeats,
-          isCancelled: () => _cancelRequested,
-        );
+        late BenchmarkResult result;
+        try {
+          final BenchmarkRunner runner;
+          if (singleRunner != null) {
+            runner = singleRunner;
+          } else {
+            if (ownedEngineId != engineId || ownedRunner == null) {
+              await disposeOwnedEngine();
+              if (_cancelRequested) {
+                throw const EngineCancelledException('Benchmark cancelled.');
+              }
+              final engine = widget.engineFactory!(engineId);
+              ownedEngine = engine;
+              ownedEngineId = engineId;
+              final service = widget.serviceFactory?.call(engine) ??
+                  TranscriptionService(
+                    engine: engine,
+                    vadEngine: state?.activeVadEngine,
+                  );
+              ownedRunner = BenchmarkRunner(
+                engine,
+                service,
+                chunkSettings: state?.chunkSettings,
+                neuralVad: state?.neuralVadSettings,
+              );
+            }
+            runner = ownedRunner!;
+          }
+          _activeEngine = runner.engine;
+          result = await runner.run(
+            caseSpec,
+            audioPath,
+            repeats: _repeats,
+            isCancelled: () => _cancelRequested,
+          );
+        } on EngineCancelledException {
+          rethrow;
+        } catch (error) {
+          result = BenchmarkResult(
+            caseSpec: caseSpec,
+            engine: engineId,
+            backend: Backend.cpu,
+            attempts: _repeats,
+            failures: _repeats,
+            error: error.toString(),
+          );
+        }
         collected.add(result);
         if (!mounted) return;
         setState(
@@ -201,6 +292,9 @@ class _BenchPageState extends State<BenchPage> {
     } on EngineCancelledException {
       // A cancel is not a failure cell: the in-flight row is marked cancelled.
     } finally {
+      _activeEngine = null;
+      await disposeOwnedEngine();
+      state?.engineBusy = false;
       if (mounted) {
         setState(() {
           _running = false;
@@ -218,7 +312,7 @@ class _BenchPageState extends State<BenchPage> {
   void _cancel() {
     if (!_running || _cancelRequested) return;
     setState(() => _cancelRequested = true);
-    final engine = widget.engine;
+    final engine = _activeEngine ?? widget.engine;
     if (engine is CancellableAsrEngine) engine.cancel();
     // Neural VAD plans on its own worker, so the cancel must reach that too.
     widget.state?.cancelVad();
@@ -285,6 +379,7 @@ class _BenchPageState extends State<BenchPage> {
         setup.downloaded.isNotEmpty &&
         store != null &&
         !_running &&
+        !(state?.engineBusy ?? false) &&
         !needsVad;
 
     return ListView(

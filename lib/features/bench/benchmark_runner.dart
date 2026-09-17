@@ -8,16 +8,18 @@ import '../transcribe/transcription_service.dart';
 class BenchmarkCase {
   const BenchmarkCase({
     required this.id,
-    required this.family,
-    required this.quant,
-    required this.modelPath,
+    required this.model,
   });
 
   /// Stable id (the catalog entry id) so a row can be tracked across runs.
   final String id;
-  final String family;
-  final String quant;
-  final String modelPath;
+
+  /// Complete catalog bundle, including tokens and encoder/decoder companions.
+  final EngineModelSpec model;
+
+  String get family => model.family ?? '';
+  String get quant => model.quant ?? '';
+  String get modelPath => model.path;
 }
 
 /// The median outcome of [BenchmarkRunner.run]'s repeated runs for one case.
@@ -106,11 +108,6 @@ class BenchmarkRunner {
     int repeats = 3,
     bool Function()? isCancelled,
   }) async {
-    final model = EngineModelSpec(
-      path: caseSpec.modelPath,
-      family: caseSpec.family,
-      quant: caseSpec.quant,
-    );
     final elapsed = <Duration>[];
     final tokensPerSecond = <double>[];
     final rtf = <double>[];
@@ -121,7 +118,7 @@ class BenchmarkRunner {
       try {
         final result = await service.transcribe(
           audioPath: audioPath,
-          model: model,
+          model: caseSpec.model,
           chunkSettings: chunkSettings,
           neuralVad: neuralVad,
           isCancelled: isCancelled,

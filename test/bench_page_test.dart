@@ -40,6 +40,50 @@ class _CancellableEngine extends _FakeEngine implements CancellableAsrEngine {
   Future<void> cancel() async => cancelCalls++;
 }
 
+class _NamedEngine extends _FakeEngine {
+  _NamedEngine(this.engineId);
+
+  final String engineId;
+  bool disposed = false;
+
+  @override
+  String get id => engineId;
+
+  @override
+  Future<void> dispose() async => disposed = true;
+}
+
+class _RoutingService extends TranscriptionService {
+  _RoutingService(AsrEngine engine, this.calls) : super(engine: engine);
+
+  final List<(String, EngineModelSpec)> calls;
+
+  @override
+  Future<TranscriptionJobResult> transcribe({
+    required String audioPath,
+    required EngineModelSpec model,
+    Backend backend = Backend.cpu,
+    String? language,
+    ChunkSettings? chunkSettings,
+    void Function(TranscriptionStage stage)? onStage,
+    void Function(TranscribeProgress progress)? onProgress,
+    bool Function()? isCancelled,
+    Object? neuralVad,
+  }) async {
+    calls.add((engine.id, model));
+    return TranscriptionJobResult(
+      text: 'ok',
+      elapsed: const Duration(milliseconds: 100),
+      audioDuration: const Duration(seconds: 1),
+      engine: engine.id,
+      model: model,
+      backend: backend,
+      originalLufs: -16,
+      gainDb: 0,
+    );
+  }
+}
+
 /// Returns results with controlled numbers so the medians are predictable:
 /// elapsed 100/200/300 ms, RTF 0.10/0.20/0.30 and tokens/s 10/20/30.
 class _ScriptedService extends TranscriptionService {
@@ -140,9 +184,11 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   void download(ModelEntry entry) {
-    File(store.pathFor(entry))
-      ..parent.createSync(recursive: true)
-      ..writeAsBytesSync(List.filled(16, 0));
+    for (final file in entry.bundleFiles) {
+      File(store.pathToFile(entry, file))
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(List.filled(16, 0));
+    }
   }
 
   /// A tall surface so every control and result is laid out in the test.
@@ -150,6 +196,8 @@ void main() {
     WidgetTester tester, {
     AsrEngine engine = const _FakeEngine(),
     TranscriptionService? service,
+    BenchmarkEngineFactory? engineFactory,
+    BenchmarkServiceFactory? serviceFactory,
     List<ModelEntry> entries = const [],
     String? audio,
     Future<void> Function(String, String)? exportFile,
@@ -164,6 +212,8 @@ void main() {
         home: BenchPage(
           engine: engine,
           service: service,
+          engineFactory: engineFactory,
+          serviceFactory: serviceFactory,
           entries: entries,
           store: store,
           pickAudio: () async => audio,
@@ -251,6 +301,63 @@ void main() {
     );
     expect(saved['pocketasr_benchmark.json'], contains('"rtf": 0.2'));
     expect(saved['pocketasr_benchmark.csv'], contains('"sensevoice"'));
+  });
+
+  testWidgets('routes bundles to their engines with complete model specs', (
+    tester,
+  ) async {
+    const whisper = ModelEntry(
+      id: 'whisper',
+      displayName: 'Whisper',
+      fileName: 'encoder.onnx',
+      family: 'whisper',
+      quant: 'int8',
+      engine: 'sherpa',
+      files: [
+        ModelFile(fileName: 'encoder.onnx', role: 'encoder'),
+        ModelFile(fileName: 'decoder.onnx', role: 'decoder'),
+        ModelFile(fileName: 'tokens.txt', role: 'tokens'),
+      ],
+    );
+    const crisp = ModelEntry(
+      id: 'crisp',
+      displayName: 'Crisp',
+      fileName: 'model.gguf',
+      family: 'sensevoice',
+      quant: 'q4_k',
+      engine: 'crispasr',
+    );
+    download(whisper);
+    download(crisp);
+
+    final engines = <_NamedEngine>[];
+    final calls = <(String, EngineModelSpec)>[];
+    await pumpBench(
+      tester,
+      entries: const [whisper, crisp],
+      audio: 'picked.wav',
+      engineFactory: (id) {
+        final engine = _NamedEngine(id);
+        engines.add(engine);
+        return engine;
+      },
+      serviceFactory: (engine) => _RoutingService(engine, calls),
+    );
+
+    await tester.tap(find.text('Choose audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run benchmark'));
+    await tester.pumpAndSettle();
+
+    expect(engines.map((engine) => engine.id), ['sherpa', 'crispasr']);
+    expect(calls, hasLength(6));
+    expect(calls.take(3).every((call) => call.$1 == 'sherpa'), isTrue);
+    expect(calls.skip(3).every((call) => call.$1 == 'crispasr'), isTrue);
+    final whisperSpec = calls.first.$2;
+    expect(whisperSpec.encoderPath, endsWith('encoder.onnx'));
+    expect(whisperSpec.decoderPath, endsWith('decoder.onnx'));
+    expect(whisperSpec.tokensPath, endsWith('tokens.txt'));
+    expect(engines.every((engine) => engine.disposed), isTrue);
   });
 
   testWidgets('a failed model shows the failure, never a number', (

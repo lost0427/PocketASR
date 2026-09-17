@@ -145,12 +145,16 @@ class SettingsPage extends StatelessWidget {
   }
 
   void _openBench(BuildContext context) {
-    // The benchmark runs the same engine the rest of the app would; it builds
-    // its own service so a benchmark never writes a transcript.
+    // Each catalog bundle gets its declared engine. Engines are reused within
+    // the run and owned by the benchmark, so the user's selection is unchanged.
     final state = AppStateScope.of(context);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => BenchPage(engine: state.engine, state: state),
+        builder: (_) => BenchPage(
+          state: state,
+          engineFactory: (id) =>
+              state.engineRegistry.createAsr(id, threads: state.threads),
+        ),
       ),
     );
   }
