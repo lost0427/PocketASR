@@ -13,8 +13,17 @@ if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $sha) { th
 $unpacked = Join-Path $cache $name
 if (!(Test-Path $unpacked)) { Expand-Archive $zip -DestinationPath $cache -Force }
 $target = Join-Path $Destination 'ffmpeg'
-New-Item -ItemType Directory -Force -Path $target | Out-Null
-Copy-Item -Path "$unpacked/*" -Destination $target -Recurse -Force
-& (Join-Path $target 'bin/ffmpeg.exe') -version
+$binDir = Join-Path $target 'bin'
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+# ffmpeg.exe hard-links every shared library in its import table, including
+# avdevice/avfilter/swscale, so all of them must ship even though decoding
+# never touches avdevice. ffplay, ffprobe, docs, headers and import libs do
+# nothing at runtime; dropping them keeps the release zip ~12MB smaller.
+$runtime = 'ffmpeg.exe', 'avcodec-63.dll', 'avformat-63.dll', 'avutil-61.dll',
+  'swresample-7.dll', 'avfilter-12.dll', 'swscale-10.dll', 'avdevice-63.dll'
+foreach ($file in $runtime) {
+  Copy-Item -LiteralPath (Join-Path $unpacked "bin/$file") -Destination $binDir
+}
+& (Join-Path $binDir 'ffmpeg.exe') -version
 if ($LASTEXITCODE -ne 0) { throw 'Bundled FFmpeg failed to start' }
 Copy-Item -LiteralPath "$PSScriptRoot/../../native/FFMPEG-NOTICE.txt" -Destination $target
