@@ -10,6 +10,32 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+/// Input convention used by an embedding model.
+///
+/// [metadata] keeps using prefixes declared by the loaded GGUF. Qwen3's
+/// official GGUF does not carry its SentenceTransformers query prompt, so its
+/// canonical retrieval instruction is supplied explicitly here while indexed
+/// documents remain unchanged.
+enum EmbeddingModelProfile {
+  metadata,
+  qwen3;
+
+  static EmbeddingModelProfile parse(String? value) => values.firstWhere(
+    (profile) => profile.name == value,
+    orElse: () => metadata,
+  );
+
+  static const _qwen3QueryPrefix =
+      'Instruct: Given a web search query, retrieve relevant passages that '
+      'answer the query\nQuery:';
+
+  String queryInput(String text, {String metadataPrefix = ''}) =>
+      '${this == qwen3 ? _qwen3QueryPrefix : metadataPrefix}$text';
+
+  String documentInput(String text, {String metadataPrefix = ''}) =>
+      '${this == qwen3 ? '' : metadataPrefix}$text';
+}
+
 /// Turns text into a fixed-length embedding vector.
 ///
 /// The embed methods return [FutureOr] so both a synchronous test embedder and

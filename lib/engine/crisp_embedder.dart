@@ -26,20 +26,25 @@ class CrispEmbedder implements Embedder {
   /// Loads [modelPath] now. [threads] is the native CPU thread count (0 lets
   /// the library auto-detect); [libPath] overrides the platform default library
   /// location, for callers that stage the `.so`/`.dll` themselves.
-  CrispEmbedder({required String modelPath, int threads = 0, String? libPath})
-    : _model = _open(modelPath, threads: threads, libPath: libPath),
-      id = identityFor(modelPath) {
+  CrispEmbedder({
+    required String modelPath,
+    this.profile = EmbeddingModelProfile.metadata,
+    int threads = 0,
+    String? libPath,
+  }) : _model = _open(modelPath, threads: threads, libPath: libPath),
+       id = identityFor(modelPath) {
     try {
       dim = _probeDim(_model, modelPath);
       // Verified against crispembed 0.16.1 (the local package; the native
       // binary is CI-fetched and not inspectable here): encode() applies only
       // the settable ctx prefix — documented as "empty string if none", and
       // the package's own example sets `query: ` manually to prefix outputs.
-      // E5 query/passage prefixes live in GGUF metadata and are exposed as
-      // *read-only* getters for the caller to apply, so encode() does not add
-      // them automatically. Prepending them below is therefore correct, and
-      // the `_model.prefix` check makes a double-prefix impossible if a future
-      // build starts pre-setting the ctx prefix on load.
+      // Model-declared query/passage prefixes are exposed as *read-only*
+      // getters for the caller to apply, so encode() does not add them
+      // automatically. The `_model.prefix` check makes a double-prefix
+      // impossible if a future build starts pre-setting the ctx prefix on
+      // load. Profiles with an explicit convention (Qwen3) override these
+      // metadata prefixes in [embedQuery]/[embedDocument].
       if (_model.prefix.isEmpty) {
         _queryPrefix = _model.ctxQueryPrefix;
         _passagePrefix = _model.ctxPassagePrefix;
@@ -57,6 +62,7 @@ class CrispEmbedder implements Embedder {
   }
 
   final crisp.CrispEmbed _model;
+  final EmbeddingModelProfile profile;
   late final String _queryPrefix;
   late final String _passagePrefix;
 
@@ -74,14 +80,13 @@ class CrispEmbedder implements Embedder {
   Float32List embed(String text) => _model.encode(text);
 
   @override
-  Float32List embedQuery(String text) => _encodePrefixed(text, _queryPrefix);
+  Float32List embedQuery(String text) =>
+      _model.encode(profile.queryInput(text, metadataPrefix: _queryPrefix));
 
   @override
-  Float32List embedDocument(String text) =>
-      _encodePrefixed(text, _passagePrefix);
-
-  Float32List _encodePrefixed(String text, String prefix) =>
-      prefix.isEmpty ? _model.encode(text) : _model.encode('$prefix$text');
+  Float32List embedDocument(String text) => _model.encode(
+    profile.documentInput(text, metadataPrefix: _passagePrefix),
+  );
 
   @override
   Future<void> dispose() async {

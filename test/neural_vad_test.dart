@@ -243,10 +243,10 @@ void main() {
     test('persists the VAD model and knobs, and reset restores defaults', () {
       final db = AppDatabase.open();
       addTearDown(db.close);
-      final model = write('silero.onnx');
+      final model = write('ten-vad.int8.onnx');
 
       AppState(database: db)
-        ..selectVad(path: model)
+        ..selectVad(path: model, family: VadModelFamily.ten)
         ..chunkStrategy = ChunkStrategy.neural
         ..vadThreshold = 0.7
         ..vadMinSilenceSeconds = 1.2
@@ -256,6 +256,7 @@ void main() {
 
       final restored = AppState(database: db);
       expect(restored.vadModelPath, model);
+      expect(restored.vadModelFamily, VadModelFamily.ten);
       expect(restored.chunkStrategy, ChunkStrategy.neural);
       expect(restored.vadThreshold, 0.7);
       expect(restored.vadMinSilenceSeconds, 1.2);
@@ -268,6 +269,7 @@ void main() {
       expect(restored.chunkSettings, isNull);
       final vad = restored.neuralVadSettings!;
       expect(vad.modelPath, model);
+      expect(vad.family, VadModelFamily.ten);
       expect(vad.threshold, 0.7);
       expect(vad.minSilenceDuration, 1.2);
       expect(vad.minSpeechDuration, 0.4);
@@ -400,7 +402,7 @@ void main() {
       tester,
     ) async {
       const asr = ModelEntry(id: 'asr', displayName: 'Speech', fileName: 'a.onnx');
-      const vad = ModelEntry(id: 'vad', displayName: 'Silero', fileName: 'v.onnx', type: 'vad');
+      const vad = ModelEntry(id: 'vad', displayName: 'TEN', fileName: 'v.onnx', family: 'ten', type: 'vad');
       final store = LocalModelStore(dir);
       for (final entry in [asr, vad]) {
         File(store.pathFor(entry))
@@ -439,6 +441,7 @@ void main() {
       await tester.tap(find.text('Use'));
       await tester.pumpAndSettle();
       expect(state.vadModelPath, store.pathFor(vad));
+      expect(state.vadModelFamily, VadModelFamily.ten);
       expect(state.modelPath, store.pathFor(asr)); // untouched
 
       // Deleting the VAD bundle clears only the VAD selection.
@@ -451,6 +454,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(state.vadModelPath, isNull);
+      expect(state.vadModelFamily, VadModelFamily.silero);
       expect(state.modelPath, store.pathFor(asr));
       expect(store.isDownloaded(vad), isFalse);
     });

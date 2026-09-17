@@ -9,6 +9,34 @@ import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/engine/embedding_index.dart';
 
 void main() {
+  group('EmbeddingModelProfile', () {
+    test('Qwen3 instructs queries and leaves documents unchanged', () {
+      expect(
+        EmbeddingModelProfile.qwen3.queryInput('无线网络'),
+        'Instruct: Given a web search query, retrieve relevant passages that '
+        'answer the query\nQuery:无线网络',
+      );
+      expect(EmbeddingModelProfile.qwen3.documentInput('会议记录'), '会议记录');
+    });
+
+    test('metadata profile applies prefixes declared by the GGUF', () {
+      expect(
+        EmbeddingModelProfile.metadata.queryInput(
+          'wifi',
+          metadataPrefix: 'query: ',
+        ),
+        'query: wifi',
+      );
+      expect(
+        EmbeddingModelProfile.metadata.documentInput(
+          'notes',
+          metadataPrefix: 'passage: ',
+        ),
+        'passage: notes',
+      );
+    });
+  });
+
   group('EmbeddingIndex', () {
     test('normalize makes a unit vector and keeps zero at zero', () {
       final unit = EmbeddingIndex.normalize(Float32List.fromList([3, 4]));
@@ -97,10 +125,7 @@ void main() {
         [
           id,
           embedder.dim,
-          vector.buffer.asUint8List(
-            vector.offsetInBytes,
-            vector.lengthInBytes,
-          ),
+          vector.buffer.asUint8List(vector.offsetInBytes, vector.lengthInBytes),
           embedder.id,
           0,
         ],
@@ -108,54 +133,63 @@ void main() {
       return id;
     }
 
-    test('searchSemantic ranks by similarity and hides trash by default', () async {
-      final wifi = store('WiFi', 'connect to the wifi network');
-      final lunch = store('Lunch', 'beef noodles for lunch');
+    test(
+      'searchSemantic ranks by similarity and hides trash by default',
+      () async {
+        final wifi = store('WiFi', 'connect to the wifi network');
+        final lunch = store('Lunch', 'beef noodles for lunch');
 
-      final hits = await search.searchSemantic('wifi network');
-      expect(hits.first.id, wifi);
-      expect(
-        (await search.searchSemantic('wifi network', topK: 1)).single.id,
-        wifi,
-      );
-      expect(hits.map((t) => t.id), contains(lunch)); // still comparable
+        final hits = await search.searchSemantic('wifi network');
+        expect(hits.first.id, wifi);
+        expect(
+          (await search.searchSemantic('wifi network', topK: 1)).single.id,
+          wifi,
+        );
+        expect(hits.map((t) => t.id), contains(lunch)); // still comparable
 
-      transcripts.softDelete(wifi);
-      expect(
-        (await search.searchSemantic('wifi network')).map((t) => t.id),
-        isNot(contains(wifi)),
-      );
-      expect(
-        (await search.searchSemantic('wifi network', includeTrash: true)).first.id,
-        wifi,
-      );
-    });
+        transcripts.softDelete(wifi);
+        expect(
+          (await search.searchSemantic('wifi network')).map((t) => t.id),
+          isNot(contains(wifi)),
+        );
+        expect(
+          (await search.searchSemantic(
+            'wifi network',
+            includeTrash: true,
+          )).first.id,
+          wifi,
+        );
+      },
+    );
 
-    test('returns nothing without an embedder and skips other models', () async {
-      final wifi = store('WiFi', 'wifi network');
-      final other = transcripts.insert(title: 'Other', text: 'wifi network');
-      db.db.execute(
-        'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
-        'VALUES(?,?,?,?,?)',
-        [
-          other,
-          3,
-          Float32List.fromList([1, 0, 0]).buffer.asUint8List(),
-          'other-model',
-          0,
-        ],
-      );
+    test(
+      'returns nothing without an embedder and skips other models',
+      () async {
+        final wifi = store('WiFi', 'wifi network');
+        final other = transcripts.insert(title: 'Other', text: 'wifi network');
+        db.db.execute(
+          'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
+          'VALUES(?,?,?,?,?)',
+          [
+            other,
+            3,
+            Float32List.fromList([1, 0, 0]).buffer.asUint8List(),
+            'other-model',
+            0,
+          ],
+        );
 
-      expect(await SearchRepo(db).searchSemantic('wifi'), isEmpty);
-      expect(
-        (await search.searchSemantic('wifi')).map((t) => t.id),
-        [wifi],
-      );
-    });
+        expect(await SearchRepo(db).searchSemantic('wifi'), isEmpty);
+        expect((await search.searchSemantic('wifi')).map((t) => t.id), [wifi]);
+      },
+    );
 
     test('searchHybrid fuses literal and semantic matches', () async {
       final wifi = store('WiFi', 'connect to the wifi network');
-      final tea = transcripts.insert(title: 'Tea', text: 'how to brew green tea');
+      final tea = transcripts.insert(
+        title: 'Tea',
+        text: 'how to brew green tea',
+      );
 
       final ids = (await search.searchHybrid('wifi')).map((t) => t.id);
       expect(ids, contains(wifi)); // literal + semantic both rank it
@@ -165,7 +199,10 @@ void main() {
       transcripts.softDelete(wifi);
       expect(await search.searchHybrid('wifi'), isEmpty);
       expect(
-        (await search.searchHybrid('wifi', includeTrash: true)).map((t) => t.id),
+        (await search.searchHybrid(
+          'wifi',
+          includeTrash: true,
+        )).map((t) => t.id),
         contains(wifi),
       );
     });

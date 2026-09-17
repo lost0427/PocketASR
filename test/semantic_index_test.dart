@@ -87,17 +87,23 @@ void main() {
       db.close();
     });
 
-    int embeddingCount({String? model}) => db.db
-        .select(
-          'SELECT COUNT(*) AS n FROM embedding'
-          '${model == null ? '' : ' WHERE model = ?'}',
-          [?model],
-        )
-        .single['n'] as int;
+    int embeddingCount({String? model}) =>
+        db.db.select(
+              'SELECT COUNT(*) AS n FROM embedding'
+              '${model == null ? '' : ' WHERE model = ?'}',
+              [?model],
+            ).single['n']
+            as int;
 
     test('indexPending writes vectors; semantic query ranks by them', () async {
-      final wifi = transcripts.insert(title: 'W', text: 'connect to the wifi network');
-      final lunch = transcripts.insert(title: 'L', text: 'beef noodles for lunch');
+      final wifi = transcripts.insert(
+        title: 'W',
+        text: 'connect to the wifi network',
+      );
+      final lunch = transcripts.insert(
+        title: 'L',
+        text: 'beef noodles for lunch',
+      );
 
       await indexer.indexPending();
 
@@ -105,7 +111,10 @@ void main() {
       expect(indexer.lastError, isNull);
       // Documents went in through embedDocument, the query through
       // embedQuery — the E5 prefix seam (never both, never plain embed).
-      expect(embedder.documentTexts, containsAll(['connect to the wifi network', 'beef noodles for lunch']));
+      expect(
+        embedder.documentTexts,
+        containsAll(['connect to the wifi network', 'beef noodles for lunch']),
+      );
       final hits = await search.searchSemantic('query');
       expect(hits.map((t) => t.id), [wifi, lunch]);
       expect(embedder.queryTexts, ['query']);
@@ -117,7 +126,10 @@ void main() {
     });
 
     test('indexTranscript indexes one row and is idempotent', () async {
-      final id = transcripts.insert(title: 'W', text: 'connect to the wifi network');
+      final id = transcripts.insert(
+        title: 'W',
+        text: 'connect to the wifi network',
+      );
       transcripts.insert(title: 'L', text: 'beef noodles for lunch');
 
       await indexer.indexTranscript(id);
@@ -129,14 +141,21 @@ void main() {
       expect(embedder.documentTexts.length, 1);
     });
 
-    test('indexTranscript skips a trashed row without even encoding', () async {
-      final id = transcripts.insert(title: 'T', text: 'connect to the wifi network');
+    test('indexTranscript keeps trashed rows searchable', () async {
+      final id = transcripts.insert(
+        title: 'T',
+        text: 'connect to the wifi network',
+      );
       transcripts.softDelete(id);
 
       await indexer.indexTranscript(id);
 
-      expect(embedder.documentTexts, isEmpty); // liveness checked pre-encode
-      expect(embeddingCount(), 0); // no vector resurrected for a dead row
+      expect(embedder.documentTexts, ['connect to the wifi network']);
+      expect(embeddingCount(), 1);
+      expect(
+        (await search.searchSemantic('query', onlyTrash: true)).single.id,
+        id,
+      );
     });
 
     test('a query never compares another model\'s vectors', () async {
@@ -144,7 +163,10 @@ void main() {
       // `near` holds a perfect match for the query tagged 'other-model',
       // `far` a weak match tagged with the query's own model.
       final near = transcripts.insert(title: 'N', text: 'foreign text');
-      final far = transcripts.insert(title: 'F', text: 'connect to the wifi network');
+      final far = transcripts.insert(
+        title: 'F',
+        text: 'connect to the wifi network',
+      );
       db.db.execute(
         'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
         'VALUES(?,?,?,?,?)',
@@ -158,20 +180,22 @@ void main() {
 
       // Without the `model = ?` filter, 'near' would rank first; isolation
       // means it is never even a candidate.
-      expect(
-        (await search.searchSemantic('query')).map((t) => t.id),
-        [far],
-      );
+      expect((await search.searchSemantic('query')).map((t) => t.id), [far]);
     });
 
-    test('rebuild deletes only this model\'s rows and never embeds the trashed', () async {
-      final wifi = transcripts.insert(title: 'W', text: 'connect to the wifi network');
+    test('rebuild replaces foreign vectors for history and trash', () async {
+      final wifi = transcripts.insert(
+        title: 'W',
+        text: 'connect to the wifi network',
+      );
       await indexer.indexPending(); // wifi -> fake-a
 
-      // A trashed transcript holding an 'other-model' vector: rebuild's DELETE
-      // skips it (other model) and re-embedding skips it (not live), so it
-      // survives untouched.
-      final doomed = transcripts.insert(title: 'D', text: 'beef noodles for lunch');
+      // A trashed transcript holding an old model's vector must be rebuilt too
+      // because semantic search is available in the recycle bin.
+      final doomed = transcripts.insert(
+        title: 'D',
+        text: 'beef noodles for lunch',
+      );
       transcripts.softDelete(doomed);
       db.db.execute(
         'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
@@ -181,11 +205,15 @@ void main() {
 
       await indexer.rebuild();
 
-      expect(embeddingCount(model: 'other-model'), 1);
-      expect(embeddingCount(model: 'fake-a'), 1);
+      expect(embeddingCount(model: 'other-model'), 0);
+      expect(embeddingCount(model: 'fake-a'), 2);
+      expect((await search.searchSemantic('query')).map((t) => t.id), [wifi]);
       expect(
-        (await search.searchSemantic('query')).map((t) => t.id),
-        [wifi],
+        (await search.searchSemantic(
+          'query',
+          onlyTrash: true,
+        )).map((t) => t.id),
+        [doomed],
       );
     });
 
@@ -193,7 +221,10 @@ void main() {
       // `embedding` is keyed by transcript_id alone (db.dart schema), so two
       // models cannot coexist on one live row: fake-a's pending pass replaces
       // the foreign vector. Fails loudly if the PK becomes composite.
-      final lunch = transcripts.insert(title: 'L', text: 'beef noodles for lunch');
+      final lunch = transcripts.insert(
+        title: 'L',
+        text: 'beef noodles for lunch',
+      );
       db.db.execute(
         'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
         'VALUES(?,?,?,?,?)',
@@ -206,54 +237,80 @@ void main() {
       expect(embeddingCount(model: 'fake-a'), 1);
     });
 
-    test('a trash or purge racing the embed never resurrects a row', () async {
-      final trashed = transcripts.insert(title: 'T', text: 'connect to the wifi network');
-      final purged = transcripts.insert(title: 'P', text: 'beef noodles for lunch');
+    test(
+      'trash stays searchable while a purge racing the embed is dropped',
+      () async {
+        final trashed = transcripts.insert(
+          title: 'T',
+          text: 'connect to the wifi network',
+        );
+        final purged = transcripts.insert(
+          title: 'P',
+          text: 'beef noodles for lunch',
+        );
 
-      // Mid-embed (after the pending snapshot, before the write txn) the row
-      // dies: the in-transaction liveness check must catch it for a soft
-      // delete, and the FK would catch it for a purge anyway.
-      embedder.onEmbed = (text) {
-        if (text == 'connect to the wifi network') {
-          transcripts.softDelete(trashed);
-        }
-        if (text == 'beef noodles for lunch') {
-          transcripts.softDelete(purged);
-          transcripts.purge(purged);
-        }
-      };
-      await indexer.indexPending();
+        // Mid-embed (after the pending snapshot, before the write txn), a trash
+        // move keeps the row searchable while a permanent purge drops the late
+        // vector write.
+        embedder.onEmbed = (text) {
+          if (text == 'connect to the wifi network') {
+            transcripts.softDelete(trashed);
+          }
+          if (text == 'beef noodles for lunch') {
+            transcripts.softDelete(purged);
+            transcripts.purge(purged);
+          }
+        };
+        await indexer.indexPending();
 
-      expect(embeddingCount(), 0);
-      embedder.onEmbed = null;
+        expect(embeddingCount(), 1);
+        expect(
+          (await search.searchSemantic('query', onlyTrash: true)).single.id,
+          trashed,
+        );
+        embedder.onEmbed = null;
 
-      // And a trashed row is skipped by indexPending from the start, even
-      // after restore comes later through a fresh indexPending.
-      final late = transcripts.insert(title: 'L', text: 'connect to the wifi network');
-      transcripts.softDelete(late);
-      await indexer.indexPending();
-      expect(embeddingCount(), 0);
-    });
+        // A row already in trash is also indexed by the next pending pass.
+        final late = transcripts.insert(
+          title: 'L',
+          text: 'connect to the wifi network',
+        );
+        transcripts.softDelete(late);
+        await indexer.indexPending();
+        expect(embeddingCount(), 2);
+      },
+    );
 
-    test('a dispose/model switch mid-embed never writes the stale index', () async {
-      // The slow (async) embed stands in for the worker round-trip: the model
-      // is replaced while it is in flight. The indexer's post-await liveness
-      // guards must drop the write instead of storing a vector under the
-      // dead model into the live table.
-      transcripts.insert(title: 'W', text: 'connect to the wifi network');
-      embedder.documentDelay = const Duration(milliseconds: 50);
+    test(
+      'a dispose/model switch mid-embed never writes the stale index',
+      () async {
+        // The slow (async) embed stands in for the worker round-trip: the model
+        // is replaced while it is in flight. The indexer's post-await liveness
+        // guards must drop the write instead of storing a vector under the
+        // dead model into the live table.
+        transcripts.insert(title: 'W', text: 'connect to the wifi network');
+        embedder.documentDelay = const Duration(milliseconds: 50);
 
-      final running = indexer.indexPending();
-      await Future<void>.delayed(const Duration(milliseconds: 10)); // mid-embed
-      indexer.dispose(); // AppState swaps the model here
-      await running; // must drain without touching the DB or the notifier
+        final running = indexer.indexPending();
+        await Future<void>.delayed(
+          const Duration(milliseconds: 10),
+        ); // mid-embed
+        indexer.dispose(); // AppState swaps the model here
+        await running; // must drain without touching the DB or the notifier
 
-      expect(embedder.documentTexts, isNotEmpty); // the encode itself happened
-      expect(embeddingCount(), 0); // but no stale write survived it
-    });
+        expect(
+          embedder.documentTexts,
+          isNotEmpty,
+        ); // the encode itself happened
+        expect(embeddingCount(), 0); // but no stale write survived it
+      },
+    );
 
     test('bad vectors are refused, exposed as state, and retryable', () async {
-      final id = transcripts.insert(title: 'W', text: 'connect to the wifi network');
+      final id = transcripts.insert(
+        title: 'W',
+        text: 'connect to the wifi network',
+      );
 
       embedder.custom = (text) => _v2(double.nan, 0);
       await indexer.indexPending();
@@ -274,20 +331,29 @@ void main() {
       expect((await search.searchSemantic('query')).single.id, id);
     });
 
-    test('jobs serialize and each awaitable call completes its own work', () async {
-      transcripts.insert(title: 'W', text: 'connect to the wifi network');
-      transcripts.insert(title: 'L', text: 'beef noodles for lunch');
+    test(
+      'jobs serialize and each awaitable call completes its own work',
+      () async {
+        transcripts.insert(title: 'W', text: 'connect to the wifi network');
+        transcripts.insert(title: 'L', text: 'beef noodles for lunch');
 
-      await Future.wait([indexer.indexPending(), indexer.indexPending()]);
+        await Future.wait([indexer.indexPending(), indexer.indexPending()]);
 
-      // If the two jobs overlapped they'd both embed the same two rows.
-      expect(embedder.documentTexts.length, 2);
-      expect(indexer.phase.value, SemanticIndexPhase.idle);
-    });
+        // If the two jobs overlapped they'd both embed the same two rows.
+        expect(embedder.documentTexts.length, 2);
+        expect(indexer.phase.value, SemanticIndexPhase.idle);
+      },
+    );
 
     test('truncated stored blobs are skipped, not trusted', () async {
-      final good = transcripts.insert(title: 'W', text: 'connect to the wifi network');
-      final bad = transcripts.insert(title: 'B', text: 'beef noodles for lunch');
+      final good = transcripts.insert(
+        title: 'W',
+        text: 'connect to the wifi network',
+      );
+      final bad = transcripts.insert(
+        title: 'B',
+        text: 'beef noodles for lunch',
+      );
       await indexer.indexPending();
       // Corrupt B's blob behind the indexer's back (legacy/hand-written row).
       db.db.execute(
@@ -342,10 +408,9 @@ void main() {
         search.searchLiteral('网络', includeTrash: true).map((t) => t.id),
         containsAll([live, trashed]),
       );
-      expect(
-        search.searchLiteral('网络', onlyTrash: true).map((t) => t.id),
-        [trashed],
-      );
+      expect(search.searchLiteral('网络', onlyTrash: true).map((t) => t.id), [
+        trashed,
+      ]);
       expect(
         await search.searchSemantic('网络', onlyTrash: true),
         isEmpty, // no embedder configured: honest empty
@@ -408,18 +473,26 @@ void main() {
           ..writeAsBytesSync(List.filled(4, 1));
 
         // Same basename, different paths → different identities.
-        expect(CrispEmbedder.identityFor(a.path), isNot(CrispEmbedder.identityFor(b.path)));
+        expect(
+          CrispEmbedder.identityFor(a.path),
+          isNot(CrispEmbedder.identityFor(b.path)),
+        );
         // Identity carries the path and the size, not just the name.
         expect(CrispEmbedder.identityFor(a.path), contains(a.path));
         expect(CrispEmbedder.identityFor(a.path), endsWith(':4'));
         // Same dir, same size, different file → still distinct.
-        expect(CrispEmbedder.identityFor(a.path), isNot(CrispEmbedder.identityFor(c.path)));
+        expect(
+          CrispEmbedder.identityFor(a.path),
+          isNot(CrispEmbedder.identityFor(c.path)),
+        );
         // An in-place model swap (same path, new content/size) is a new model.
         final before = CrispEmbedder.identityFor(a.path);
         a.writeAsBytesSync(List.filled(9, 1));
         expect(CrispEmbedder.identityFor(a.path), isNot(before));
-        expect(CrispEmbedder.identityFor('a-nonexistent.gguf'),
-            'crispembed:a-nonexistent.gguf'); // no throw on a bare name
+        expect(
+          CrispEmbedder.identityFor('a-nonexistent.gguf'),
+          'crispembed:a-nonexistent.gguf',
+        ); // no throw on a bare name
       } finally {
         dirA.deleteSync(recursive: true);
         dirB.deleteSync(recursive: true);

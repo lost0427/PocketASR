@@ -148,31 +148,47 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(6));
-      final qwen = entries.singleWhere((entry) => entry.family == 'qwen3');
-      expect(qwen.engine, 'crispasr');
-      expect(qwen.parameters, 938034704);
-      expect(qwen.primaryFile.sha256, hasLength(64));
+      expect(entries, hasLength(9));
+      final qwenAsr = entries.singleWhere(
+        (entry) => entry.id == 'crispasr-qwen3-asr-0.6b-q8',
+      );
+      expect(qwenAsr.engine, 'crispasr');
+      expect(qwenAsr.parameters, 938034704);
+      expect(qwenAsr.primaryFile.sha256, hasLength(64));
+      final qwenEmbedding = entries.singleWhere(
+        (entry) => entry.id == 'crispembed-qwen3-0.6b-q8',
+      );
+      expect(qwenEmbedding.family, 'qwen3');
+      expect(qwenEmbedding.engine, 'crispembed');
+      expect(qwenEmbedding.type, 'embedding');
+      expect(qwenEmbedding.quant, 'q8_0');
+      expect(qwenEmbedding.parameters, 600000000);
+      expect(qwenEmbedding.primaryFile.fileName, 'qwen3-embed-0.6b-q8_0.gguf');
+      expect(qwenEmbedding.primaryFile.sizeBytes, 639145792);
+      expect(
+        qwenEmbedding.primaryFile.sha256,
+        '072c5ca5019996cd0464e028801039055b38e78e038f7846010c70ddbe20e670',
+      );
       final crispAsr = entries
           .where((entry) => entry.engine == 'crispasr')
           .toList();
-      expect(
-        crispAsr.map((entry) => entry.id),
-        ['crispasr-sensevoice-q8', 'crispasr-qwen3-asr-0.6b-q8'],
-      );
+      expect(crispAsr.map((entry) => entry.id), [
+        'crispasr-sensevoice-q8',
+        'crispasr-qwen3-asr-0.6b-q8',
+      ]);
       expect(crispAsr.map((entry) => entry.quant), everyElement('q8_0'));
-      expect(
-        crispAsr.map((entry) => entry.primaryFile.fileName),
-        ['sensevoice-small-q8_0.gguf', 'qwen3-asr-0.6b-q8_0.gguf'],
-      );
+      expect(crispAsr.map((entry) => entry.primaryFile.fileName), [
+        'sensevoice-small-q8_0.gguf',
+        'qwen3-asr-0.6b-q8_0.gguf',
+      ]);
       for (final entry in entries) {
         // Every allowlist file must carry a verified size and checksum —
         // the store and downloader gate on both.
         for (final file in entry.bundleFiles) {
           expect(file.sizeBytes, isNotNull, reason: file.fileName);
           expect(file.sha256, isNotNull, reason: file.fileName);
-          // ASR/embedding live on Hugging Face; the Silero VAD comes from a
-          // (mutable) k2-fsa GitHub release tag — the sha256 is the gate.
+          // ASR/embedding live on Hugging Face; VAD models come from a
+          // mutable k2-fsa GitHub release tag, so sha256 is the gate.
           expect(file.url, startsWith('https://'), reason: file.fileName);
         }
         expect(entry.engine, isNotNull);
@@ -183,6 +199,49 @@ void main() {
       expect(
         whisper.bundleFiles.map((f) => f.role),
         containsAll(['encoder', 'decoder', 'tokens']),
+      );
+
+      final vad = entries.where((entry) => entry.type == 'vad').toList();
+      expect(
+        vad.map(
+          (entry) => (
+            entry.family,
+            entry.quant,
+            entry.primaryFile.fileName,
+            entry.primaryFile.sizeBytes,
+            entry.primaryFile.sha256,
+          ),
+        ),
+        [
+          (
+            'ten',
+            'int8',
+            'ten-vad.int8.onnx',
+            129534,
+            '880c072f188efa169ea028b2159d1b3a438e153d080b87eac31b74ecad511e61',
+          ),
+          (
+            'ten',
+            'fp32',
+            'ten-vad.onnx',
+            332211,
+            '718cb7eef47e3cf5ddbe7e967a7503f46b8b469c0706872f494dfa921b486206',
+          ),
+          (
+            'silero',
+            'int8',
+            'silero_vad.int8.onnx',
+            212860,
+            'c36d490aff5ab924ca6c7aeec4d8f6bd3d22db6fa17611b9c5b17eae58ac3a20',
+          ),
+          (
+            'silero',
+            'fp32',
+            'silero_vad.onnx',
+            643854,
+            '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6',
+          ),
+        ],
       );
     });
   });
@@ -195,11 +254,7 @@ void main() {
       fileName: 'unused',
       family: 'whisper',
       files: [
-        ModelFile(
-          fileName: 'model.onnx',
-          role: 'model',
-          sizeBytes: 4,
-        ),
+        ModelFile(fileName: 'model.onnx', role: 'model', sizeBytes: 4),
         ModelFile(fileName: 'tokens.txt', role: 'tokens', sizeBytes: 2),
       ],
     );

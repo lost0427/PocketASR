@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "comment": "Curated bundles PocketASR may fetch and run on-device. Each bundle is one primary model file plus companions (tokens, whisper encoder/decoder). sizeBytes/sha256 are the exact values pinned at the Hugging Face revision named in each URL; nothing here is estimated. license names the upstream license; where the mirror ships no LICENSE file, that is stated instead of implied. The vad bundle comes from a mutable GitHub release tag, so its sha256 is the integrity gate, not the URL.",
+  "comment": "Curated bundles PocketASR may fetch and run on-device. Each bundle is one primary model file plus companions (tokens, whisper encoder/decoder). sizeBytes/sha256 are exact verified values; nothing here is estimated. license names the upstream license; where the mirror ships no LICENSE file, that is stated instead of implied. VAD bundles come from a mutable GitHub release tag, so sha256 is the integrity gate, not the URL.",
   "models": [
     {
       "id": "sherpa-sensevoice-int8",
@@ -83,20 +83,21 @@
       ]
     },
     {
-      "id": "crispembed-e5-small-q8",
-      "parameters": 117505920,
-      "displayName": "Multilingual E5 Small (CrispEmbed q8_0 GGUF)",
+      "id": "crispembed-qwen3-0.6b-q8",
+      "parameters": 600000000,
+      "displayName": "Qwen3 Embedding 0.6B (CrispEmbed q8_0 GGUF)",
       "engine": "crispembed",
       "type": "embedding",
+      "family": "qwen3",
       "quant": "q8_0",
-      "license": "MIT",
+      "license": "Apache-2.0 (Qwen/Qwen3-Embedding-0.6B weights and cstr GGUF conversion)",
       "files": [
         {
-          "fileName": "multilingual-e5-small-q8_0.gguf",
+          "fileName": "qwen3-embed-0.6b-q8_0.gguf",
           "role": "model",
-          "url": "https://huggingface.co/cstr/multilingual-e5-small-GGUF/resolve/178420da727e544c2689e89b6648b205ad176eda/multilingual-e5-small-q8_0.gguf",
-          "sizeBytes": 131624960,
-          "sha256": "0a34067a40f25d3149b36885faa62bee0e5284d0f9edc102acfc00e115d953e8"
+          "url": "https://huggingface.co/cstr/qwen3-embed-0.6b-GGUF/resolve/c3e60fe676eb37650b39170e908a309e71ca3a55/qwen3-embed-0.6b-q8_0.gguf",
+          "sizeBytes": 639145792,
+          "sha256": "072c5ca5019996cd0464e028801039055b38e78e038f7846010c70ddbe20e670"
         }
       ]
     },
@@ -121,10 +122,66 @@
       ]
     },
     {
-      "id": "sherpa-silero-vad",
-      "displayName": "Silero VAD (sherpa-onnx export)",
+      "id": "sherpa-ten-vad-int8",
+      "displayName": "TEN VAD (int8)",
       "engine": "sherpa",
       "type": "vad",
+      "family": "ten",
+      "quant": "int8",
+      "license": "TEN VAD Open Source License (Apache-2.0 with additional conditions)",
+      "files": [
+        {
+          "fileName": "ten-vad.int8.onnx",
+          "role": "model",
+          "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/ten-vad.int8.onnx",
+          "sizeBytes": 129534,
+          "sha256": "880c072f188efa169ea028b2159d1b3a438e153d080b87eac31b74ecad511e61"
+        }
+      ]
+    },
+    {
+      "id": "sherpa-ten-vad-fp32",
+      "displayName": "TEN VAD",
+      "engine": "sherpa",
+      "type": "vad",
+      "family": "ten",
+      "quant": "fp32",
+      "license": "TEN VAD Open Source License (Apache-2.0 with additional conditions)",
+      "files": [
+        {
+          "fileName": "ten-vad.onnx",
+          "role": "model",
+          "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/ten-vad.onnx",
+          "sizeBytes": 332211,
+          "sha256": "718cb7eef47e3cf5ddbe7e967a7503f46b8b469c0706872f494dfa921b486206"
+        }
+      ]
+    },
+    {
+      "id": "sherpa-silero-vad-int8",
+      "displayName": "Silero VAD (int8)",
+      "engine": "sherpa",
+      "type": "vad",
+      "family": "silero",
+      "quant": "int8",
+      "license": "MIT (per k2-fsa official sherpa-onnx export)",
+      "files": [
+        {
+          "fileName": "silero_vad.int8.onnx",
+          "role": "model",
+          "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.int8.onnx",
+          "sizeBytes": 212860,
+          "sha256": "c36d490aff5ab924ca6c7aeec4d8f6bd3d22db6fa17611b9c5b17eae58ac3a20"
+        }
+      ]
+    },
+    {
+      "id": "sherpa-silero-vad-fp32",
+      "displayName": "Silero VAD",
+      "engine": "sherpa",
+      "type": "vad",
+      "family": "silero",
+      "quant": "fp32",
       "license": "MIT (per k2-fsa official sherpa-onnx export)",
       "files": [
         {

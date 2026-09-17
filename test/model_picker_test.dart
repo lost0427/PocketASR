@@ -47,6 +47,7 @@ void main() {
     id: 'vad',
     displayName: 'Silero VAD',
     fileName: 'vad.onnx',
+    family: 'silero',
     type: 'vad',
   );
   const embedding = ModelEntry(

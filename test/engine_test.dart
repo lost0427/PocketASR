@@ -48,6 +48,7 @@ void main() {
   group('NeuralVadSettings', () {
     test('defaults match the pinned Silero planning knobs', () {
       const settings = NeuralVadSettings(modelPath: 'silero.onnx');
+      expect(settings.family, VadModelFamily.silero);
       expect(settings.threshold, 0.5);
       expect(settings.minSilenceDuration, 0.5);
       expect(settings.minSpeechDuration, 0.25);

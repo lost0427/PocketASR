@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
+import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/engine/model_downloader.dart';
 import 'package:pocket_asr/features/models/models_page.dart';
@@ -213,6 +214,7 @@ void main() {
       fileName: 'e.gguf',
       engine: 'crispembed',
       type: 'embedding',
+      family: 'qwen3',
     );
     download(asr);
     download(embedding);
@@ -234,6 +236,7 @@ void main() {
     await tester.tap(find.text('Use').last);
     await tester.pumpAndSettle();
     expect(state.embeddingPath, store.pathFor(embedding));
+    expect(state.embeddingProfile, EmbeddingModelProfile.qwen3);
     expect(state.modelPath, isNull);
     // This build has no native CrispEmbed library. The embedder loads on its
     // worker isolate (real async I/O), so wait outside the fake clock for the

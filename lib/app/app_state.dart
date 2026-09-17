@@ -19,13 +19,16 @@ import '../data/transcript_repo.dart';
 /// instance is handed back; tests inject a fake so no native library is
 /// needed. A failure must throw [EmbedderUnavailableException] — never fall
 /// back to [DeterministicEmbedder], which would fake semantic meaning.
-typedef EmbedderFactory = FutureOr<Embedder> Function(String modelPath);
+typedef EmbedderFactory = FutureOr<Embedder> Function(
+  String modelPath,
+  EmbeddingModelProfile profile,
+);
 
 /// The three-way chunking control in Settings: the two [ChunkMode] strategies
 /// plus real neural VAD.
 ///
 /// Neural VAD is deliberately *not* a [ChunkMode] value: it is a separate
-/// engine path ([NeuralVadSettings], planned by a sherpa-onnx Silero worker)
+/// engine path ([NeuralVadSettings], planned by a sherpa-onnx VAD worker)
 /// and is mutually exclusive with [ChunkSettings], which is exactly why the
 /// pages hand one or the other — never both — to the service.
 enum ChunkStrategy { fixed, energy, neural }
@@ -48,8 +51,14 @@ class AppState extends ChangeNotifier {
     _loadSettings();
   }
 
-  static Future<Embedder> _crispEmbedder(String modelPath) async {
-    final embedder = WorkerEmbedder.crisp(modelPath: modelPath);
+  static Future<Embedder> _crispEmbedder(
+    String modelPath,
+    EmbeddingModelProfile profile,
+  ) async {
+    final embedder = WorkerEmbedder.crisp(
+      modelPath: modelPath,
+      profile: profile,
+    );
     try {
       await embedder.load(); // spawns the worker; the native load runs there
       return embedder;
@@ -435,7 +444,7 @@ class AppState extends ChangeNotifier {
 
   /// Chunking defaults and the bounds the Settings sliders offer. The energy
   /// mode is a loudness gate, **not** a neural VAD (see [ChunkPlanner]); the
-  /// neural strategy is the real Silero path described by [NeuralVadSettings].
+  /// neural strategy is the model path described by [NeuralVadSettings].
   static const ChunkSettings defaultChunkSettings = ChunkSettings();
   static const double minChunkSeconds = 5;
   static const double maxChunkSeconds = 120;
@@ -570,12 +579,14 @@ class AppState extends ChangeNotifier {
   }
 
   String? _vadModelPath;
+  VadModelFamily _vadModelFamily = VadModelFamily.silero;
   bool _vadSelectionMissing = false;
 
-  /// Local path of the Silero VAD model the neural strategy runs, or null when
+  /// Local path of the VAD model the neural strategy runs, or null when
   /// none is selected. A *separate* selection from [modelPath]: choosing a VAD
   /// bundle never changes what transcribes, and vice versa.
   String? get vadModelPath => _vadModelPath;
+  VadModelFamily get vadModelFamily => _vadModelFamily;
 
   /// True when the persisted VAD selection could not be restored because the
   /// file it named is gone; neural mode refuses to start until one is picked.
@@ -587,11 +598,16 @@ class AppState extends ChangeNotifier {
 
   /// Adopts a downloaded VAD bundle for the neural strategy. Refused while a
   /// run owns the engines, like [selectModel].
-  void selectVad({required String path}) {
+  void selectVad({
+    required String path,
+    VadModelFamily family = VadModelFamily.silero,
+  }) {
     if (_engineBusy) return;
     _vadModelPath = path;
+    _vadModelFamily = family;
     _vadSelectionMissing = false;
     _save('vad_model_path', path);
+    _save('vad_model_family', family.name);
     notifyListeners();
   }
 
@@ -600,8 +616,10 @@ class AppState extends ChangeNotifier {
   void clearVadSelection() {
     if (_vadModelPath == null && !_vadSelectionMissing) return;
     _vadModelPath = null;
+    _vadModelFamily = VadModelFamily.silero;
     _vadSelectionMissing = false;
     _save('vad_model_path', '');
+    _save('vad_model_family', '');
     notifyListeners();
   }
 
@@ -613,6 +631,7 @@ class AppState extends ChangeNotifier {
     if (_chunkStrategy != ChunkStrategy.neural || path == null) return null;
     return NeuralVadSettings(
       modelPath: path,
+      family: _vadModelFamily,
       threshold: _vadThreshold,
       minSilenceDuration: _vadMinSilenceSeconds,
       minSpeechDuration: _vadMinSpeechSeconds,
@@ -625,6 +644,7 @@ class AppState extends ChangeNotifier {
   /// stale after a Settings change (plain value equality, no framework).
   String get neuralVadSignature => [
     _vadModelPath ?? '',
+    _vadModelFamily.name,
     _vadThreshold,
     _vadMinSilenceSeconds,
     _vadMinSpeechSeconds,
@@ -635,6 +655,11 @@ class AppState extends ChangeNotifier {
   void _restoreVadSelection() {
     final path = _nonEmpty(database.getSetting('vad_model_path'));
     if (path == null) return;
+    final family = database.getSetting('vad_model_family');
+    _vadModelFamily = VadModelFamily.values.firstWhere(
+      (value) => value.name == family,
+      orElse: () => VadModelFamily.silero,
+    );
     if (File(path).existsSync()) {
       _vadModelPath = path;
     } else {
@@ -648,7 +673,7 @@ class AppState extends ChangeNotifier {
   // Neural VAD engine (independent of the ASR engine)
   // ---------------------------------------------------------------------------
 
-  /// sherpa-onnx is the only adapter that runs real Silero VAD, so the VAD
+  /// sherpa-onnx is the adapter that runs the supported neural VAD models, so
   /// worker is always a sherpa worker even when CrispASR (or anything else)
   /// transcribes. That separation is the point: neural VAD is not bound to one
   /// ASR engine.
@@ -739,6 +764,7 @@ class AppState extends ChangeNotifier {
   Embedder? _embedder;
   SemanticIndexer? _indexer;
   String? _embeddingPath;
+  EmbeddingModelProfile _embeddingProfile = EmbeddingModelProfile.metadata;
   String? _embeddingError;
 
   /// The live embedding model, or null when none is selected/loaded.
@@ -747,6 +773,10 @@ class AppState extends ChangeNotifier {
   /// The persisted embedding model path, even when the model could not be
   /// loaded on this build (the Models page shows it and explains why).
   String? get embeddingPath => _embeddingPath;
+
+  /// Input convention paired with [embeddingPath]. Persisted so a restored
+  /// Qwen3 model keeps its required query instruction after an app restart.
+  EmbeddingModelProfile get embeddingProfile => _embeddingProfile;
 
   /// True when a selected embedding model is really loaded and searchable.
   bool get embeddingReady => _embedder != null;
@@ -762,10 +792,15 @@ class AppState extends ChangeNotifier {
   /// the choice. The model loads asynchronously on its worker isolate; a
   /// construction/load failure (missing native library/model) is kept as
   /// [embeddingError] and never replaced with the deterministic test embedder.
-  void selectEmbedding({required String path}) {
+  void selectEmbedding({
+    required String path,
+    EmbeddingModelProfile profile = EmbeddingModelProfile.metadata,
+  }) {
     if (!_disposed) {
       _embeddingPath = path;
+      _embeddingProfile = profile;
       _save('embedding_path', path);
+      _save('embedding_profile', profile.name);
       _rebuildEmbedding();
       notifyListeners();
     }
@@ -775,7 +810,9 @@ class AppState extends ChangeNotifier {
   void clearEmbedding() {
     if (_disposed) return;
     _embeddingPath = null;
+    _embeddingProfile = EmbeddingModelProfile.metadata;
     _save('embedding_path', '');
+    _save('embedding_profile', '');
     _rebuildEmbedding();
     notifyListeners();
   }
@@ -790,6 +827,9 @@ class AppState extends ChangeNotifier {
     final path = _nonEmpty(database.getSetting('embedding_path'));
     if (path == null) return;
     _embeddingPath = path;
+    _embeddingProfile = EmbeddingModelProfile.parse(
+      database.getSetting('embedding_profile'),
+    );
     _rebuildEmbedding();
   }
 
@@ -806,7 +846,7 @@ class AppState extends ChangeNotifier {
 
     final path = _embeddingPath;
     if (path == null || path.isEmpty) return;
-    unawaited(_initEmbedding(path));
+    unawaited(_initEmbedding(path, _embeddingProfile));
   }
 
   /// Awaits the embedder factory (worker spawn + native load), and wires the
@@ -814,18 +854,23 @@ class AppState extends ChangeNotifier {
   /// native encode. A completion that is no longer current (model switched or
   /// AppState disposed while loading) releases its embedder instead of wiring
   /// a stale model into the new index.
-  Future<void> _initEmbedding(String path) async {
+  Future<void> _initEmbedding(
+    String path,
+    EmbeddingModelProfile profile,
+  ) async {
     Embedder embedder;
     try {
-      embedder = await _embedderFactory(path);
+      embedder = await _embedderFactory(path, profile);
     } on Object catch (error) {
-      if (!_disposed && _embeddingPath == path) {
+      if (!_disposed &&
+          _embeddingPath == path &&
+          _embeddingProfile == profile) {
         _embeddingError = error.toString();
         notifyListeners();
       }
       return;
     }
-    if (_disposed || _embeddingPath != path) {
+    if (_disposed || _embeddingPath != path || _embeddingProfile != profile) {
       embedder.dispose();
       return;
     }

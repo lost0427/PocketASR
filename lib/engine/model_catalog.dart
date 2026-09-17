@@ -164,7 +164,7 @@ class ModelEntry {
   /// fields below.
   final List<ModelFile> files;
 
-  /// Served model family (`sensevoice`, `whisper`, ...), for labels/logs.
+  /// Served model family (`sensevoice`, `whisper`, `silero`, `ten`, ...).
   final String? family;
 
   /// Quantization tag (`q8_0`, `q4_k`, ...), for labels/logs.
@@ -173,7 +173,7 @@ class ModelEntry {
   /// Engine that runs this bundle (`sherpa`, `crispasr`, `crispembed`).
   final String? engine;
 
-  /// What the model produces: `asr` or `embedding`.
+  /// What the model produces: `asr`, `embedding`, or `vad`.
   final String type;
 
   /// Upstream license note, verbatim from the allowlist; null means the

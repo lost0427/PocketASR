@@ -64,7 +64,7 @@ class CrispAsrEngine implements AsrEngine {
     return const EngineCapabilities(
       available: true,
       backends: {Backend.cpu},
-      // CrispASR carries no neural VAD of its own (real Silero detection runs
+      // CrispASR carries no neural VAD of its own (real detection runs
       // in a separate sherpa-onnx worker).
       supportsVad: false,
     );
@@ -121,7 +121,7 @@ class CrispAsrEngine implements AsrEngine {
   }
 
   /// CrispASR has no neural VAD of its own; transcription using it gets cut
-  /// boundaries from a *separate* sherpa-onnx Silero worker (the service's
+  /// boundaries from a *separate* sherpa-onnx VAD worker (the service's
   /// `vadEngine`), so neural VAD is not bound to this ASR. This method only
   /// exists to satisfy the interface and reports that honestly.
   @override
@@ -130,7 +130,7 @@ class CrispAsrEngine implements AsrEngine {
     NeuralVadSettings vad,
   ) => Future.error(
     const EngineUnavailableException(
-      'CrispASR has no neural VAD; supply a separate sherpa-onnx Silero '
+      'CrispASR has no neural VAD; supply a separate sherpa-onnx VAD '
       'engine as the service vadEngine to cut on real speech.',
     ),
   );

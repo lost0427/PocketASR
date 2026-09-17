@@ -87,7 +87,7 @@ class _FakeWorkerEngine implements AsrEngine {
   ) async {
     // Recording the model path proves the settings record crossed the
     // isolate boundary intact alongside the request.
-    await _record('planVad:${vad.modelPath}');
+    await _record('planVad:${vad.modelPath}:${vad.family.name}');
     return const VadPlan([
       VadSegment(start: Duration.zero, end: Duration(seconds: 1)),
     ]);
@@ -154,7 +154,10 @@ void main() {
     ).toList();
     final plan = await e.planVad(
       const TranscribeRequest(audioPath: 'a.wav'),
-      const NeuralVadSettings(modelPath: 'vad.onnx'),
+      const NeuralVadSettings(
+        modelPath: 'vad.onnx',
+        family: VadModelFamily.ten,
+      ),
     );
     await e.dispose();
 
@@ -166,7 +169,7 @@ void main() {
       'load:model.gguf',
       'transcribe',
       'transcribe',
-      'planVad:vad.onnx',
+      'planVad:vad.onnx:ten',
       'dispose-engine',
     ]);
     expect(first.single.partialText, 'heard:a.wav');

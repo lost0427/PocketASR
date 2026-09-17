@@ -77,7 +77,7 @@ class SherpaEngine implements AsrEngine {
     return const EngineCapabilities(
       available: true,
       backends: {Backend.cpu},
-      // The bindings expose the real Silero VoiceActivityDetector; the model
+      // The bindings expose the real neural VoiceActivityDetector; the model
       // file itself arrives per call in NeuralVadSettings. planVad still
       // fails loudly when that file is missing or unreadable.
       supportsVad: true,
@@ -194,11 +194,7 @@ class SherpaEngine implements AsrEngine {
     }
   }
 
-  /// Silero VAD's fixed window at 16 kHz; [acceptWaveform] is fed exactly
-  /// this many samples at a time and the buffer drained after each window.
-  static const int _vadWindow = 512;
-
-  /// Runs the real Silero `VoiceActivityDetector` over the WAV at
+  /// Runs the selected `VoiceActivityDetector` over the WAV at
   /// [TranscribeRequest.audioPath]. No ASR model is loaded and none is run:
   /// the detector only needs its own ONNX plus the caller's [NeuralVadSettings].
   /// Segments are drained as they complete, trailing speech is flushed, and
@@ -213,24 +209,15 @@ class SherpaEngine implements AsrEngine {
     if (_initError != null) throw EngineUnavailableException(_initError!);
 
     const sampleRate = 16000;
+    final windowSize = switch (vad.family) {
+      VadModelFamily.silero => 512,
+      VadModelFamily.ten => 256,
+    };
 
     final sherpa.VoiceActivityDetector detector;
     try {
       detector = sherpa.VoiceActivityDetector(
-        config: sherpa.VadModelConfig(
-          sileroVad: sherpa.SileroVadModelConfig(
-            model: vad.modelPath,
-            threshold: vad.threshold,
-            minSilenceDuration: vad.minSilenceDuration,
-            minSpeechDuration: vad.minSpeechDuration,
-            windowSize: _vadWindow,
-            maxSpeechDuration: vad.maxSpeechSeconds,
-          ),
-          sampleRate: sampleRate,
-          numThreads: 1,
-          provider: 'cpu',
-          debug: false,
-        ),
+        config: _vadConfig(vad, sampleRate, windowSize),
         // Drained every window, so it only ever holds one speech run plus pad.
         bufferSizeInSeconds:
             vad.maxSpeechSeconds + vad.speechPadMs / 1000 + 1,
@@ -258,7 +245,10 @@ class SherpaEngine implements AsrEngine {
     }
 
     try {
-      await for (final samples in readCanonicalWave(request.audioPath, blockSize: _vadWindow)) {
+      await for (final samples in readCanonicalWave(
+        request.audioPath,
+        blockSize: windowSize,
+      )) {
         detector.acceptWaveform(samples);
         drain();
       }
@@ -276,6 +266,50 @@ class SherpaEngine implements AsrEngine {
 
   static Duration _durationFromSample(int sample, int rate) =>
       Duration(microseconds: (sample * 1000000 / rate).round());
+
+  static sherpa.VadModelConfig _vadConfig(
+    NeuralVadSettings vad,
+    int sampleRate,
+    int windowSize,
+  ) {
+    final common = (
+      model: vad.modelPath,
+      threshold: vad.threshold,
+      minSilence: vad.minSilenceDuration,
+      minSpeech: vad.minSpeechDuration,
+      maxSpeech: vad.maxSpeechSeconds,
+    );
+    return switch (vad.family) {
+      VadModelFamily.silero => sherpa.VadModelConfig(
+        sileroVad: sherpa.SileroVadModelConfig(
+          model: common.model,
+          threshold: common.threshold,
+          minSilenceDuration: common.minSilence,
+          minSpeechDuration: common.minSpeech,
+          windowSize: windowSize,
+          maxSpeechDuration: common.maxSpeech,
+        ),
+        sampleRate: sampleRate,
+        numThreads: 1,
+        provider: 'cpu',
+        debug: false,
+      ),
+      VadModelFamily.ten => sherpa.VadModelConfig(
+        tenVad: sherpa.TenVadModelConfig(
+          model: common.model,
+          threshold: common.threshold,
+          minSilenceDuration: common.minSilence,
+          minSpeechDuration: common.minSpeech,
+          windowSize: windowSize,
+          maxSpeechDuration: common.maxSpeech,
+        ),
+        sampleRate: sampleRate,
+        numThreads: 1,
+        provider: 'cpu',
+        debug: false,
+      ),
+    };
+  }
 
   @override
   Future<void> dispose() async {

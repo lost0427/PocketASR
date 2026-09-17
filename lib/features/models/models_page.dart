@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../engine/asr_engine.dart';
+import '../../engine/embedder.dart';
 import '../../engine/model_catalog.dart';
 import '../../engine/model_downloader.dart';
 import '../../l10n/app_localizations.dart';
@@ -193,9 +195,24 @@ class _ModelsPageState extends State<ModelsPage> {
       case _ModelKind.asr:
         _use(entry, store, state);
       case _ModelKind.embedding:
-        state.selectEmbedding(path: store.pathFor(entry));
+        state.selectEmbedding(
+          path: store.pathFor(entry),
+          profile: switch (entry.family) {
+            'qwen3' => EmbeddingModelProfile.qwen3,
+            _ => EmbeddingModelProfile.metadata,
+          },
+        );
       case _ModelKind.vad:
-        state.selectVad(path: store.pathFor(entry));
+        state.selectVad(
+          path: store.pathFor(entry),
+          family: switch (entry.family) {
+            'ten' => VadModelFamily.ten,
+            'silero' => VadModelFamily.silero,
+            _ => throw StateError(
+              'Unsupported VAD model family "${entry.family}".',
+            ),
+          },
+        );
     }
   }
 

@@ -38,12 +38,18 @@ class WorkerEmbedder implements Embedder {
   /// the worker fails to load.
   factory WorkerEmbedder.crisp({
     required String modelPath,
+    EmbeddingModelProfile profile = EmbeddingModelProfile.metadata,
     int threads = 0,
     String? libPath,
   }) => WorkerEmbedder._(
     CrispEmbedder.identityFor(modelPath),
     _buildNative,
-    _CrispSetup(modelPath: modelPath, threads: threads, libPath: libPath),
+    _CrispSetup(
+      modelPath: modelPath,
+      profile: profile,
+      threads: threads,
+      libPath: libPath,
+    ),
   );
 
   /// Test hook: run an arbitrary embedder factory inside the worker so command
@@ -113,7 +119,9 @@ class WorkerEmbedder implements Embedder {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    if (_started == null) return; // never spawned anything; nothing to tear down
+    if (_started == null) {
+      return; // never spawned anything; nothing to tear down
+    }
     try {
       await _call('dispose', null);
     } on Object {
@@ -220,8 +228,7 @@ class WorkerEmbedder implements Embedder {
     _pending.clear();
   }
 
-  static Object _errorFor(_EmbedEvent message) =>
-      message.embedderError
+  static Object _errorFor(_EmbedEvent message) => message.embedderError
       ? EmbedderUnavailableException(message.value as String)
       : StateError('Embedding worker error: ${message.value}');
 
@@ -251,11 +258,13 @@ class _Boot {
 class _CrispSetup {
   const _CrispSetup({
     required this.modelPath,
+    required this.profile,
     required this.threads,
     this.libPath,
   });
 
   final String modelPath;
+  final EmbeddingModelProfile profile;
   final int threads;
   final String? libPath;
 }
@@ -269,7 +278,12 @@ class _EmbedCommand {
 }
 
 class _EmbedEvent {
-  const _EmbedEvent(this.kind, this.id, this.value, [this.embedderError = false]);
+  const _EmbedEvent(
+    this.kind,
+    this.id,
+    this.value, [
+    this.embedderError = false,
+  ]);
 
   final String kind;
   final int? id;
@@ -288,6 +302,7 @@ Embedder _buildNative(Object? config) {
   final setup = config as _CrispSetup;
   return CrispEmbedder(
     modelPath: setup.modelPath,
+    profile: setup.profile,
     threads: setup.threads,
     libPath: setup.libPath,
   );
@@ -342,7 +357,11 @@ Future<void> _entry(_Boot boot) async {
             return;
           default:
             main.send(
-              _EmbedEvent(_eventFailure, cmd.id, 'unknown worker op "${cmd.op}"'),
+              _EmbedEvent(
+                _eventFailure,
+                cmd.id,
+                'unknown worker op "${cmd.op}"',
+              ),
             );
         }
       } on Object catch (error) {

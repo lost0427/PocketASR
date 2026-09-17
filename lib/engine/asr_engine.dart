@@ -77,16 +77,20 @@ class EngineCapabilities {
   final String? unavailableReason;
 }
 
-/// Minimal config for a *real* neural VAD (Silero via sherpa-onnx's
-/// `VoiceActivityDetector`) — the knobs offline planning actually uses.
+/// VAD architecture understood by sherpa-onnx's `VoiceActivityDetector`.
+enum VadModelFamily { silero, ten }
+
+/// Minimal config for a *real* neural VAD via sherpa-onnx's
+/// `VoiceActivityDetector` — the knobs offline planning actually uses.
 ///
 /// All durations are seconds on the 16 kHz mono timeline the app normalizes
-/// to. [modelPath] must point at a Silero VAD ONNX the user supplied (see
+/// to. [modelPath] must point at a supported VAD ONNX the user supplied (see
 /// the `type: vad` entry in `assets/model_allowlist.json`); nothing here
 /// fabricates a model or substitutes an energy gate.
 class NeuralVadSettings {
   const NeuralVadSettings({
     required this.modelPath,
+    this.family = VadModelFamily.silero,
     this.threshold = 0.5,
     this.minSilenceDuration = 0.5,
     this.minSpeechDuration = 0.25,
@@ -94,8 +98,11 @@ class NeuralVadSettings {
     this.maxSpeechSeconds = 30,
   });
 
-  /// Local path of the Silero VAD model file.
+  /// Local path of the selected VAD model file.
   final String modelPath;
+
+  /// Model architecture; this controls the native config and input window.
+  final VadModelFamily family;
 
   /// Speech-probability gate (exclusive 0..1) passed to the model.
   final double threshold;

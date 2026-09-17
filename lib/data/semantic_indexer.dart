@@ -39,8 +39,9 @@ class SemanticIndexer {
   Database get _db => _database.db;
 
   /// Observable phase for the UI (bind with a ValueListenableBuilder).
-  final ValueNotifier<SemanticIndexPhase> phase =
-      ValueNotifier(SemanticIndexPhase.idle);
+  final ValueNotifier<SemanticIndexPhase> phase = ValueNotifier(
+    SemanticIndexPhase.idle,
+  );
 
   String? _lastError;
 
@@ -50,38 +51,32 @@ class SemanticIndexer {
 
   Future<void> _tail = Future<void>.value();
 
-  /// Embeds every live transcript this model has no vector for.
+  /// Embeds every stored transcript this model has no vector for, including
+  /// recycle-bin rows because that view also supports semantic search.
   Future<void> indexPending() => _enqueue(_runPending);
 
   /// Re-indexes from scratch for *this model*: the rows tagged with this
-  /// model's id are deleted first, then every live transcript is re-embedded.
+  /// model's id are deleted first, then every stored transcript is re-embedded.
   ///
   /// Isolation ceiling (schema, not accident): `embedding` has
   /// `transcript_id` as its primary key — one vector per transcript, total.
   /// Indexing a transcript with this model therefore *replaces* whatever
-  /// other model's vector it held; rows held by another model on trashed
-  /// transcripts are never deleted or replaced (they are not live and not
-  /// pending). Queries stay strictly model-filtered, so a replaced/foreign
-  /// vector can never answer a query from the wrong model.
+  /// other model's vector it held. Queries stay strictly model-filtered, so a
+  /// replaced/foreign vector can never answer a query from the wrong model.
   /// ponytail: two models coexisting needs a `PRIMARY KEY (transcript_id,
   /// model)` migration in db.dart — out of this lane's ownership; add it when
   /// model switching stops being rare enough to re-embed.
   Future<void> rebuild() => _enqueue(() async {
-    _db.execute(
-      'DELETE FROM embedding WHERE model = ?',
-      [_embedder.id],
-    );
+    _db.execute('DELETE FROM embedding WHERE model = ?', [_embedder.id]);
     await _runPending();
   });
 
-  /// Embeds one transcript now if live and still unvectorized by this model;
-  /// no-op otherwise (the next [indexPending] picks up anything skipped).
+  /// Embeds one transcript now if it still exists and is unvectorized by this
+  /// model; no-op otherwise (the next [indexPending] picks up anything
+  /// skipped).
   Future<void> indexTranscript(int id) => _enqueue(() async {
-    final rows = _db.select(
-      'SELECT text FROM transcript WHERE id = ? AND deleted_at IS NULL',
-      [id],
-    );
-    if (rows.isEmpty) return; // trashed or purged: never resurrect
+    final rows = _db.select('SELECT text FROM transcript WHERE id = ?', [id]);
+    if (rows.isEmpty) return; // permanently deleted: never recreate anything
     final existing = _db.select(
       'SELECT 1 FROM embedding WHERE transcript_id = ? AND model = ?',
       [id, _embedder.id],
@@ -106,7 +101,9 @@ class SemanticIndexer {
     // Every job is serial and self-contained: failures become state instead of
     // rejecting the chain, so one bad vector cannot wedge all later indexing.
     _tail = _tail.then((_) async {
-      if (_disposed) return; // superseded model: the queue drains, writes nothing
+      if (_disposed) {
+        return; // superseded model: the queue drains, writes nothing
+      }
       _lastError = null;
       phase.value = SemanticIndexPhase.running;
       try {
@@ -124,7 +121,7 @@ class SemanticIndexer {
     final pending = _db.select(
       'SELECT t.id, t.text FROM transcript t '
       'LEFT JOIN embedding e ON e.transcript_id = t.id AND e.model = ? '
-      'WHERE e.transcript_id IS NULL AND t.deleted_at IS NULL '
+      'WHERE e.transcript_id IS NULL '
       'ORDER BY t.id',
       [_embedder.id],
     );
@@ -144,15 +141,12 @@ class SemanticIndexer {
     _check(vector);
     _db.execute('BEGIN');
     try {
-      // Re-check liveness inside the transaction: the transcript may have been
-      // trashed or purged while (slow) embedding was running. A purge would be
-      // caught by the foreign key, a soft delete would not — this guard is
-      // what keeps a trashed row from gaining a fresh vector.
-      final alive = _db.select(
-        'SELECT 1 FROM transcript WHERE id = ? AND deleted_at IS NULL',
-        [id],
-      );
-      if (alive.isEmpty) {
+      // Re-check existence inside the transaction: the transcript may have
+      // been permanently deleted while the worker was encoding. Moving it to
+      // the recycle bin is not a reason to drop the vector because semantic
+      // search is available there too.
+      final stored = _db.select('SELECT 1 FROM transcript WHERE id = ?', [id]);
+      if (stored.isEmpty) {
         _db.execute('ROLLBACK');
         return;
       }
