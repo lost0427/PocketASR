@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../engine/asr_engine.dart';
-import '../../engine/metrics.dart';
 import '../../engine/system_metrics.dart';
 import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
@@ -71,10 +70,6 @@ class _TranscribePageState extends State<TranscribePage> {
   /// Shared, persisted model path; a pick in either page updates the same value.
   String? get _modelPath => _modelSpec?.path;
 
-  /// Rolling tokens/s across engine-reported true token counts. Its `tokens`
-  /// also carries the latest cumulative token count for the run.
-  final TokenRateTracker _tokenRates = TokenRateTracker();
-
   // Live run state, all rewritten from real engine progress.
   String _result = '';
   String _partialText = '';
@@ -133,19 +128,15 @@ class _TranscribePageState extends State<TranscribePage> {
     }
   }
 
-  /// Mirrors one engine progress update into the live metrics. A negative or
-  /// missing token count is ignored by [TokenRateTracker], so nothing is
-  /// invented; unknown figures stay null and render as `—`.
+  /// Mirrors one engine progress update into the live metrics. Token speed is
+  /// deliberately excluded: offline engines only provide a trustworthy total
+  /// after the run, so the UI shows "Calculating" until then.
   void _onProgress(TranscribeProgress progress) {
     if (!mounted) return;
-    if (progress.tokens != null) {
-      _tokenRates.add(progress.tokens!, progress.elapsed);
-    }
     final partial = progress.partialText.trim();
     setState(() {
       if (progress.ratio >= 0) _progress = progress.ratio;
       _elapsed = progress.elapsed;
-      _tokensPerSec = _tokenRates.tokensPerSecond;
       if (partial.isNotEmpty) {
         _partialText = partial;
         _charsPerSec = graphemesPerSecond(partial, progress.elapsed);
@@ -168,6 +159,17 @@ class _TranscribePageState extends State<TranscribePage> {
         TranscriptionStage.finalizing => l10n.transcribeStageFinalizing,
         null => l10n.transcribeProgress,
       };
+
+  _TokenMetricState _tokenMetricState(EngineCapabilities? capabilities) {
+    if (capabilities == null) return _TokenMetricState.unavailable;
+    if (!capabilities.supportsTokenCount) {
+      return _TokenMetricState.unsupported;
+    }
+    if (_running) return _TokenMetricState.calculating;
+    return _tokensPerSec == null
+        ? _TokenMetricState.unavailable
+        : _TokenMetricState.available;
+  }
 
   void _notify(String message) {
     ScaffoldMessenger.of(context)
@@ -228,7 +230,6 @@ class _TranscribePageState extends State<TranscribePage> {
     // A previous cancel replaces the VAD worker; start this run on a fresh one.
     state?.resetVadEngine();
     final service = _service(state);
-    _tokenRates.reset();
     state?.engineBusy = true; // the Models page must not swap this instance
     setState(() {
       _running = true;
@@ -284,7 +285,7 @@ class _TranscribePageState extends State<TranscribePage> {
           _elapsed = result.elapsed;
           _rtf = result.rtf;
           _runBackend = result.backend;
-          _tokensPerSec = result.avgTokensPerSec ?? _tokensPerSec;
+          _tokensPerSec = result.avgTokensPerSec;
           _charsPerSec = result.text.isEmpty
               ? null
               : graphemesPerSecond(result.text, result.elapsed);
@@ -688,6 +689,7 @@ class _TranscribePageState extends State<TranscribePage> {
                   ),
                   const SizedBox(height: 12),
                   _MetricsGrid(
+                    tokenState: _tokenMetricState(capabilities),
                     tokensPerSec: _tokensPerSec,
                     charsPerSec: _charsPerSec,
                     rtf: _rtf,
@@ -1147,11 +1149,14 @@ String? _elapsed(Duration? value) {
 String? _memory(int? bytes) =>
     bytes == null ? null : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
+enum _TokenMetricState { unsupported, calculating, available, unavailable }
+
 /// Six metric tiles fed by the live run. CPU and memory come from the periodic
 /// sampler and stay `—` whenever a reading could not be taken — the page never
 /// invents numbers.
 class _MetricsGrid extends StatelessWidget {
   const _MetricsGrid({
+    required this.tokenState,
     required this.tokensPerSec,
     required this.charsPerSec,
     required this.rtf,
@@ -1160,6 +1165,7 @@ class _MetricsGrid extends StatelessWidget {
     required this.memoryBytes,
   });
 
+  final _TokenMetricState tokenState;
   final double? tokensPerSec;
   final double? charsPerSec;
   final double? rtf;
@@ -1171,8 +1177,14 @@ class _MetricsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final unknown = l10n.metricUnavailable;
+    final tokenRate = switch (tokenState) {
+      _TokenMetricState.unsupported => l10n.metricUnsupported,
+      _TokenMetricState.calculating => l10n.metricCalculating,
+      _TokenMetricState.available => _rate(tokensPerSec) ?? unknown,
+      _TokenMetricState.unavailable => unknown,
+    };
     final metrics = <(String, IconData, String)>[
-      (l10n.metricTokensPerSec, Icons.speed, _rate(tokensPerSec) ?? unknown),
+      (l10n.metricTokensPerSec, Icons.speed, tokenRate),
       (l10n.metricCharsPerSec, Icons.abc, _rate(charsPerSec) ?? unknown),
       (
         l10n.metricRtf,

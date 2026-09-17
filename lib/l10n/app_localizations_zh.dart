@@ -189,6 +189,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get metricUnavailable => '—';
 
   @override
+  String get metricUnsupported => '不支持';
+
+  @override
+  String get metricCalculating => '计算中';
+
+  @override
   String get queueTitle => '队列';
 
   @override

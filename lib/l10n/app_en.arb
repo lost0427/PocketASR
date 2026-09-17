@@ -60,6 +60,8 @@
   "metricCpu": "CPU",
   "metricMemory": "Memory",
   "metricUnavailable": "—",
+  "metricUnsupported": "Unsupported",
+  "metricCalculating": "Calculating",
   "queueTitle": "Queue",
   "queueBody": "Line up several files at once, reorder them, and watch each one finish in turn.",
   "queueAddAudio": "Add audio",

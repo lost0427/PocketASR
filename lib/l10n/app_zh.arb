@@ -58,6 +58,8 @@
   "metricCpu": "CPU",
   "metricMemory": "内存",
   "metricUnavailable": "—",
+  "metricUnsupported": "不支持",
+  "metricCalculating": "计算中",
   "queueTitle": "队列",
   "queueBody": "一次排入多个文件，自由调整顺序，逐个查看进度。",
   "queueAddAudio": "添加音频",

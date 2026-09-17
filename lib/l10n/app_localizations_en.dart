@@ -196,6 +196,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metricUnavailable => '—';
 
   @override
+  String get metricUnsupported => 'Unsupported';
+
+  @override
+  String get metricCalculating => 'Calculating';
+
+  @override
   String get queueTitle => 'Queue';
 
   @override

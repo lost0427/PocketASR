@@ -63,6 +63,13 @@ class _FakeEngine extends UnavailableAsrEngine {
 const _availableCaps = EngineCapabilities(
   available: true,
   backends: {Backend.cpu},
+  supportsTokenCount: true,
+);
+
+const _unsupportedTokenCaps = EngineCapabilities(
+  available: true,
+  backends: {Backend.cpu},
+  supportsTokenCount: false,
 );
 
 /// Service stub that replays a fixed progress script and returns a result,
@@ -148,6 +155,14 @@ class _SlowService extends TranscriptionService {
     Object? neuralVad,
   }) async {
     onStage?.call(TranscriptionStage.segmenting);
+    onProgress?.call(
+      const TranscribeProgress(
+        elapsed: Duration(milliseconds: 500),
+        ratio: 0.5,
+        partialText: 'hel',
+        tokens: 3,
+      ),
+    );
     await release.future;
     return TranscriptionJobResult(
       text: 'hello',
@@ -226,6 +241,17 @@ void main() {
       find.widgetWithText(FilledButton, 'Start transcription'),
     );
     expect(start.onPressed, isNull);
+  });
+
+  testWidgets('shows token rate as unsupported when the engine cannot count', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(engine: const _FakeEngine(_unsupportedTokenCaps)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unsupported'), findsOneWidget);
   });
 
   testWidgets('displays the current engine, backend and model', (tester) async {
@@ -544,6 +570,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Segmenting audio'), findsOneWidget);
+    expect(find.text('Calculating'), findsOneWidget);
 
     // A tick of the run's sampler fills the CPU and memory tiles with the
     // readings the sampler really returned.
@@ -556,6 +583,7 @@ void main() {
     // Ending the run stops the sampling: no further reads happen.
     service.release.complete();
     await tester.pumpAndSettle();
+    expect(find.text('Calculating'), findsNothing);
     final callsAtEnd = sampler.calls;
     await tester.pump(const Duration(seconds: 3));
     expect(sampler.calls, callsAtEnd);

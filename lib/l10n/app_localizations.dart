@@ -446,6 +446,18 @@ abstract class AppLocalizations {
   /// **'—'**
   String get metricUnavailable;
 
+  /// No description provided for @metricUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported'**
+  String get metricUnsupported;
+
+  /// No description provided for @metricCalculating.
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating'**
+  String get metricCalculating;
+
   /// No description provided for @queueTitle.
   ///
   /// In en, this message translates to:
