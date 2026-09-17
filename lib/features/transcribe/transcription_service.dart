@@ -106,7 +106,9 @@ class TranscriptionService {
   /// Leaving [chunkSettings] null uses default 30-second windows.
   /// [onProgress] is optional and never changes
   /// the returned result. A failing or silent engine throws
-  /// [EngineUnavailableException]; no placeholder text is ever returned.
+  /// [EngineUnavailableException]; no placeholder text is ever returned. An
+  /// empty completed chunk is skipped, but a job where every chunk is empty
+  /// still fails.
   ///
   /// [neuralVad] (mutually exclusive with [chunkSettings]) cuts on *real*
   /// neural VAD instead: the (possibly separate) `vadEngine` detects speech
@@ -222,6 +224,8 @@ class TranscriptionService {
         )) {
           last = progress;
           if (onProgress != null) {
+            final completed =
+                progress.ratio >= 1 && progress.partialText.trim().isNotEmpty;
             final aggregated = TranscribeProgress(
               elapsed: elapsed + progress.elapsed,
               ratio: progress.ratio < 0
@@ -230,24 +234,30 @@ class TranscriptionService {
               partialText: <String>[...parts, progress.partialText]
                   .join(' ')
                   .trim(),
-              completedChunkText: progress.ratio >= 1
+              completedChunkText: completed
                   ? progress.partialText.trim()
                   : null,
-              completedChunkElapsed: progress.ratio >= 1
-                  ? progress.elapsed
-                  : null,
+              completedChunkElapsed: completed ? progress.elapsed : null,
             );
             onProgress.call(aggregated);
           }
         }
         final result = last;
-        if (result == null || result.partialText.trim().isEmpty) {
-          throw const EngineUnavailableException('ASR returned no transcript');
+        if (result == null) {
+          throw EngineUnavailableException(
+            'ASR returned no result for chunk ${i + 1} of ${windows.length}',
+          );
         }
-        parts.add(result.partialText.trim());
+        final text = result.partialText.trim();
         elapsed += result.elapsed;
         doneUs += chunkUs;
         await file.delete();
+        if (text.isEmpty) {
+          // ponytail: empty output is a valid no-speech result for one chunk;
+          // only a stream with no result, or an entirely empty job, is fatal.
+          continue;
+        }
+        parts.add(text);
       }
       if (isCancelled?.call() ?? false) {
         // Cancel can land while the *final* native call drains — the loop
@@ -255,6 +265,11 @@ class TranscriptionService {
         throw EngineCancelledException(
           'Cancelled during the final chunk; ${parts.length} chunk(s) were '
           'transcribed but discarded — a cancelled job returns no text.',
+        );
+      }
+      if (parts.isEmpty) {
+        throw const EngineUnavailableException(
+          'ASR returned no transcript for any audio chunk',
         );
       }
       onStage?.call(TranscriptionStage.finalizing);

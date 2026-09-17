@@ -275,7 +275,7 @@ void main() {
     expect(result.text, 'done');
   });
 
-  test('an engine that emits no text still errors instead of faking', () async {
+  test('a job where every chunk is empty still errors', () async {
     final engine = _FakeEngine(const [
       TranscribeProgress(elapsed: Duration(seconds: 1), ratio: 1),
     ]);
@@ -285,7 +285,31 @@ void main() {
         audioPath: 'ignored.wav',
         model: const EngineModelSpec(path: 'model.gguf'),
       ),
-      throwsA(isA<EngineUnavailableException>()),
+      throwsA(
+        isA<EngineUnavailableException>().having(
+          (e) => e.message,
+          'message',
+          contains('any audio chunk'),
+        ),
+      ),
+    );
+  });
+
+  test('an engine that emits no result still errors immediately', () async {
+    final engine = _FakeEngine(const []);
+
+    await expectLater(
+      _service(engine).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+      ),
+      throwsA(
+        isA<EngineUnavailableException>().having(
+          (e) => e.message,
+          'message',
+          contains('no result for chunk 1 of 1'),
+        ),
+      ),
     );
   });
 
@@ -372,6 +396,52 @@ void main() {
 
     // The whole temp directory (not just the chunk files) is gone.
     expect(File(engine.requests.first).parent.existsSync(), isFalse);
+  });
+
+  test('empty chunks are skipped without losing text or elapsed time', () async {
+    final engine = _ChunkedEngine([
+      const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 100),
+          ratio: 1,
+          partialText: 'a',
+        ),
+      ],
+      const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 200),
+          ratio: 1,
+        ),
+      ],
+      const [
+        TranscribeProgress(
+          elapsed: Duration(milliseconds: 300),
+          ratio: 1,
+          partialText: 'b',
+        ),
+      ],
+    ]);
+    final seen = <TranscribeProgress>[];
+    final audio = AudioBuffer(
+      samples: Float32List(16000 * 3),
+      sampleRate: 16000,
+    );
+
+    final result = await _service(engine, audio).transcribe(
+      audioPath: 'ignored.wav',
+      model: const EngineModelSpec(path: 'model.gguf'),
+      chunkSettings: _oneSecondFixed,
+      onProgress: seen.add,
+    );
+
+    expect(engine.requests, hasLength(3));
+    expect(result.text, 'a b');
+    expect(result.elapsed, const Duration(milliseconds: 600));
+    expect(seen.map((p) => p.completedChunkText), ['a', null, 'b']);
+    expect(
+      seen.map((p) => p.completedChunkElapsed?.inMilliseconds),
+      [100, null, 300],
+    );
   });
 
   test('mid-run engine failure throws and cleans the temp directory', () async {
