@@ -11,7 +11,7 @@ import '../models/model_picker.dart';
 const List<double> settingsLoudnessTargets = <double>[-16, -14, -23];
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
-const String settingsAppVersion = '1.0.10';
+const String settingsAppVersion = '1.0.11';
 
 const String _systemLanguage = 'system';
 
