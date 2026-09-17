@@ -18,11 +18,20 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # Honest build: no Windows native build/fetch for CrispASR/CrispEmbed is
-      # wired, so the Crisp adapters report unavailable on Windows. That is NOT
-      # "no ASR": SherpaEngine works there — the sherpa_onnx plugin bundles its
-      # own Windows DLLs (sherpa_onnx_windows).
+      - name: Restore cached Windows native build
+        id: windows-native-cache
+        uses: actions/cache@v4
+        with:
+          path: native/windows
+          key: native-windows-x64-${{ hashFiles('scripts/ci/build_native_windows.ps1') }}
+      - name: Build CrispEmbed from pinned source
+        if: steps.windows-native-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/ci/build_native_windows.ps1
       - run: flutter build windows --release
+      - name: Verify bundled CrispEmbed
+        shell: pwsh
+        run: ./scripts/ci/verify_windows_native.ps1 -BundleDirectory build/windows/x64/runner/Release
       - name: Bundle FFmpeg
         shell: pwsh
         run: ./scripts/ci/stage_ffmpeg_windows.ps1 -Destination build/windows/x64/runner/Release

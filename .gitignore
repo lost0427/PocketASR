@@ -59,6 +59,8 @@ native/*
 /.ccache/
 # Stable build work dir for scripts/ci/build_native_android.sh (keeps ccache hits).
 /.native-work/
+# Stable source/build directory for the pinned Windows CrispEmbed build.
+/.native-work-windows/
 android/key.properties
 
 # Android/Gradle first-sync artifacts

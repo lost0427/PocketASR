@@ -14,11 +14,11 @@ and under which licenses.
 
 ## Current state
 
-- **CrispASR / CrispEmbed**: no `.so`/`.dll` is committed. On Android, CI
-  builds both from source (below). The adapters report
-  `EngineCapabilities.unavailable` with a clear reason and never fabricate text
-  or embeddings. `CrispEmbedder` throws `EmbedderUnavailableException` instead
-  of falling back to `DeterministicEmbedder`.
+- **CrispASR / CrispEmbed**: no `.so`/`.dll` is committed. Android CI builds
+  both from source; Windows CI builds CrispEmbed from source. A missing native
+  artifact remains an explicit availability error. `CrispEmbedder` throws
+  `EmbedderUnavailableException` instead of falling back to
+  `DeterministicEmbedder`.
 - **sherpa-onnx**: the `sherpa_onnx` Flutter plugin bundles native libraries
   itself — Windows DLLs via `sherpa_onnx_windows`, and per-ABI Android packages
   (`sherpa_onnx_android_arm64`, …). `SherpaEngine` becomes available once the
@@ -127,18 +127,32 @@ workflow): `crispasr-android-arm64-v8a.tar.gz` (v0.8.32) sha256
 
 ## Windows
 
-The release workflow builds a Windows app, but with **no CrispASR/CrispEmbed
-DLLs**: there is no Windows native build step, so the two Crisp adapters
-honestly report unavailable on Windows. This is *not* "no ASR on Windows" —
-SherpaEngine is available there because the `sherpa_onnx` plugin bundles its
-Windows DLLs (`sherpa_onnx_windows`) automatically.
+The release workflow builds the x64 CPU `crispembed.dll` from CrispEmbed
+v0.16.1 commit `e6411e48bfd2572cc29a7c04eccee8a8153bef2e` and asserts its
+`ggml` gitlink is `0714117daca2471b00e09554c7eaa74a06b0b2c5`. The build uses
+`BUILD_SHARED_LIBS=OFF`, so CrispEmbed's pinned ggml is linked into the DLL
+rather than shipped as a second ABI surface. BLAS, CUDA, Vulkan, llamafile and
+OpenMP are disabled, as are host-native and AVX512 compilation; the portable
+Windows x64 build uses an AVX2 CPU baseline instead of inheriting the release
+runner's instruction set. The ignored staging path is
+`native/windows/crispembed.dll`; the application CMake installs it beside
+`pocket_asr.exe`, where the Dart FFI loader resolves it by name.
+
+`scripts/ci/verify_windows_native.ps1` loads the DLL from the final Release
+bundle, which checks its immediate dependency closure, and verifies every
+export eagerly bound by the Dart embedding constructor plus the query/passage
+metadata-prefix exports. The release workflow caches the staged DLL by the
+Windows build script hash. No model is downloaded or bundled.
+
+CrispASR still has no Windows native build step and honestly reports
+unavailable. This is *not* "no ASR on Windows" — SherpaEngine is available
+there because the `sherpa_onnx` plugin bundles its Windows DLLs
+(`sherpa_onnx_windows`) automatically.
 
 To enable CrispASR manually, download `libcrispasr-windows-x86_64.tar.gz` from
 the CrispASR `v0.8.32` release (sha256
 `3c2bccdd7e02ac5c526a744628f08b2ce6333f29c03804340fba8d131001b9b9`) and put its
 DLLs next to the built executable (`build/windows/x64/runner/Release/`).
-CrispEmbed's Windows plugin looks for `windows/lib/crispembed.dll`; without a
-staged `crispembed-windows-x86_64.zip` it warns and bundles nothing.
 
 ## Models are never built or downloaded
 

@@ -9,11 +9,13 @@
   the binaries were only 4KB LOAD-aligned, and 16KB alignment is a link-time
   property that cannot be fixed post-hoc (no patchelf, no pickFirst).
 - `.github/workflows/release.yml` (tag `v*`) builds Windows and Android releases.
-- **Windows** release bundles no native CrispASR/CrispEmbed: there is no Windows
-  native build step, so the Crisp adapters report unavailable and the default
-  engine/embedder are the `UnavailableAsrEngine` / `DeterministicEmbedder`
-  stand-ins. That is not "no ASR on Windows": **SherpaEngine works there** —
-  its DLLs are bundled by the `sherpa_onnx` plugin (`sherpa_onnx_windows`).
+- **Windows** release builds CrispEmbed v0.16.1 from its pinned source commit
+  and asserted ggml gitlink, then bundles the CPU-only x64 `crispembed.dll`;
+  host-native/AVX512 compilation is disabled in favor of an AVX2 baseline, and
+  models are still user-supplied at runtime. CrispASR remains unavailable
+  because there is no Windows CrispASR native build step. That is not "no ASR
+  on Windows": **SherpaEngine works there** — its DLLs are bundled by the
+  `sherpa_onnx` plugin (`sherpa_onnx_windows`).
 - **Android** release restores a matching native cache or runs
   `scripts/ci/build_native_android.sh` before `flutter build apk`: NDK r28+
   (r30 LTS pinned), arm64-v8a / android-24,

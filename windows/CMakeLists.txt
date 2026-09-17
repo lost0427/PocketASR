@@ -87,6 +87,16 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Native CrispEmbed is built from pinned source into this gitignored staging
+# directory. Keep ownership in the app rather than mutating Flutter's pub cache.
+set(POCKETASR_CRISPEMBED_DLL
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native/windows/crispembed.dll")
+if(EXISTS "${POCKETASR_CRISPEMBED_DLL}")
+  install(FILES "${POCKETASR_CRISPEMBED_DLL}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

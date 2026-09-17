@@ -6,9 +6,9 @@
 /// thread talks to [WorkerEmbedder], a mailbox. Constructing one loads the
 /// native library and the GGUF model immediately; a missing `.so`/`.dll` or an
 /// unreadable model throws [EmbedderUnavailableException] rather than falling
-/// back to [DeterministicEmbedder]. This build ships no `libcrispembed`, so
-/// construction currently fails loudly — which is the point: semantic search
-/// must never fake meaning.
+/// back to [DeterministicEmbedder]. Android and Windows release builds stage
+/// the native library from pinned source; unsupported or incomplete builds
+/// still fail loudly so semantic search never fakes meaning.
 library;
 
 import 'dart:io';
@@ -35,8 +35,8 @@ class CrispEmbedder implements Embedder {
        id = identityFor(modelPath) {
     try {
       dim = _probeDim(_model, modelPath);
-      // Verified against crispembed 0.16.1 (the local package; the native
-      // binary is CI-fetched and not inspectable here): encode() applies only
+      // Verified against crispembed 0.16.1 (the local package and pinned native
+      // source): encode() applies only
       // the settable ctx prefix — documented as "empty string if none", and
       // the package's own example sets `query: ` manually to prefix outputs.
       // Model-declared query/passage prefixes are exposed as *read-only*
