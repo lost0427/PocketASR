@@ -6,7 +6,6 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -30,7 +29,7 @@ import kotlin.math.max
  *
  * Method `decodeToPcm{path, targetSampleRate}` accepts a local file path or
  * a `content://` URI and runs MediaExtractor + MediaCodec on a background
- * executor: decode (PCM 16-bit or float output, whatever the codec reports),
+ * executor: decode (the linear PCM format reported by the codec),
  * mono downmix (mean, clamped), continuous linear resample to the target
  * rate, streaming into a little-endian float32 temp file in the app cache.
  * The reply is only `{path, sampleRate, count}` — bulk PCM never crosses
@@ -146,10 +145,13 @@ class AudioDecodeChannel(
             val channels = max(1, trackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
             if (inRate <= 0) throw IOException("Invalid source sample rate $inRate")
 
-            val (decoder, floatRequested) = openDecoder(mime, trackFormat)
+            val decoder = openDecoder(mime, trackFormat)
             codec = decoder
             decoder.start()
-            var useFloat = outputIsFloat(decoder, floatRequested)
+            var pcmEncoding = outputPcmEncoding(
+                decoder,
+                sourcePcmEncoding(mime, trackFormat),
+            )
 
             val pcmSink = PcmSink(out)
             sink = pcmSink
@@ -187,11 +189,14 @@ class AudioDecodeChannel(
                         ob.position(info.offset)
                         ob.limit(info.offset + info.size)
                         ob.order(ByteOrder.nativeOrder())
-                        val frameBytes = (if (useFloat) 4 else 2) * channels
+                        val frameBytes = bytesPerSample(pcmEncoding) * channels
+                        if (info.size % frameBytes != 0) {
+                            throw IOException("Decoder output is not aligned to PCM frames")
+                        }
                         val frames = info.size / frameBytes
                         if (frames > 0) {
                             framesSeen += frames
-                            resampler.feed(downmix(ob, frames, channels, useFloat))
+                            resampler.feed(downmix(ob, frames, channels, pcmEncoding))
                         }
                     }
                     decoder.releaseOutputBuffer(outIndex, false)
@@ -200,9 +205,9 @@ class AudioDecodeChannel(
                     }
                 } else when (outIndex) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED ->
-                        // Real decoders keep rate/channels stable; only the
-                        // PCM encoding can differ from what was requested.
-                        useFloat = outputIsFloat(decoder, useFloat)
+                        // Real decoders keep rate/channels stable; only the PCM
+                        // encoding may become more specific once output starts.
+                        pcmEncoding = outputPcmEncoding(decoder, pcmEncoding)
                     MediaCodec.INFO_TRY_AGAIN_LATER -> {
                         idle += 1
                         if (inputDone && idle > MAX_IDLE_ROUNDS) {
@@ -236,54 +241,84 @@ class AudioDecodeChannel(
         }
     }
 
-    /** Returns the decoder and whether float output was successfully requested. */
+    /** Configures the decoder without changing the extractor's source format. */
     private fun openDecoder(
         mime: String,
         trackFormat: MediaFormat,
-    ): Pair<MediaCodec, Boolean> {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // The copy constructor is API 29. Copy the track format instead
-            // of rebuilding one: MediaFormat.createAudioFormat(mime, rate,
-            // channels) keeps only those three keys, drops the AAC csd-0/
-            // csd-1, and the decoder then happily configures and emits
-            // nothing. The original stays untouched for the fallback below.
-            val requested = MediaFormat(trackFormat)
-            requested.setInteger(
-                MediaFormat.KEY_PCM_ENCODING,
-                AudioFormat.ENCODING_PCM_FLOAT,
-            )
-            var codec: MediaCodec? = null
-            try {
-                codec = MediaCodec.createDecoderByType(mime)
-                codec.configure(requested, null, null, 0)
-                return codec to true
-            } catch (e: Exception) {
-                runCatching { codec?.release() }
-            }
-        }
-        val fallback = MediaCodec.createDecoderByType(mime)
+    ): MediaCodec {
+        val decoder = MediaCodec.createDecoderByType(mime)
         try {
-            fallback.configure(trackFormat, null, null, 0)
+            decoder.configure(trackFormat, null, null, 0)
         } catch (e: Exception) {
-            runCatching { fallback.release() }
+            runCatching { decoder.release() }
             throw e
         }
-        return fallback to false
+        return decoder
     }
 
-    /** Trusts the codec's reported encoding; anything else is an honest failure. */
-    private fun outputIsFloat(codec: MediaCodec, fallbackFloat: Boolean): Boolean {
+    /** PCM decoders use this key for both input and output, so preserve the source value. */
+    private fun sourcePcmEncoding(mime: String, format: MediaFormat): Int {
+        if (mime != MediaFormat.MIMETYPE_AUDIO_RAW) return AudioFormat.ENCODING_PCM_16BIT
+        return try {
+            format.getInteger(MediaFormat.KEY_PCM_ENCODING)
+        } catch (e: Exception) {
+            AudioFormat.ENCODING_PCM_16BIT
+        }.let(::normalizePcmEncoding)
+    }
+
+    /** Uses the codec's actual output encoding, defaulting to Android's PCM16 contract. */
+    private fun outputPcmEncoding(codec: MediaCodec, fallback: Int): Int {
         val encoding = try {
             codec.outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
         } catch (e: Exception) {
-            return fallbackFloat // Key absent: assume what was configured.
+            return fallback
         }
-        if (encoding == 0) return fallbackFloat // Some stacks report "unset" as 0.
-        return when (encoding) {
-            AudioFormat.ENCODING_PCM_FLOAT -> true
-            AudioFormat.ENCODING_PCM_16BIT -> false
+        if (encoding == AudioFormat.ENCODING_INVALID) return fallback
+        return normalizePcmEncoding(encoding)
+    }
+
+    private fun normalizePcmEncoding(encoding: Int): Int = when (encoding) {
+        AudioFormat.ENCODING_INVALID,
+        AudioFormat.ENCODING_DEFAULT -> AudioFormat.ENCODING_PCM_16BIT
+        AudioFormat.ENCODING_PCM_8BIT,
+        AudioFormat.ENCODING_PCM_16BIT,
+        AudioFormat.ENCODING_PCM_FLOAT,
+        AudioFormat.ENCODING_PCM_24BIT_PACKED,
+        AudioFormat.ENCODING_PCM_32BIT -> encoding
+        else -> throw IOException("Decoder output PCM encoding $encoding is not supported")
+    }
+
+    private fun bytesPerSample(encoding: Int): Int = when (encoding) {
+        AudioFormat.ENCODING_PCM_8BIT -> 1
+        AudioFormat.ENCODING_PCM_16BIT -> 2
+        AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+        AudioFormat.ENCODING_PCM_FLOAT,
+        AudioFormat.ENCODING_PCM_32BIT -> 4
+        else -> throw IOException("Decoder output PCM encoding $encoding is not supported")
+    }
+
+    private fun readPcmSample(buf: ByteBuffer, encoding: Int): Float {
+        val value = when (encoding) {
+            AudioFormat.ENCODING_PCM_8BIT -> ((buf.get().toInt() and 0xff) - 128) / 128f
+            AudioFormat.ENCODING_PCM_16BIT -> buf.short / 32768f
+            AudioFormat.ENCODING_PCM_FLOAT -> buf.float
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                val first = buf.get().toInt() and 0xff
+                val middle = buf.get().toInt() and 0xff
+                val last = buf.get().toInt() and 0xff
+                val raw = if (buf.order() == ByteOrder.LITTLE_ENDIAN) {
+                    first or (middle shl 8) or (last shl 16)
+                } else {
+                    (first shl 16) or (middle shl 8) or last
+                }
+                val signed = if (raw and 0x800000 != 0) raw - 0x1000000 else raw
+                signed / 8388608f
+            }
+            AudioFormat.ENCODING_PCM_32BIT -> buf.int / 2147483648f
             else -> throw IOException("Decoder output PCM encoding $encoding is not supported")
         }
+        if (!value.isFinite()) throw IOException("Decoder produced a non-finite PCM sample")
+        return value
     }
 
     /** Channel-interleaved decoder output to clamped mono frames. */
@@ -291,21 +326,21 @@ class AudioDecodeChannel(
         buf: ByteBuffer,
         frames: Int,
         channels: Int,
-        isFloat: Boolean,
+        encoding: Int,
     ): FloatArray {
         val mono = FloatArray(frames)
         if (channels == 1) {
             for (f in 0 until frames) {
-                mono[f] = if (isFloat) buf.float else buf.short / 32768f
+                mono[f] = readPcmSample(buf, encoding).coerceIn(-1f, 1f)
             }
             return mono
         }
         for (f in 0 until frames) {
-            var sum = 0f
+            var sum = 0.0
             for (c in 0 until channels) {
-                sum += if (isFloat) buf.float else buf.short / 32768f
+                sum += readPcmSample(buf, encoding)
             }
-            mono[f] = (sum / channels).coerceIn(-1f, 1f)
+            mono[f] = (sum / channels).coerceIn(-1.0, 1.0).toFloat()
         }
         return mono
     }
@@ -320,6 +355,7 @@ class AudioDecodeChannel(
             private set
 
         fun put(value: Float) {
+            if (!value.isFinite()) throw IOException("Resampler produced a non-finite PCM sample")
             stage[fill++] = value
             if (fill == stage.size) flushStage()
         }
