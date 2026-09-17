@@ -317,8 +317,10 @@ class AudioDecodeChannel(
             AudioFormat.ENCODING_PCM_32BIT -> buf.int / 2147483648f
             else -> throw IOException("Decoder output PCM encoding $encoding is not supported")
         }
-        if (!value.isFinite()) throw IOException("Decoder produced a non-finite PCM sample")
-        return value
+        // Some platform decoders conceal a damaged compressed frame by
+        // emitting NaN/Inf samples. A single bad frame should become a short
+        // silence, not invalidate the rest of a long recording.
+        return if (value.isFinite()) value else 0f
     }
 
     /** Channel-interleaved decoder output to clamped mono frames. */
@@ -355,8 +357,7 @@ class AudioDecodeChannel(
             private set
 
         fun put(value: Float) {
-            if (!value.isFinite()) throw IOException("Resampler produced a non-finite PCM sample")
-            stage[fill++] = value
+            stage[fill++] = if (value.isFinite()) value else 0f
             if (fill == stage.size) flushStage()
         }
 

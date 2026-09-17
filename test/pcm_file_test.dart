@@ -116,4 +116,23 @@ void main() {
       }
     },
   );
+
+  test(
+    'non-finite decoded samples become silence without loading the file',
+    () async {
+      final data = ByteData(5 * 4)
+        ..setFloat32(0, 0.25, Endian.little)
+        ..setFloat32(4, double.nan, Endian.little)
+        ..setFloat32(8, double.infinity, Endian.little)
+        ..setFloat32(12, double.negativeInfinity, Endian.little)
+        ..setFloat32(16, -0.5, Endian.little);
+      final path = '${dir.path}/damaged.f32';
+      await File(path).writeAsBytes(data.buffer.asUint8List());
+
+      final blocks = await PcmFile(path, 5).blocks(blockSize: 2).toList();
+
+      expect(blocks.map((block) => block.length), [2, 2, 1]);
+      expect(blocks.expand((block) => block), [0.25, 0, 0, 0, -0.5]);
+    },
+  );
 }

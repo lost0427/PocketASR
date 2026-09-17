@@ -66,10 +66,10 @@ class PcmFile {
         final samples = Float32List(length);
         for (var i = 0; i < length; i++) {
           final value = view.getFloat32(i * 4, Endian.little);
-          if (!value.isFinite) {
-            throw const FormatException('Non-finite PCM sample');
-          }
-          samples[i] = (value * gain).clamp(-1.0, 1.0);
+          // A damaged compressed frame may survive a platform decoder as a
+          // non-finite sample. Preserve the timeline with silence so one bad
+          // frame does not discard the rest of a long recording.
+          samples[i] = value.isFinite ? (value * gain).clamp(-1.0, 1.0) : 0;
         }
         yield samples;
       }
