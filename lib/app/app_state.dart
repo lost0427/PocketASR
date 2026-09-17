@@ -169,8 +169,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Quantization tag (`q8_0`, `q4_k`, `q6_k`). Registry default is Q4_K.
-  String _modelQuant = 'q4_k';
+  /// Quantization tag (`q8_0`, `q4_k`, `q6_k`). Registry default is Q8_0.
+  String _modelQuant = 'q8_0';
   String get modelQuant => _modelQuant;
   set modelQuant(String value) {
     if (value == _modelQuant) return;

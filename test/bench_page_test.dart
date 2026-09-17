@@ -166,7 +166,7 @@ const _sense = ModelEntry(
   displayName: 'SenseVoice',
   fileName: 'sense.onnx',
   family: 'sensevoice',
-  quant: 'q4_k',
+  quant: 'q8_0',
   engine: 'sherpa',
 );
 
@@ -321,7 +321,7 @@ void main() {
       displayName: 'Crisp',
       fileName: 'model.gguf',
       family: 'sensevoice',
-      quant: 'q4_k',
+      quant: 'q8_0',
       engine: 'crispasr',
     );
     download(whisper);

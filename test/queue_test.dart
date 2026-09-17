@@ -180,7 +180,7 @@ void main() {
     final worker = QueueWorker(
       queue,
       service,
-      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice', quant: 'q4_k'),
+      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice', quant: 'q8_0'),
       transcriptRepo: repo,
       backend: Backend.cpu,
       chunkSettings: const ChunkSettings(
@@ -195,7 +195,7 @@ void main() {
     expect(service.models, hasLength(1));
     expect(service.models.single.path, 'm.onnx');
     expect(service.models.single.family, 'sensevoice');
-    expect(service.models.single.quant, 'q4_k');
+    expect(service.models.single.quant, 'q8_0');
     expect(service.lastBackend, Backend.cpu);
     expect(service.lastChunkSettings?.mode, ChunkMode.energy);
     expect(service.lastChunkSettings?.chunkSeconds, 12);

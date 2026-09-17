@@ -127,7 +127,6 @@ void main() {
     final path = write('voice.gguf', [1, 2, 3]);
     final state = AppState(database: db)
       ..modelFamily = 'sensevoice'
-      ..modelQuant = 'q4_k'
       ..modelPath = path;
 
     // A GGUF goes to CrispASR, not silently to the sherpa adapter.
@@ -136,12 +135,13 @@ void main() {
     expect(state.modelSelectionIsManual, isTrue);
     // Family/quant come from the Settings controls, not a bundle.
     expect(state.modelSpec!.family, 'sensevoice');
-    expect(state.modelSpec!.quant, 'q4_k');
+    expect(state.modelSpec!.quant, 'q8_0');
 
     final restored = AppState(database: db);
     expect(restored.engineId, 'crispasr');
     expect(restored.modelPath, path);
     expect(restored.modelSelectionIsManual, isTrue);
+    expect(restored.modelSpec!.quant, 'q8_0');
   });
 
   test('a vanished selection is cleared and flagged on restart', () {
