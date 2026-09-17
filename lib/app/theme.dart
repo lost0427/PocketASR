@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 /// One seed keeps the light and dark schemes in step.
@@ -7,6 +9,11 @@ ThemeData buildLightTheme() => _buildTheme(Brightness.light);
 
 ThemeData buildDarkTheme() => _buildTheme(Brightness.dark);
 
+/// Flutter Windows falls back to a CJK serif (SimSun) for Chinese text when
+/// no CJK font is declared; Segoe UI only covers Latin. Name Microsoft YaHei
+/// first so both scripts share one sans-serif stack.
+final _fontFamily = Platform.isWindows ? 'Microsoft YaHei UI' : null;
+
 ThemeData _buildTheme(Brightness brightness) {
   final scheme = ColorScheme.fromSeed(
     seedColor: seedColor,
@@ -14,6 +21,7 @@ ThemeData _buildTheme(Brightness brightness) {
   );
 
   return ThemeData(
+    fontFamily: _fontFamily,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     appBarTheme: AppBarTheme(
