@@ -99,6 +99,7 @@ class _RecordingService extends TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     NeuralVadSettings? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -142,6 +143,7 @@ class _BlockingService extends TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     NeuralVadSettings? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {

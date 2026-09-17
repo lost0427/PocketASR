@@ -7,6 +7,9 @@ import '../../core/audio/chunk_planner.dart';
 import '../../core/audio/pcm_file.dart';
 import '../../core/audio/loudness.dart';
 import '../../engine/asr_engine.dart';
+import 'transcription_stage.dart';
+
+export 'transcription_stage.dart';
 
 class TranscriptionJobResult {
   const TranscriptionJobResult({
@@ -135,6 +138,7 @@ class TranscriptionService {
     String? language,
     ChunkSettings? chunkSettings,
     NeuralVadSettings? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -148,10 +152,13 @@ class TranscriptionService {
     chunkSettings?.validate();
     final dir = await Directory.systemTemp.createTemp('pocket_asr_');
     try {
+    onStage?.call(TranscriptionStage.decoding);
     final audio = await _decode(audioPath, dir, isCancelled);
+    onStage?.call(TranscriptionStage.analyzing);
     final measured = await _measure(audio, isCancelled);
     final gain = math.pow(10, measured.gainDb / 20).toDouble();
     List<List<AudioChunk>> windows = const [];
+    onStage?.call(TranscriptionStage.segmenting);
     if (neuralVad == null) {
       // Fixed/energy windows are planned before the temp dir exists, so an
       // invalid or speechless plan leaves no debris.
@@ -189,6 +196,7 @@ class TranscriptionService {
       if (isCancelled?.call() ?? false) {
         throw const EngineCancelledException('Cancelled before loading the ASR model.');
       }
+      onStage?.call(TranscriptionStage.loadingModel);
       await engine.load(model, backend);
       final totalUs = windows.fold<int>(
         0,
@@ -198,6 +206,7 @@ class TranscriptionService {
       var doneUs = 0;
       var elapsed = Duration.zero;
       int? tokensSoFar = 0;
+      onStage?.call(TranscriptionStage.transcribing);
       for (var i = 0; i < windows.length; i++) {
         if (isCancelled?.call() ?? false) {
           throw EngineCancelledException(
@@ -259,6 +268,7 @@ class TranscriptionService {
           'transcribed but discarded — a cancelled job returns no text.',
         );
       }
+      onStage?.call(TranscriptionStage.finalizing);
       return TranscriptionJobResult(
         text: parts.join(' ').trim(),
         elapsed: elapsed,

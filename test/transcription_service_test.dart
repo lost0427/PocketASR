@@ -235,6 +235,32 @@ void main() {
     expect(result.audioDuration, const Duration(seconds: 1));
   });
 
+  test('reports each processing stage in execution order', () async {
+    final engine = _FakeEngine(const [
+      TranscribeProgress(
+        elapsed: Duration(milliseconds: 100),
+        ratio: 1,
+        partialText: 'done',
+      ),
+    ]);
+    final stages = <TranscriptionStage>[];
+
+    await _service(engine).transcribe(
+      audioPath: 'ignored.wav',
+      model: const EngineModelSpec(path: 'model.gguf'),
+      onStage: stages.add,
+    );
+
+    expect(stages, const [
+      TranscriptionStage.decoding,
+      TranscriptionStage.analyzing,
+      TranscriptionStage.segmenting,
+      TranscriptionStage.loadingModel,
+      TranscriptionStage.transcribing,
+      TranscriptionStage.finalizing,
+    ]);
+  });
+
   test('runs without a callback (backwards compatible)', () async {
     final engine = _FakeEngine(const [
       TranscribeProgress(

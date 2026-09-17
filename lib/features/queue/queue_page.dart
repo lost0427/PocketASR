@@ -175,6 +175,24 @@ class _QueuePageState extends State<QueuePage> {
         TranscriptionJobStatus.cancelled => l10n.queueStatusCancelled,
       };
 
+  String _stageLabel(AppLocalizations l10n, TranscriptionStage stage) =>
+      switch (stage) {
+        TranscriptionStage.decoding => l10n.transcribeStageDecoding,
+        TranscriptionStage.analyzing => l10n.transcribeStageAnalyzing,
+        TranscriptionStage.segmenting => l10n.transcribeStageSegmenting,
+        TranscriptionStage.loadingModel => l10n.transcribeStageLoadingModel,
+        TranscriptionStage.transcribing => l10n.transcribeStageTranscribing,
+        TranscriptionStage.finalizing => l10n.transcribeStageFinalizing,
+      };
+
+  String _jobStatusLabel(AppLocalizations l10n, TranscriptionJob job) {
+    final stage = job.stage;
+    if (job.status == TranscriptionJobStatus.running && stage != null) {
+      return _stageLabel(l10n, stage);
+    }
+    return _statusLabel(l10n, job.status);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -312,7 +330,7 @@ class _QueuePageState extends State<QueuePage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
-                        job.error ?? _statusLabel(l10n, job.status),
+                        job.error ?? _jobStatusLabel(l10n, job),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

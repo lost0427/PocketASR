@@ -57,6 +57,7 @@ class QueueWorker {
             backend: backend,
             chunkSettings: chunkSettings,
             neuralVad: neuralVad,
+            onStage: (stage) => queue.updateStage(id, stage),
             isCancelled: () => queue.isCancelling(id),
           );
           // A cancel that landed after the engine returned: discard the text

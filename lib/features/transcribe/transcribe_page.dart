@@ -79,6 +79,7 @@ class _TranscribePageState extends State<TranscribePage> {
   String _result = '';
   String _partialText = '';
   double? _progress;
+  TranscriptionStage? _stage;
   bool _running = false;
   bool _recordingBusy = false;
   String? _error;
@@ -152,6 +153,22 @@ class _TranscribePageState extends State<TranscribePage> {
     });
   }
 
+  void _onStage(TranscriptionStage stage) {
+    if (!mounted) return;
+    setState(() => _stage = stage);
+  }
+
+  String _stageLabel(AppLocalizations l10n, TranscriptionStage? stage) =>
+      switch (stage) {
+        TranscriptionStage.decoding => l10n.transcribeStageDecoding,
+        TranscriptionStage.analyzing => l10n.transcribeStageAnalyzing,
+        TranscriptionStage.segmenting => l10n.transcribeStageSegmenting,
+        TranscriptionStage.loadingModel => l10n.transcribeStageLoadingModel,
+        TranscriptionStage.transcribing => l10n.transcribeStageTranscribing,
+        TranscriptionStage.finalizing => l10n.transcribeStageFinalizing,
+        null => l10n.transcribeProgress,
+      };
+
   void _notify(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -218,6 +235,7 @@ class _TranscribePageState extends State<TranscribePage> {
       _error = null;
       _cancelRequested = false;
       _progress = 0;
+      _stage = TranscriptionStage.decoding;
       _result = '';
       _partialText = '';
       _tokensPerSec = null;
@@ -236,6 +254,7 @@ class _TranscribePageState extends State<TranscribePage> {
         backend: state?.backend ?? Backend.cpu,
         chunkSettings: state?.chunkSettings,
         neuralVad: neuralVad,
+        onStage: _onStage,
         onProgress: _onProgress,
         isCancelled: () => _cancelRequested,
       );
@@ -284,7 +303,12 @@ class _TranscribePageState extends State<TranscribePage> {
       // A cancelled run leaves the VAD worker's cancel flag set; drop it so a
       // retry starts clean.
       state?.resetVadEngine();
-      if (mounted) setState(() => _running = false);
+      if (mounted) {
+        setState(() {
+          _running = false;
+          _stage = null;
+        });
+      }
     }
   }
 
@@ -657,8 +681,10 @@ class _TranscribePageState extends State<TranscribePage> {
                         ? l10n.transcribeProgressIdle
                         : _cancelRequested
                         ? l10n.transcribeCancelling
-                        : l10n.transcribeProgress,
-                    value: _progress ?? 0,
+                        : _stageLabel(l10n, _stage),
+                    value: running && _stage != TranscriptionStage.transcribing
+                        ? null
+                        : _progress ?? 0,
                   ),
                   const SizedBox(height: 12),
                   _MetricsGrid(
@@ -1061,7 +1087,7 @@ class _ProgressPanel extends StatelessWidget {
   const _ProgressPanel({required this.label, required this.value});
 
   final String label;
-  final double value;
+  final double? value;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,13 +1106,14 @@ class _ProgressPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
-                '${(value * 100).round()}%',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+              if (value != null)
+                Text(
+                  '${(value! * 100).round()}%',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),

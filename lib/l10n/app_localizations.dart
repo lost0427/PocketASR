@@ -290,6 +290,42 @@ abstract class AppLocalizations {
   /// **'Waiting to start'**
   String get transcribeProgressIdle;
 
+  /// No description provided for @transcribeStageDecoding.
+  ///
+  /// In en, this message translates to:
+  /// **'Decoding audio'**
+  String get transcribeStageDecoding;
+
+  /// No description provided for @transcribeStageAnalyzing.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing loudness'**
+  String get transcribeStageAnalyzing;
+
+  /// No description provided for @transcribeStageSegmenting.
+  ///
+  /// In en, this message translates to:
+  /// **'Segmenting audio'**
+  String get transcribeStageSegmenting;
+
+  /// No description provided for @transcribeStageLoadingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading model'**
+  String get transcribeStageLoadingModel;
+
+  /// No description provided for @transcribeStageTranscribing.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing'**
+  String get transcribeStageTranscribing;
+
+  /// No description provided for @transcribeStageFinalizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Finalizing'**
+  String get transcribeStageFinalizing;
+
   /// No description provided for @transcribeMetrics.
   ///
   /// In en, this message translates to:

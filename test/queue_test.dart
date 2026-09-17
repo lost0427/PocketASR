@@ -31,6 +31,7 @@ class _RecordingService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -258,6 +259,26 @@ void main() {
     expect(queue.byId('a')?.status, TranscriptionJobStatus.cancelled);
     expect(repo.list(), isEmpty); // the text was thrown away, not saved
   });
+
+  test('worker exposes the current processing stage on the job', () async {
+    final queue = TranscriptionQueue()..add(job('a'));
+    final service = _GatedService();
+    final worker = QueueWorker(
+      queue,
+      service,
+      const EngineModelSpec(path: 'm.onnx', family: 'sensevoice'),
+    );
+
+    final running = worker.run();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+
+    expect(queue.byId('a')?.status, TranscriptionJobStatus.running);
+    expect(queue.byId('a')?.stage, TranscriptionStage.loadingModel);
+
+    service.release.complete();
+    await running;
+    expect(queue.byId('a')?.stage, isNull);
+  });
 }
 
 /// Polls [isCancelled] like a real chunk loop and throws once it is true.
@@ -274,6 +295,7 @@ class _BlockingService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -300,9 +322,11 @@ class _GatedService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    onStage?.call(TranscriptionStage.loadingModel);
     await release.future;
     return TranscriptionJobResult(
       text: 'late success',

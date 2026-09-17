@@ -88,6 +88,7 @@ class _ScriptedService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -141,10 +142,12 @@ class _SlowService extends TranscriptionService {
     Backend backend = Backend.cpu,
     String? language,
     ChunkSettings? chunkSettings,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
     Object? neuralVad,
   }) async {
+    onStage?.call(TranscriptionStage.segmenting);
     await release.future;
     return TranscriptionJobResult(
       text: 'hello',
@@ -539,6 +542,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start transcription'));
     await tester.pump();
+
+    expect(find.text('Segmenting audio'), findsOneWidget);
 
     // A tick of the run's sampler fills the CPU and memory tiles with the
     // readings the sampler really returned.

@@ -29,6 +29,7 @@ class _RecordingService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -209,6 +210,8 @@ void main() {
     await tester.tap(find.text('Run queue'));
     await tester.pump();
 
+    expect(find.text('Segmenting audio'), findsOneWidget);
+
     // The page really asked the engine to abort (the cooperative seam).
     await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
@@ -294,9 +297,11 @@ class _BlockingService extends TranscriptionService {
     // Object? keeps this override valid under both the pre-VAD and neural-VAD
     // service signature.
     Object? neuralVad,
+    void Function(TranscriptionStage stage)? onStage,
     void Function(TranscribeProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    onStage?.call(TranscriptionStage.segmenting);
     while (!(isCancelled?.call() ?? false)) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }

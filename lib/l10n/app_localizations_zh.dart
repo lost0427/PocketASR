@@ -111,6 +111,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeProgressIdle => '等待开始';
 
   @override
+  String get transcribeStageDecoding => '正在解码音频';
+
+  @override
+  String get transcribeStageAnalyzing => '正在分析响度';
+
+  @override
+  String get transcribeStageSegmenting => '正在切分音频';
+
+  @override
+  String get transcribeStageLoadingModel => '正在加载模型';
+
+  @override
+  String get transcribeStageTranscribing => '正在转录';
+
+  @override
+  String get transcribeStageFinalizing => '正在整理结果';
+
+  @override
   String get transcribeMetrics => '实时指标';
 
   @override

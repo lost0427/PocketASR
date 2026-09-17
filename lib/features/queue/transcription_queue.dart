@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../transcribe/transcription_stage.dart';
+
 /// Lifecycle of a queued transcription.
 ///
 /// [cancelling] is the cooperative window the running job spends between
@@ -40,6 +42,9 @@ class TranscriptionJob {
 
   /// Last failure message, or null.
   String? error;
+
+  /// Current processing phase while [status] is running.
+  TranscriptionStage? stage;
 
   bool get isFinished =>
       status == TranscriptionJobStatus.done ||
@@ -119,6 +124,7 @@ class TranscriptionQueue extends ChangeNotifier {
     job.status = job.status == TranscriptionJobStatus.pending
         ? TranscriptionJobStatus.cancelled
         : TranscriptionJobStatus.cancelling;
+    job.stage = null;
     notifyListeners();
     return true;
   }
@@ -137,6 +143,7 @@ class TranscriptionQueue extends ChangeNotifier {
       return false;
     }
     job.status = TranscriptionJobStatus.cancelled;
+    job.stage = null;
     notifyListeners();
     return true;
   }
@@ -150,6 +157,7 @@ class TranscriptionQueue extends ChangeNotifier {
     }
     job.status = TranscriptionJobStatus.pending;
     job.error = null;
+    job.stage = null;
     notifyListeners();
     return true;
   }
@@ -160,6 +168,7 @@ class TranscriptionQueue extends ChangeNotifier {
     for (final job in _jobs) {
       if (job.status == TranscriptionJobStatus.pending) {
         job.status = TranscriptionJobStatus.running;
+        job.stage = null;
         job.attempts++;
         notifyListeners();
         return job;
@@ -175,6 +184,7 @@ class TranscriptionQueue extends ChangeNotifier {
       return false;
     }
     job.status = TranscriptionJobStatus.done;
+    job.stage = null;
     notifyListeners();
     return true;
   }
@@ -188,6 +198,19 @@ class TranscriptionQueue extends ChangeNotifier {
     }
     job.status = TranscriptionJobStatus.failed;
     job.error = error;
+    job.stage = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// Updates the visible processing phase of a running job.
+  bool updateStage(String id, TranscriptionStage stage) {
+    final job = byId(id);
+    if (job == null || job.status != TranscriptionJobStatus.running) {
+      return false;
+    }
+    if (job.stage == stage) return true;
+    job.stage = stage;
     notifyListeners();
     return true;
   }

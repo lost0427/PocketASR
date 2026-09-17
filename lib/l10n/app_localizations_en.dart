@@ -114,6 +114,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeProgressIdle => 'Waiting to start';
 
   @override
+  String get transcribeStageDecoding => 'Decoding audio';
+
+  @override
+  String get transcribeStageAnalyzing => 'Analyzing loudness';
+
+  @override
+  String get transcribeStageSegmenting => 'Segmenting audio';
+
+  @override
+  String get transcribeStageLoadingModel => 'Loading model';
+
+  @override
+  String get transcribeStageTranscribing => 'Transcribing';
+
+  @override
+  String get transcribeStageFinalizing => 'Finalizing';
+
+  @override
   String get transcribeMetrics => 'Live metrics';
 
   @override
