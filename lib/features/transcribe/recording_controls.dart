@@ -159,7 +159,10 @@ class _RecordingControlsState extends State<RecordingControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_recording) Text(l10n.recordElapsed(_clock.elapsed.inSeconds)),
+        if (_recording) ...[
+          Text(l10n.recordElapsed(_clock.elapsed.inSeconds)),
+          const SizedBox(height: 8),
+        ],
         Wrap(
           spacing: 12,
           children: [
@@ -181,11 +184,13 @@ class _RecordingControlsState extends State<RecordingControls> {
               ),
           ],
         ),
-        if (_error != null)
+        if (_error != null) ...[
+          const SizedBox(height: 8),
           Text(
             _error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
+        ],
       ],
     );
   }

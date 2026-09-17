@@ -477,7 +477,12 @@ class _TranscribePageState extends State<TranscribePage> {
         final transcript = _result.isNotEmpty ? _result : _partialText;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            48 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
@@ -491,7 +496,7 @@ class _TranscribePageState extends State<TranscribePage> {
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   _SourceCard(
                     fileName: _fileName,
                     hint: l10n.transcribeFileHint,
@@ -501,6 +506,7 @@ class _TranscribePageState extends State<TranscribePage> {
                     enabled: !running && !_previewing && !_recordingBusy,
                     onPick: _pickFile,
                   ),
+                  const SizedBox(height: 12),
                   RecordingControls(
                     enabled: !running && !_previewing && !busyElsewhere,
                     onBusy: (busy) => setState(() => _recordingBusy = busy),
@@ -524,7 +530,7 @@ class _TranscribePageState extends State<TranscribePage> {
                       body: l10n.transcribeEngineUnavailableBody,
                     ),
                   ],
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   _SectionLabel(l10n.transcribeEngineSection),
                   const SizedBox(height: 12),
                   Row(
@@ -567,6 +573,7 @@ class _TranscribePageState extends State<TranscribePage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed:
                         running ||
@@ -580,6 +587,9 @@ class _TranscribePageState extends State<TranscribePage> {
                       modelPath == null
                           ? l10n.transcribeChooseModel
                           : l10n.transcribeChangeModel,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
                     ),
                   ),
                   if (needsDecoder) ...[
