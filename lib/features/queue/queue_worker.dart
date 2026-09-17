@@ -77,9 +77,7 @@ class QueueWorker {
             modelPath: result.model.path,
             backend: result.backend.name,
             rtf: result.rtf,
-            tokens: result.tokens,
             totalMs: result.elapsed.inMilliseconds,
-            avgTokensPerSec: result.avgTokensPerSec,
           );
           queue.complete(id);
         } on EngineCancelledException {

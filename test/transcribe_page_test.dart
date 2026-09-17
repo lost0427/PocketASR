@@ -63,13 +63,6 @@ class _FakeEngine extends UnavailableAsrEngine {
 const _availableCaps = EngineCapabilities(
   available: true,
   backends: {Backend.cpu},
-  supportsTokenCount: true,
-);
-
-const _unsupportedTokenCaps = EngineCapabilities(
-  available: true,
-  backends: {Backend.cpu},
-  supportsTokenCount: false,
 );
 
 /// Service stub that replays a fixed progress script and returns a result,
@@ -114,7 +107,6 @@ class _ScriptedService extends TranscriptionService {
       backend: backend,
       originalLufs: -16,
       gainDb: 0,
-      tokens: 4,
     );
   }
 }
@@ -160,7 +152,6 @@ class _SlowService extends TranscriptionService {
         elapsed: Duration(milliseconds: 500),
         ratio: 0.5,
         partialText: 'hel',
-        tokens: 3,
       ),
     );
     await release.future;
@@ -243,17 +234,6 @@ void main() {
     expect(start.onPressed, isNull);
   });
 
-  testWidgets('shows token rate as unsupported when the engine cannot count', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(engine: const _FakeEngine(_unsupportedTokenCaps)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Unsupported'), findsOneWidget);
-  });
-
   testWidgets('displays the current engine, backend and model', (tester) async {
     await tester.pumpWidget(_app(engine: const _FakeEngine(_availableCaps)));
     await tester.pumpAndSettle();
@@ -291,13 +271,11 @@ void main() {
         elapsed: Duration(seconds: 1),
         ratio: 0.5,
         partialText: 'hel',
-        tokens: 2,
       ),
       TranscribeProgress(
         elapsed: Duration(seconds: 2),
         ratio: 1,
         partialText: 'hello',
-        tokens: 4,
       ),
     ]);
 
@@ -323,9 +301,8 @@ void main() {
     expect(find.text('CPU'), findsWidgets);
     expect(find.text('model.onnx'), findsOneWidget);
 
-    // Real metrics: 4 tokens / 2 s = 2.0, 5 graphemes / 2 s = 2.5,
+    // Real metrics: 5 graphemes / 2 s = 2.5,
     // RTF = 2 s / 0.5 s audio = 4.00, elapsed = 2.0s.
-    expect(find.text('2.0'), findsOneWidget); // tokens/s
     expect(find.text('2.5'), findsOneWidget); // chars/s
     expect(find.text('4.00'), findsOneWidget); // RTF
     expect(find.text('2.0s'), findsOneWidget); // elapsed
@@ -338,7 +315,6 @@ void main() {
     expect(rows.single.engine, 'fake');
     expect(rows.single.modelPath, 'model.onnx');
     expect(rows.single.backend, 'cpu');
-    expect(rows.single.tokens, 4);
     expect(rows.single.totalMs, 2000);
     expect(rows.single.rtf, 4.0);
   });
@@ -570,7 +546,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Segmenting audio'), findsOneWidget);
-    expect(find.text('Calculating'), findsOneWidget);
+    expect(find.text('Calculating'), findsNothing);
 
     // A tick of the run's sampler fills the CPU and memory tiles with the
     // readings the sampler really returned.
@@ -583,7 +559,6 @@ void main() {
     // Ending the run stops the sampling: no further reads happen.
     service.release.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Calculating'), findsNothing);
     final callsAtEnd = sampler.calls;
     await tester.pump(const Duration(seconds: 3));
     expect(sampler.calls, callsAtEnd);

@@ -724,8 +724,8 @@ class _ResultCard extends StatelessWidget {
               ),
               _metric(
                 context,
-                l10n.metricTokensPerSec,
-                result.tokensPerSecond?.toStringAsFixed(1) ??
+                l10n.metricCharsPerSec,
+                result.charsPerSecond?.toStringAsFixed(1) ??
                     l10n.metricUnavailable,
               ),
             ],

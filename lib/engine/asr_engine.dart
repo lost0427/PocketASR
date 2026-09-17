@@ -58,7 +58,6 @@ class EngineCapabilities {
     required this.available,
     this.backends = const {},
     this.supportsVad = false,
-    this.supportsTokenCount = false,
     this.unavailableReason,
   });
 
@@ -73,10 +72,6 @@ class EngineCapabilities {
 
   /// True when [AsrEngine.planVad] can return real cut boundaries.
   final bool supportsVad;
-
-  /// True when progress/result carry real tokenizer token counts. When false,
-  /// metrics show `—` instead of inventing a tokens/s figure (plan Phase 6).
-  final bool supportsTokenCount;
 
   /// Human-readable why-not when [available] is false.
   final String? unavailableReason;
@@ -214,7 +209,8 @@ class TranscribeProgress {
     required this.elapsed,
     this.ratio = -1,
     this.partialText = '',
-    this.tokens,
+    this.completedChunkText,
+    this.completedChunkElapsed,
   });
 
   /// Wall-clock time since transcription started.
@@ -226,38 +222,13 @@ class TranscribeProgress {
   /// Text decoded so far; empty until the engine emits partials.
   final String partialText;
 
-  /// Real tokenizer count so far, or null when unsupported/not counted yet.
-  final int? tokens;
-}
-
-/// The finished output of one transcription.
-class TranscriptionResult {
-  const TranscriptionResult({
-    required this.text,
-    required this.elapsed,
-    this.audioDuration,
-    this.tokens,
-  });
-
-  final String text;
-
-  /// Total wall-clock time spent.
-  final Duration elapsed;
-
-  /// Input audio length; null when the caller did not measure it.
-  final Duration? audioDuration;
-
-  /// Real tokenizer token count, or null when the engine cannot report one.
-  final int? tokens;
-
-  bool get isEmpty => text.isEmpty;
-
-  /// Real-time factor = processing time / audio time; null when unknown.
-  double? get rtf {
-    final audioMs = audioDuration?.inMilliseconds;
-    if (audioMs == null || audioMs <= 0) return null;
-    return elapsed.inMilliseconds / audioMs;
-  }
+  /// Text and inference time for the most recently completed chunk.
+  ///
+  /// Engines leave these null. The transcription service fills them only on
+  /// the final progress event for a chunk so the UI can show that chunk's
+  /// character rate while the next chunk is running.
+  final String? completedChunkText;
+  final Duration? completedChunkElapsed;
 }
 
 /// The single swap point for ASR engines (plan §2).
@@ -319,8 +290,8 @@ abstract interface class CancellableAsrEngine implements AsrEngine {
 
 /// Raised whenever an operation needs the missing native library.
 ///
-/// Deliberately an error and not an empty [TranscriptionResult]: a caller that
-/// forgets to handle it must crash loudly, never persist an empty transcript.
+/// Deliberately an error rather than an empty result: a caller that forgets to
+/// handle it must crash loudly, never persist an empty transcript.
 class EngineUnavailableException implements Exception {
   const EngineUnavailableException(this.message);
 

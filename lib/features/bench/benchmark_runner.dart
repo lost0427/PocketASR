@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../core/audio/chunk_planner.dart';
+import '../../core/text/token_counter.dart';
 import '../../engine/asr_engine.dart';
 import '../transcribe/transcription_service.dart';
 
@@ -24,7 +25,7 @@ class BenchmarkCase {
 
 /// The median outcome of [BenchmarkRunner.run]'s repeated runs for one case.
 ///
-/// [elapsed], [tokensPerSecond] and [rtf] are medians over the runs that
+/// [elapsed], [charsPerSecond] and [rtf] are medians over the runs that
 /// succeeded; [attempts] and [failures] say how many really ran. A cell with no
 /// successful run carries [error] and no numbers — it is never given a made-up
 /// value.
@@ -34,7 +35,7 @@ class BenchmarkResult {
     required this.engine,
     required this.backend,
     this.elapsed,
-    this.tokensPerSecond,
+    this.charsPerSecond,
     this.rtf,
     this.attempts = 0,
     this.failures = 0,
@@ -45,7 +46,7 @@ class BenchmarkResult {
   final String engine;
   final Backend backend;
   final Duration? elapsed;
-  final double? tokensPerSecond;
+  final double? charsPerSecond;
   final double? rtf;
 
   /// How many runs were attempted and how many threw.
@@ -55,7 +56,7 @@ class BenchmarkResult {
   /// Failure message when no run succeeded, or a partial-failure note.
   final String? error;
 
-  bool get isFailure => elapsed == null && rtf == null && tokensPerSecond == null;
+  bool get isFailure => elapsed == null && rtf == null && charsPerSecond == null;
 
   Map<String, Object?> toJson() => {
     'id': caseSpec.id,
@@ -65,7 +66,7 @@ class BenchmarkResult {
     'engine': engine,
     'backend': backend.name,
     'elapsedMs': elapsed?.inMilliseconds,
-    'tokensPerSecond': tokensPerSecond,
+    'charsPerSecond': charsPerSecond,
     'rtf': rtf,
     'attempts': attempts,
     'failures': failures,
@@ -109,7 +110,7 @@ class BenchmarkRunner {
     bool Function()? isCancelled,
   }) async {
     final elapsed = <Duration>[];
-    final tokensPerSecond = <double>[];
+    final charsPerSecond = <double>[];
     final rtf = <double>[];
     var failures = 0;
     String? lastError;
@@ -124,8 +125,8 @@ class BenchmarkRunner {
           isCancelled: isCancelled,
         );
         elapsed.add(result.elapsed);
-        final rate = result.avgTokensPerSec;
-        if (rate != null) tokensPerSecond.add(rate);
+        final rate = graphemesPerSecond(result.text, result.elapsed);
+        if (rate != null) charsPerSecond.add(rate);
         final factor = result.rtf;
         if (factor != null) rtf.add(factor);
       } on EngineCancelledException {
@@ -152,7 +153,7 @@ class BenchmarkRunner {
       engine: engine.id,
       backend: Backend.cpu,
       elapsed: _medianDuration(elapsed),
-      tokensPerSecond: _median(tokensPerSecond),
+      charsPerSecond: _median(charsPerSecond),
       rtf: _median(rtf),
       attempts: repeats,
       failures: failures,
@@ -183,7 +184,7 @@ class BenchmarkRunner {
 
   static String toCsv(List<BenchmarkResult> results) {
     final lines = <String>[
-      'id,family,quant,modelPath,engine,backend,elapsedMs,tokensPerSecond,rtf,'
+      'id,family,quant,modelPath,engine,backend,elapsedMs,charsPerSecond,rtf,'
           'attempts,failures,error',
     ];
     for (final result in results) {

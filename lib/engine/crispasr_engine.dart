@@ -65,10 +65,8 @@ class CrispAsrEngine implements AsrEngine {
       available: true,
       backends: {Backend.cpu},
       // CrispASR carries no neural VAD of its own (real Silero detection runs
-      // in a separate sherpa-onnx worker), and it reports segments/words
-      // rather than tokenizer tokens.
+      // in a separate sherpa-onnx worker).
       supportsVad: false,
-      supportsTokenCount: false,
     );
   }
 

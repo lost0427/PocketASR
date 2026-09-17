@@ -21,7 +21,6 @@ class TranscriptionJobResult {
     required this.backend,
     required this.originalLufs,
     required this.gainDb,
-    this.tokens,
   });
 
   final String text;
@@ -32,15 +31,10 @@ class TranscriptionJobResult {
   final Backend backend;
   final double originalLufs;
   final double gainDb;
-  final int? tokens;
 
   double? get rtf => audioDuration.inMicroseconds == 0
       ? null
       : elapsed.inMicroseconds / audioDuration.inMicroseconds;
-
-  double? get avgTokensPerSec => tokens == null || elapsed.inMicroseconds == 0
-      ? null
-      : tokens! * 1000000 / elapsed.inMicroseconds;
 }
 
 /// What [TranscriptionService.previewVad] returns: the real neural-VAD
@@ -103,11 +97,11 @@ class TranscriptionService {
   /// When [chunkSettings] is given, the normalized PCM is sliced per
   /// [ChunkPlanner] plan and each block is sent as its own engine request:
   /// the model is loaded once, blocks run sequentially, and text, engine-
-  /// reported elapsed time and tokens are aggregated, while [onProgress]
+  /// reported elapsed time is aggregated, while [onProgress]
   /// receives the running aggregate (global ratio over planned audio).
-  /// Unknown token counts stay null — nothing is estimated. Chunk overlap
-  /// ([ChunkSettings.overlapSeconds] > 0) duplicates boundary text on purpose
-  /// or not at all: no deduplication is implemented here, so the default is 0.
+  /// Chunk overlap ([ChunkSettings.overlapSeconds] > 0) duplicates boundary
+  /// text on purpose or not at all: no deduplication is implemented here, so
+  /// the default is 0.
   ///
   /// Leaving [chunkSettings] null uses default 30-second windows.
   /// [onProgress] is optional and never changes
@@ -205,7 +199,6 @@ class TranscriptionService {
       final parts = <String>[];
       var doneUs = 0;
       var elapsed = Duration.zero;
-      int? tokensSoFar = 0;
       onStage?.call(TranscriptionStage.transcribing);
       for (var i = 0; i < windows.length; i++) {
         if (isCancelled?.call() ?? false) {
@@ -237,9 +230,12 @@ class TranscriptionService {
               partialText: <String>[...parts, progress.partialText]
                   .join(' ')
                   .trim(),
-              tokens: tokensSoFar == null || progress.tokens == null
-                  ? null
-                  : tokensSoFar + progress.tokens!,
+              completedChunkText: progress.ratio >= 1
+                  ? progress.partialText.trim()
+                  : null,
+              completedChunkElapsed: progress.ratio >= 1
+                  ? progress.elapsed
+                  : null,
             );
             onProgress.call(aggregated);
           }
@@ -250,13 +246,6 @@ class TranscriptionService {
         }
         parts.add(result.partialText.trim());
         elapsed += result.elapsed;
-        if (result.tokens == null) {
-          tokensSoFar = null;
-        } else if (tokensSoFar != null) {
-          // result.tokens is the engine's cumulative count *within* this
-          // chunk, so add it once, at chunk end.
-          tokensSoFar += result.tokens!;
-        }
         doneUs += chunkUs;
         await file.delete();
       }
@@ -278,7 +267,6 @@ class TranscriptionService {
         backend: backend,
         originalLufs: measured.lufs,
         gainDb: measured.gainDb,
-        tokens: tokensSoFar,
       );
     } finally {
       await dir.delete(recursive: true);

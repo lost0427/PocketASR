@@ -207,13 +207,11 @@ void main() {
         elapsed: Duration(milliseconds: 100),
         ratio: 0.5,
         partialText: 'he',
-        tokens: 1,
       ),
       TranscribeProgress(
         elapsed: Duration(milliseconds: 200),
         ratio: 1,
         partialText: 'hello',
-        tokens: 3,
       ),
     ]);
     final seen = <TranscribeProgress>[];
@@ -226,11 +224,10 @@ void main() {
 
     expect(seen.map((p) => p.ratio), [0.5, 1.0]);
     expect(seen.map((p) => p.partialText), ['he', 'hello']);
-    expect(seen.map((p) => p.tokens), [1, 3]);
+    expect(seen.map((p) => p.completedChunkText), [null, 'hello']);
 
     // Forwarding must not change the returned result.
     expect(result.text, 'hello');
-    expect(result.tokens, 3);
     expect(result.engine, 'fake');
     expect(result.audioDuration, const Duration(seconds: 1));
   });
@@ -276,7 +273,6 @@ void main() {
     );
 
     expect(result.text, 'done');
-    expect(result.tokens, isNull);
   });
 
   test('an engine that emits no text still errors instead of faking', () async {
@@ -323,13 +319,11 @@ void main() {
           elapsed: Duration(milliseconds: 100),
           ratio: 0.5,
           partialText: 'a?',
-          tokens: 2,
         ),
         TranscribeProgress(
           elapsed: Duration(milliseconds: 100),
           ratio: 1,
           partialText: 'a',
-          tokens: 2,
         ),
       ],
       const [
@@ -337,7 +331,6 @@ void main() {
           elapsed: Duration(milliseconds: 200),
           ratio: 1,
           partialText: 'b',
-          tokens: 3,
         ),
       ],
     ]);
@@ -359,16 +352,19 @@ void main() {
     expect(engine.chunkSamples[1], hasLength(16000));
     expect(engine.chunkSamples[1].first, 0.5);
 
-    // Aggregated full text, cumulative engine-reported elapsed and tokens.
+    // Aggregated full text and cumulative engine-reported elapsed.
     expect(result.text, 'a b');
     expect(result.elapsed, const Duration(milliseconds: 300));
-    expect(result.tokens, 5);
     expect(result.audioDuration, const Duration(seconds: 2));
 
-    // Global progress over the planned audio, with cumulative text/tokens.
+    // Global progress over the planned audio, with the completed chunk marked.
     expect(seen.map((p) => p.ratio), [0.25, 0.5, 1.0]);
     expect(seen.map((p) => p.partialText), ['a?', 'a', 'a b']);
-    expect(seen.map((p) => p.tokens), [2, 2, 5]);
+    expect(seen.map((p) => p.completedChunkText), [null, 'a', 'b']);
+    expect(
+      seen.map((p) => p.completedChunkElapsed?.inMilliseconds),
+      [null, 100, 200],
+    );
     expect(
       seen.map((p) => p.elapsed.inMilliseconds).toList(),
       [100, 100, 300],
@@ -376,40 +372,6 @@ void main() {
 
     // The whole temp directory (not just the chunk files) is gone.
     expect(File(engine.requests.first).parent.existsSync(), isFalse);
-  });
-
-  test('unknown token counts stay null instead of being estimated', () async {
-    final engine = _ChunkedEngine([
-      const [
-        TranscribeProgress(
-          elapsed: Duration(milliseconds: 100),
-          ratio: 1,
-          partialText: 'a',
-        ),
-      ],
-      const [
-        TranscribeProgress(
-          elapsed: Duration(milliseconds: 100),
-          ratio: 1,
-          partialText: 'b',
-          tokens: 7,
-        ),
-      ],
-    ]);
-    final seen = <TranscribeProgress>[];
-
-    final result = await _service(engine, _stereoLevels()).transcribe(
-      audioPath: 'ignored.wav',
-      model: const EngineModelSpec(path: 'model.gguf'),
-      chunkSettings: _oneSecondFixed,
-      onProgress: seen.add,
-    );
-
-    expect(result.tokens, isNull);
-    expect(result.avgTokensPerSec, isNull);
-    // Chunk 2 knew its tokens, but chunk 1 did not: the cumulative count is
-    // unknowable, so forwarded tokens must not pretend otherwise.
-    expect(seen.map((p) => p.tokens), [null, null]);
   });
 
   test('mid-run engine failure throws and cleans the temp directory', () async {
@@ -420,7 +382,6 @@ void main() {
             elapsed: Duration(milliseconds: 100),
             ratio: 1,
             partialText: 'a',
-            tokens: 2,
           ),
         ],
         const [],
@@ -614,7 +575,6 @@ void main() {
               elapsed: Duration(milliseconds: 100),
               ratio: 1,
               partialText: 'a b',
-              tokens: 4,
             ),
           ],
         ]);
@@ -643,7 +603,6 @@ void main() {
         expect(asr.chunkSamples.single.first, 0.25);
         expect(asr.chunkSamples.single[16000], 0.5);
         expect(result.text, 'a b');
-        expect(result.tokens, 4);
         // Timeline coordinates stay the full audio's.
         expect(result.audioDuration, const Duration(seconds: 4));
       },

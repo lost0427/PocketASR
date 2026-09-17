@@ -87,9 +87,7 @@ CREATE TABLE transcript(
   model_path TEXT,
   backend TEXT,
   rtf REAL,
-  tokens INTEGER,
   total_ms INTEGER,
-  avg_tokens_per_sec REAL,
   created_at INTEGER NOT NULL,
   deleted_at INTEGER
 );

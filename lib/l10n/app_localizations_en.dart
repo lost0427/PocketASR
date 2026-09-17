@@ -175,9 +175,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelPickerManage => 'Open Models';
 
   @override
-  String get metricTokensPerSec => 'tokens/s';
-
-  @override
   String get metricCharsPerSec => 'chars/s';
 
   @override
@@ -194,12 +191,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get metricUnavailable => '—';
-
-  @override
-  String get metricUnsupported => 'Unsupported';
-
-  @override
-  String get metricCalculating => 'Calculating';
 
   @override
   String get queueTitle => 'Queue';
@@ -618,7 +609,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get benchNoResultsBody =>
-      'A run fills this list with the median wall clock, RTF and tokens/s of three runs per model. Until then it stays empty.';
+      'A run fills this list with the median wall clock, RTF and chars/s of three runs per model. Until then it stays empty.';
 
   @override
   String get benchExportJson => 'Export JSON';

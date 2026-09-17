@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/text/token_counter.dart';
 import '../../data/search_repo.dart';
 import '../../data/semantic_indexer.dart';
 import '../../data/transcript_repo.dart';
@@ -442,6 +443,12 @@ class _TranscriptDetailPage extends StatelessWidget {
         '${localizations.formatTimeOfDay(
           TimeOfDay.fromDateTime(row.createdAt.toLocal()),
         )}';
+    final charsPerSec = row.totalMs == null
+        ? null
+        : graphemesPerSecond(
+            row.text,
+            Duration(milliseconds: row.totalMs!),
+          );
 
     final metrics = <(String, String)>[
       (l10n.historyDetailCreated, created),
@@ -457,9 +464,8 @@ class _TranscriptDetailPage extends StatelessWidget {
           row.modelPath!.split(RegExp(r'[\\/]')).last,
         ),
       if (row.rtf != null) (l10n.metricRtf, row.rtf!.toStringAsFixed(2)),
-      if (row.avgTokensPerSec != null)
-        (l10n.metricTokensPerSec, row.avgTokensPerSec!.toStringAsFixed(1)),
-      if (row.tokens != null) ('Tokens', '${row.tokens}'),
+      if (charsPerSec != null)
+        (l10n.metricCharsPerSec, charsPerSec.toStringAsFixed(1)),
       if (row.audioSeconds != null)
         (l10n.historyDetailAudio, '${row.audioSeconds!.toStringAsFixed(1)} s'),
     ];

@@ -76,7 +76,6 @@ class _FakeWorkerEngine implements AsrEngine {
           elapsed: const Duration(milliseconds: 5),
           ratio: 1,
           partialText: 'heard:${request.audioPath}',
-          tokens: 2,
         );
     }
   }
@@ -172,7 +171,6 @@ void main() {
     ]);
     expect(first.single.partialText, 'heard:a.wav');
     expect(second.single.partialText, 'heard:b.wav');
-    expect(second.single.tokens, 2);
     expect(plan.segments, hasLength(1));
   });
 

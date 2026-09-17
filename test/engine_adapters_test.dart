@@ -169,7 +169,6 @@ void main() {
       if (caps.available) {
         expect(caps.unavailableReason, isNull);
         expect(caps.backends, isNotEmpty);
-        expect(caps.supportsTokenCount, isTrue);
         // Real Silero VoiceActivityDetector in the loaded bindings.
         expect(caps.supportsVad, isTrue);
       } else {

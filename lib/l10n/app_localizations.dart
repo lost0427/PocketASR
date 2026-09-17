@@ -404,12 +404,6 @@ abstract class AppLocalizations {
   /// **'Open Models'**
   String get modelPickerManage;
 
-  /// No description provided for @metricTokensPerSec.
-  ///
-  /// In en, this message translates to:
-  /// **'tokens/s'**
-  String get metricTokensPerSec;
-
   /// No description provided for @metricCharsPerSec.
   ///
   /// In en, this message translates to:
@@ -445,18 +439,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'—'**
   String get metricUnavailable;
-
-  /// No description provided for @metricUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'Unsupported'**
-  String get metricUnsupported;
-
-  /// No description provided for @metricCalculating.
-  ///
-  /// In en, this message translates to:
-  /// **'Calculating'**
-  String get metricCalculating;
 
   /// No description provided for @queueTitle.
   ///
@@ -1235,7 +1217,7 @@ abstract class AppLocalizations {
   /// No description provided for @benchNoResultsBody.
   ///
   /// In en, this message translates to:
-  /// **'A run fills this list with the median wall clock, RTF and tokens/s of three runs per model. Until then it stays empty.'**
+  /// **'A run fills this list with the median wall clock, RTF and chars/s of three runs per model. Until then it stays empty.'**
   String get benchNoResultsBody;
 
   /// No description provided for @benchExportJson.

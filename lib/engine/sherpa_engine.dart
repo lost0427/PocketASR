@@ -81,8 +81,6 @@ class SherpaEngine implements AsrEngine {
       // file itself arrives per call in NeuralVadSettings. planVad still
       // fails loudly when that file is missing or unreadable.
       supportsVad: true,
-      // OfflineRecognizerResult.tokens is a real tokenizer count.
-      supportsTokenCount: true,
     );
   }
 
@@ -187,7 +185,6 @@ class SherpaEngine implements AsrEngine {
           elapsed: elapsed.elapsed,
           ratio: 1,
           partialText: result.text,
-          tokens: result.tokens.isEmpty ? null : result.tokens.length,
         );
       } finally {
         stream.free();

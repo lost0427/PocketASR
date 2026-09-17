@@ -79,7 +79,6 @@ class _TranscribePageState extends State<TranscribePage> {
   bool _recordingBusy = false;
   String? _error;
 
-  double? _tokensPerSec;
   double? _charsPerSec;
   Duration? _elapsed;
   double? _rtf;
@@ -128,18 +127,21 @@ class _TranscribePageState extends State<TranscribePage> {
     }
   }
 
-  /// Mirrors one engine progress update into the live metrics. Token speed is
-  /// deliberately excluded: offline engines only provide a trustworthy total
-  /// after the run, so the UI shows "Calculating" until then.
+  /// Mirrors engine progress into the page. Character speed changes only when
+  /// a chunk completes, then stays visible while the next chunk is running.
   void _onProgress(TranscribeProgress progress) {
     if (!mounted) return;
     final partial = progress.partialText.trim();
+    final chunkText = progress.completedChunkText;
+    final chunkElapsed = progress.completedChunkElapsed;
     setState(() {
       if (progress.ratio >= 0) _progress = progress.ratio;
       _elapsed = progress.elapsed;
       if (partial.isNotEmpty) {
         _partialText = partial;
-        _charsPerSec = graphemesPerSecond(partial, progress.elapsed);
+      }
+      if (chunkText != null && chunkElapsed != null) {
+        _charsPerSec = graphemesPerSecond(chunkText, chunkElapsed);
       }
     });
   }
@@ -159,17 +161,6 @@ class _TranscribePageState extends State<TranscribePage> {
         TranscriptionStage.finalizing => l10n.transcribeStageFinalizing,
         null => l10n.transcribeProgress,
       };
-
-  _TokenMetricState _tokenMetricState(EngineCapabilities? capabilities) {
-    if (capabilities == null) return _TokenMetricState.unavailable;
-    if (!capabilities.supportsTokenCount) {
-      return _TokenMetricState.unsupported;
-    }
-    if (_running) return _TokenMetricState.calculating;
-    return _tokensPerSec == null
-        ? _TokenMetricState.unavailable
-        : _TokenMetricState.available;
-  }
 
   void _notify(String message) {
     ScaffoldMessenger.of(context)
@@ -239,7 +230,6 @@ class _TranscribePageState extends State<TranscribePage> {
       _stage = TranscriptionStage.decoding;
       _result = '';
       _partialText = '';
-      _tokensPerSec = null;
       _charsPerSec = null;
       _elapsed = null;
       _rtf = null;
@@ -273,9 +263,7 @@ class _TranscribePageState extends State<TranscribePage> {
         modelPath: result.model.path,
         backend: result.backend.name,
         rtf: result.rtf,
-        tokens: result.tokens,
         totalMs: result.elapsed.inMilliseconds,
-        avgTokensPerSec: result.avgTokensPerSec,
       );
       if (mounted) {
         setState(() {
@@ -285,7 +273,6 @@ class _TranscribePageState extends State<TranscribePage> {
           _elapsed = result.elapsed;
           _rtf = result.rtf;
           _runBackend = result.backend;
-          _tokensPerSec = result.avgTokensPerSec;
           _charsPerSec = result.text.isEmpty
               ? null
               : graphemesPerSecond(result.text, result.elapsed);
@@ -689,8 +676,6 @@ class _TranscribePageState extends State<TranscribePage> {
                   ),
                   const SizedBox(height: 12),
                   _MetricsGrid(
-                    tokenState: _tokenMetricState(capabilities),
-                    tokensPerSec: _tokensPerSec,
                     charsPerSec: _charsPerSec,
                     rtf: _rtf,
                     elapsed: _elapsed,
@@ -1149,15 +1134,11 @@ String? _elapsed(Duration? value) {
 String? _memory(int? bytes) =>
     bytes == null ? null : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-enum _TokenMetricState { unsupported, calculating, available, unavailable }
-
-/// Six metric tiles fed by the live run. CPU and memory come from the periodic
+/// Five metric tiles fed by the live run. CPU and memory come from the periodic
 /// sampler and stay `—` whenever a reading could not be taken — the page never
 /// invents numbers.
 class _MetricsGrid extends StatelessWidget {
   const _MetricsGrid({
-    required this.tokenState,
-    required this.tokensPerSec,
     required this.charsPerSec,
     required this.rtf,
     required this.elapsed,
@@ -1165,8 +1146,6 @@ class _MetricsGrid extends StatelessWidget {
     required this.memoryBytes,
   });
 
-  final _TokenMetricState tokenState;
-  final double? tokensPerSec;
   final double? charsPerSec;
   final double? rtf;
   final Duration? elapsed;
@@ -1177,15 +1156,8 @@ class _MetricsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final unknown = l10n.metricUnavailable;
-    final tokenRate = switch (tokenState) {
-      _TokenMetricState.unsupported => l10n.metricUnsupported,
-      _TokenMetricState.calculating => l10n.metricCalculating,
-      _TokenMetricState.available => _rate(tokensPerSec) ?? unknown,
-      _TokenMetricState.unavailable => unknown,
-    };
     final metrics = <(String, IconData, String)>[
-      (l10n.metricTokensPerSec, Icons.speed, tokenRate),
-      (l10n.metricCharsPerSec, Icons.abc, _rate(charsPerSec) ?? unknown),
+      (l10n.metricCharsPerSec, Icons.speed, _rate(charsPerSec) ?? unknown),
       (
         l10n.metricRtf,
         Icons.timer_outlined,

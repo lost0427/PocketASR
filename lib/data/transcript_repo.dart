@@ -18,9 +18,7 @@ class Transcript {
     this.modelPath,
     this.backend,
     this.rtf,
-    this.tokens,
     this.totalMs,
-    this.avgTokensPerSec,
     this.deletedAt,
   });
 
@@ -36,9 +34,7 @@ class Transcript {
   final String? modelPath;
   final String? backend;
   final double? rtf;
-  final int? tokens;
   final int? totalMs;
-  final double? avgTokensPerSec;
 
   /// Non-null while the transcript sits in the trash.
   final DateTime? deletedAt;
@@ -69,9 +65,7 @@ Transcript transcriptFromRow(Row row) => Transcript(
   modelPath: row['model_path'] as String?,
   backend: row['backend'] as String?,
   rtf: (row['rtf'] as num?)?.toDouble(),
-  tokens: row['tokens'] as int?,
   totalMs: row['total_ms'] as int?,
-  avgTokensPerSec: (row['avg_tokens_per_sec'] as num?)?.toDouble(),
   deletedAt: row['deleted_at'] == null
       ? null
       : DateTime.fromMillisecondsSinceEpoch(row['deleted_at'] as int),
@@ -107,9 +101,7 @@ class TranscriptRepo extends ChangeNotifier {
     String? modelPath,
     String? backend,
     double? rtf,
-    int? tokens,
     int? totalMs,
-    double? avgTokensPerSec,
     List<SegmentDraft> segments = const [],
     DateTime? createdAt,
   }) {
@@ -119,8 +111,8 @@ class TranscriptRepo extends ChangeNotifier {
     try {
       _db.execute(
         'INSERT INTO transcript(title, audio_path, audio_seconds, text, lang, '
-        'engine, model_family, model_path, backend, rtf, tokens, total_ms, '
-        'avg_tokens_per_sec, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'engine, model_family, model_path, backend, rtf, total_ms, created_at) '
+        'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
         [
           title,
           audioPath,
@@ -132,9 +124,7 @@ class TranscriptRepo extends ChangeNotifier {
           modelPath,
           backend,
           rtf,
-          tokens,
           totalMs,
-          avgTokensPerSec,
           createdAtMs,
         ],
       );

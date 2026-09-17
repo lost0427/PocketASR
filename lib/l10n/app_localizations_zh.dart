@@ -168,9 +168,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelPickerManage => '打开模型页';
 
   @override
-  String get metricTokensPerSec => 'tokens/s';
-
-  @override
   String get metricCharsPerSec => '字/s';
 
   @override
@@ -187,12 +184,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get metricUnavailable => '—';
-
-  @override
-  String get metricUnsupported => '不支持';
-
-  @override
-  String get metricCalculating => '计算中';
 
   @override
   String get queueTitle => '队列';
@@ -594,8 +585,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchNoResultsTitle => '暂无结果';
 
   @override
-  String get benchNoResultsBody =>
-      '运行后会列出每个模型三次运行的中位墙钟、RTF 与 tokens/s。在此之前保持为空。';
+  String get benchNoResultsBody => '运行后会列出每个模型三次运行的中位墙钟、RTF 与字/s。在此之前保持为空。';
 
   @override
   String get benchExportJson => '导出 JSON';

@@ -24,7 +24,6 @@ class _FakeEngine extends UnavailableAsrEngine {
       ? const EngineCapabilities(
           available: true,
           backends: {Backend.cpu},
-          supportsTokenCount: true,
         )
       : const EngineCapabilities.unavailable('no native library');
 
@@ -85,7 +84,7 @@ class _RoutingService extends TranscriptionService {
 }
 
 /// Returns results with controlled numbers so the medians are predictable:
-/// elapsed 100/200/300 ms, RTF 0.10/0.20/0.30 and tokens/s 10/20/30.
+/// elapsed 100/200/300 ms, RTF 0.10/0.20/0.30 and chars/s 20/10/6.7.
 class _ScriptedService extends TranscriptionService {
   _ScriptedService() : super(engine: const _FakeEngine());
 
@@ -106,7 +105,6 @@ class _ScriptedService extends TranscriptionService {
     final n = paths.length;
     paths.add(audioPath);
     const millis = [100, 200, 300];
-    const tokens = [1, 4, 9];
     return TranscriptionJobResult(
       text: 'ok',
       elapsed: Duration(milliseconds: millis[n % 3]),
@@ -116,7 +114,6 @@ class _ScriptedService extends TranscriptionService {
       backend: backend,
       originalLufs: -16,
       gainDb: 0,
-      tokens: tokens[n % 3],
     );
   }
 }
@@ -285,10 +282,10 @@ void main() {
 
     // Three real runs of the one picked file.
     expect(service.paths, ['picked.wav', 'picked.wav', 'picked.wav']);
-    // Medians: 200ms, 0.20 RTF, 20.0 tokens/s, 3/3 runs.
+    // Medians: 200ms, 0.20 RTF, 10.0 chars/s, 3/3 runs.
     expect(find.text('200ms'), findsOneWidget);
     expect(find.text('0.20'), findsOneWidget);
-    expect(find.text('20.0'), findsOneWidget);
+    expect(find.text('10.0'), findsOneWidget);
     expect(find.text('3/3'), findsOneWidget);
 
     await tester.tap(find.text('Export JSON'));

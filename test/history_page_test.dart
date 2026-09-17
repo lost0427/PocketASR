@@ -157,8 +157,7 @@ void main() {
       backend: 'cpu',
       modelPath: 'models/m.onnx',
       rtf: 4.0,
-      tokens: 12,
-      avgTokensPerSec: 6.0,
+      totalMs: 10000,
       audioSeconds: 2.5,
     );
     await pumpHistory(tester);
@@ -175,7 +174,7 @@ void main() {
     expect(find.text('cpu'), findsOneWidget);
     expect(find.text('m.onnx'), findsOneWidget);
     expect(find.text('4.00'), findsOneWidget); // rtf
-    expect(find.text('6.0'), findsOneWidget); // tokens/s
+    expect(find.text('chars/s'), findsOneWidget);
     expect(find.text('2.5 s'), findsOneWidget);
   });
 
