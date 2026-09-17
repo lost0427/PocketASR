@@ -87,7 +87,14 @@ class AudioDecodeChannel(
         }
         executor.execute {
             try {
-                val payload = decodeToTemp(path, targetRate)
+                val outputDirectory = call.argument<String>("outputDirectory")?.let { File(it) }
+                    ?: context.cacheDir
+                val root = context.applicationInfo.dataDir.let { File(it).canonicalFile }
+                val directory = outputDirectory.canonicalFile
+                if (!directory.isDirectory || !directory.path.startsWith(root.path + File.separator)) {
+                    throw IOException("PCM output directory must be inside app storage")
+                }
+                val payload = decodeToTemp(path, targetRate, directory)
                 mainHandler.post { result.success(payload) }
             } catch (t: Throwable) {
                 mainHandler.post {
@@ -97,12 +104,16 @@ class AudioDecodeChannel(
         }
     }
 
-    private fun decodeToTemp(source: String, targetRate: Int): Map<String, Any> {
+    private fun decodeToTemp(
+        source: String,
+        targetRate: Int,
+        outputDirectory: File,
+    ): Map<String, Any> {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         var pfd: ParcelFileDescriptor? = null
         var sink: PcmSink? = null
-        val out = File.createTempFile("pocketasr_", ".f32", context.cacheDir)
+        val out = File.createTempFile("pocketasr_", ".f32", outputDirectory)
         var ok = false
         try {
             if (source.startsWith("content://")) {

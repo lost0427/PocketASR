@@ -47,12 +47,19 @@ class FileAudioSource implements AudioSource {
     if (!usesNativeDecoder()) {
       return decodeWithFfmpeg(path, '${directory.path}/decoded.f32', isCancelled: isCancelled);
     }
-    final result = await channel.invokeMethod<Object?>('decodeToPcm',
-      {'path': path, 'targetSampleRate': 16000});
-    if (result is! Map || result['path'] is! String) {
+    final result = await channel.invokeMethod<Object?>('decodeToPcm', {
+      'path': path,
+      'targetSampleRate': 16000,
+      'outputDirectory': directory.path,
+    });
+    if (result is! Map || result['path'] is! String ||
+        (result['path'] as String).isEmpty) {
       throw const FormatException('Invalid native PCM response');
     }
     final temp = File(result['path'] as String);
+    if (!await FileSystemEntity.identical(temp.parent.path, directory.path)) {
+      throw const FormatException('Native PCM is outside the job directory');
+    }
     try {
       checkAudioCancellation(isCancelled);
       final count = result['count'];
@@ -60,12 +67,10 @@ class FileAudioSource implements AudioSource {
           await temp.length() != count * 4) {
         throw const FormatException('Invalid native PCM size or rate');
       }
-      final destination = '${directory.path}/decoded.f32';
-      // Cache and job directories may be on different filesystems.
-      await temp.copy(destination);
-      return PcmFile(destination, count);
-    } finally {
+      return PcmFile(temp.path, count);
+    } catch (_) {
       await _tryDelete(temp);
+      rethrow;
     }
   }
 

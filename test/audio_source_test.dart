@@ -160,4 +160,62 @@ void main() {
     );
     expect(calls, isEmpty); // handler never recorded a successful reply
   });
+
+  test('decodeToDisk keeps native PCM in place and passes the job directory', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_1.f32')
+      ..writeAsBytesSync(writeF32([0.25, -0.5, 0.75]).readAsBytesSync());
+    mock((call) async {
+      calls.add(call);
+      return {'path': decoded.path, 'sampleRate': 16000, 'count': 3};
+    });
+
+    final pcm = await nativeSource().decodeToDisk('x.m4a', job);
+
+    expect(calls.single.arguments, {
+      'path': 'x.m4a',
+      'targetSampleRate': 16000,
+      'outputDirectory': job.path,
+    });
+    expect(pcm.path, decoded.path);
+    expect(pcm.count, 3);
+    expect(pcm.sampleRate, 16000);
+    expect(decoded.existsSync(), isTrue, reason: 'job file is retained');
+  });
+
+  test('decodeToDisk validates size and cleans up on failure', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_2.f32')
+      ..writeAsBytesSync(List.filled(8, 0));
+    mock((call) async => {
+      'path': decoded.path,
+      'sampleRate': 16000,
+      'count': 5, // claims 20 bytes
+    });
+
+    await expectLater(
+      nativeSource().decodeToDisk('x.m4a', job),
+      throwsFormatException,
+    );
+    expect(decoded.existsSync(), isFalse);
+  });
+
+  test('decodeToDisk rejects PCM outside the job directory', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final foreign = writeF32([0.5], name: 'foreign.f32');
+    mock((call) async => {
+      'path': foreign.path,
+      'sampleRate': 16000,
+      'count': 1,
+    });
+
+    await expectLater(
+      nativeSource().decodeToDisk('x.m4a', job),
+      throwsFormatException,
+    );
+    expect(foreign.existsSync(), isTrue, reason: 'not ours to delete');
+  });
 }
