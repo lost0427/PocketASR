@@ -63,22 +63,22 @@
       ]
     },
     {
-      "id": "crispasr-sensevoice-q4k",
+      "id": "crispasr-sensevoice-q8",
       "parameters": 233999167,
-      "displayName": "SenseVoice Small (CrispASR q4_k GGUF)",
+      "displayName": "SenseVoice Small (CrispASR q8_0 GGUF)",
       "engine": "crispasr",
       "type": "asr",
       "family": "sensevoice",
-      "quant": "q4_k",
+      "quant": "q8_0",
       "languages": ["zh", "en", "yue", "ja", "ko"],
       "license": "FunASR v1.1 (attribution required)",
       "files": [
         {
-          "fileName": "sensevoice-small-q4_k.gguf",
+          "fileName": "sensevoice-small-q8_0.gguf",
           "role": "model",
-          "url": "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/e14d94223aef728879f08dfb4d5f20fe873b22ef/sensevoice-small-q4_k.gguf",
-          "sizeBytes": 135549024,
-          "sha256": "b76123fcdf8dd447867446ad4fab3d071bec1cf327ec107829563346307e3891"
+          "url": "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/e14d94223aef728879f08dfb4d5f20fe873b22ef/sensevoice-small-q8_0.gguf",
+          "sizeBytes": 251670368,
+          "sha256": "b7126f2cb4fe0440cb76f652aed3f1d67813ca1d12088a13b0cafb8884a72a57"
         }
       ]
     },
@@ -101,22 +101,22 @@
       ]
     },
     {
-      "id": "crispasr-qwen3-asr-0.6b-q4k",
-      "displayName": "Qwen3-ASR 0.6B (CrispASR q4_k GGUF)",
+      "id": "crispasr-qwen3-asr-0.6b-q8",
+      "displayName": "Qwen3-ASR 0.6B (CrispASR q8_0 GGUF)",
       "engine": "crispasr",
       "type": "asr",
       "family": "qwen3",
-      "quant": "q4_k",
+      "quant": "q8_0",
       "parameters": 938034704,
       "languages": ["zh", "yue", "en", "ja", "ko", "de", "fr", "es", "pt", "ru", "it", "ar", "cs", "da", "el", "fa", "fi", "fil", "hi", "hu", "id", "mk", "ms", "nl", "pl", "ro", "sv", "th", "tr", "vi"],
       "license": "Apache-2.0 (Qwen/Qwen3-ASR-0.6B weights and cstr GGUF conversion)",
       "files": [
         {
-          "fileName": "qwen3-asr-0.6b-q4_k.gguf",
+          "fileName": "qwen3-asr-0.6b-q8_0.gguf",
           "role": "model",
-          "url": "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/58bd3202f835f46b24b17142cb503b0860c737a5/qwen3-asr-0.6b-q4_k.gguf",
-          "sizeBytes": 631026336,
-          "sha256": "f63771c02dfa486d9399d41ab6ab8cd2d8ca24e077cd32130ea1f67f4fd8dade"
+          "url": "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/58bd3202f835f46b24b17142cb503b0860c737a5/qwen3-asr-0.6b-q8_0.gguf",
+          "sizeBytes": 1006809760,
+          "sha256": "f547589d5ca582e093b2d3312ad9ff13b609b43d413f972c0e92b823dde70a00"
         }
       ]
     },

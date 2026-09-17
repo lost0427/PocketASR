@@ -153,6 +153,18 @@ void main() {
       expect(qwen.engine, 'crispasr');
       expect(qwen.parameters, 938034704);
       expect(qwen.primaryFile.sha256, hasLength(64));
+      final crispAsr = entries
+          .where((entry) => entry.engine == 'crispasr')
+          .toList();
+      expect(
+        crispAsr.map((entry) => entry.id),
+        ['crispasr-sensevoice-q8', 'crispasr-qwen3-asr-0.6b-q8'],
+      );
+      expect(crispAsr.map((entry) => entry.quant), everyElement('q8_0'));
+      expect(
+        crispAsr.map((entry) => entry.primaryFile.fileName),
+        ['sensevoice-small-q8_0.gguf', 'qwen3-asr-0.6b-q8_0.gguf'],
+      );
       for (final entry in entries) {
         // Every allowlist file must carry a verified size and checksum —
         // the store and downloader gate on both.
