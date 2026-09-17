@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_selector/file_selector.dart';
 
 import '../../engine/asr_engine.dart';
 import '../../engine/metrics.dart';
 import '../../engine/system_metrics.dart';
 import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
+import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_preprocessor.dart';
 import '../../core/text/token_counter.dart';
 import '../models/model_library.dart';
@@ -161,17 +161,12 @@ class _TranscribePageState extends State<TranscribePage> {
   Future<void> _pickFile() async {
     if (_running) return; // a run owns the current file
     final l10n = AppLocalizations.of(context);
-    final file = await openFile(
-      acceptedTypeGroups: [
-        XTypeGroup(
-          label: l10n.fileTypeAudio,
-          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
-        ),
-      ],
+    final file = await const AudioPicker().pickOne(
+      typeLabel: l10n.fileTypeAudio,
     );
     if (!mounted || file == null) return;
     setState(() {
-      _filePath = file.path;
+      _filePath = file.source;
       _fileName = file.name;
       // A preview belongs to the file it was taken from.
       _vadPreview = null;

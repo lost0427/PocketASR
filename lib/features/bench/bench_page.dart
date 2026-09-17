@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
+import '../../core/audio/audio_picker.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/model_catalog.dart';
 import '../../features/transcribe/transcription_service.dart';
@@ -49,7 +50,7 @@ class BenchPage extends StatefulWidget {
   /// transcribe and queue flows. Null in tests that do not care.
   final AppState? state;
 
-  /// Picks the fixed input audio; production uses the file selector.
+  /// Picks the fixed input audio; production uses [AudioPicker].
   final Future<String?> Function()? pickAudio;
 
   /// Writes an export; production asks the user where to save it.
@@ -125,25 +126,24 @@ class _BenchPageState extends State<BenchPage> {
 
   Future<void> _pickAudio() async {
     if (_running) return;
-    final picker = widget.pickAudio ?? _defaultPickAudio;
-    final path = await picker();
-    if (!mounted || path == null) return;
+    final injectedPicker = widget.pickAudio;
+    final PickedAudio? audio;
+    if (injectedPicker == null) {
+      audio = await const AudioPicker().pickOne(
+        typeLabel: AppLocalizations.of(context).fileTypeAudio,
+      );
+    } else {
+      final path = await injectedPicker();
+      audio = path == null
+          ? null
+          : PickedAudio(source: path, name: path.split(RegExp(r'[\\/]')).last);
+    }
+    final selected = audio;
+    if (!mounted || selected == null) return;
     setState(() {
-      _audioPath = path;
-      _audioName = path.split(RegExp(r'[\\/]')).last;
+      _audioPath = selected.source;
+      _audioName = selected.name;
     });
-  }
-
-  Future<String?> _defaultPickAudio() async {
-    final file = await openFile(
-      acceptedTypeGroups: [
-        XTypeGroup(
-          label: 'Audio',
-          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
-        ),
-      ],
-    );
-    return file?.path;
   }
 
   Future<void> _run(List<ModelEntry> downloaded, ModelStore store) async {

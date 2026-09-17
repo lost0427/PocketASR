@@ -167,7 +167,14 @@ void main() {
     addTearDown(db.close);
     final repo = TranscriptRepo(db);
 
-    final queue = TranscriptionQueue()..add(job('a'));
+    final queue = TranscriptionQueue()
+      ..add(
+        TranscriptionJob(
+          id: 'a',
+          audioPath: 'content://media/external/audio/49',
+          displayName: 'meeting 49.mp3',
+        ),
+      );
     final service = _RecordingService();
     final worker = QueueWorker(
       queue,
@@ -193,6 +200,7 @@ void main() {
     expect(service.lastChunkSettings?.chunkSeconds, 12);
     // The saved row records the run's model family, not just its path.
     expect(repo.list().single.modelFamily, 'sensevoice');
+    expect(repo.list().single.title, 'meeting 49.mp3');
   });
 
   test('a cancelled job is never persisted and ends as cancelled', () async {

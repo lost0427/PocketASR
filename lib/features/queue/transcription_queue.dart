@@ -20,13 +20,18 @@ enum TranscriptionJobStatus {
 /// Status, [attempts] and [error] are mutable; the queue owns those
 /// transitions, callers only read them.
 class TranscriptionJob {
-  TranscriptionJob({required this.id, required this.audioPath});
+  TranscriptionJob({
+    required this.id,
+    required this.audioPath,
+    String? displayName,
+  }) : displayName = displayName ?? audioPath.split(RegExp(r'[\\/]')).last;
 
   /// Unique id for this queued entry. Two entries may point at the same
   /// [audioPath] — the queue keys on [id], never on the path, so adding the
   /// same file twice cannot make one job shadow the other.
   final String id;
   final String audioPath;
+  final String displayName;
 
   TranscriptionJobStatus status = TranscriptionJobStatus.pending;
 

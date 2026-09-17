@@ -67,7 +67,7 @@ class QueueWorker {
             continue;
           }
           transcriptRepo?.insert(
-            title: job.audioPath.split(RegExp(r'[\\/]')).last,
+            title: job.displayName,
             text: result.text,
             audioPath: job.audioPath,
             audioSeconds: result.audioDuration.inMilliseconds / 1000,

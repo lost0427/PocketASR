@@ -1,7 +1,7 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/audio/audio_picker.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
 import '../../l10n/app_localizations.dart';
@@ -84,20 +84,19 @@ class _QueuePageState extends State<QueuePage> {
   Future<void> _add() async {
     if (_running) return; // a run owns the current queue
     final l10n = AppLocalizations.of(context);
-    final files = await openFiles(
-      acceptedTypeGroups: [
-        XTypeGroup(
-          label: l10n.fileTypeAudio,
-          extensions: const ['wav', 'm4a', 'mp3', 'flac'],
-        ),
-      ],
+    final files = await const AudioPicker().pickMany(
+      typeLabel: l10n.fileTypeAudio,
     );
     if (!mounted) return;
     if (files.isEmpty) return;
     setState(() {
       for (final file in files) {
         _queue.add(
-          TranscriptionJob(id: '${file.path}#${_seq++}', audioPath: file.path),
+          TranscriptionJob(
+            id: '${file.source}#${_seq++}',
+            audioPath: file.source,
+            displayName: file.name,
+          ),
         );
       }
     });
@@ -308,7 +307,7 @@ class _QueuePageState extends State<QueuePage> {
                     return ListTile(
                       leading: Icon(_icon(job.status)),
                       title: Text(
-                        job.audioPath.split(RegExp(r'[\\/]')).last,
+                        job.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
