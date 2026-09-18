@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
 import '../../core/audio/audio_picker.dart';
+import '../../core/audio/audio_source.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/model_catalog.dart';
 import '../../features/transcribe/transcription_service.dart';
@@ -68,7 +69,8 @@ class BenchPage extends StatefulWidget {
   final Future<String?> Function()? pickAudio;
 
   /// Writes an export; production asks the user where to save it.
-  final Future<void> Function(String suggestedName, String contents)? exportFile;
+  final Future<void> Function(String suggestedName, String contents)?
+  exportFile;
 
   @override
   State<BenchPage> createState() => _BenchPageState();
@@ -194,6 +196,9 @@ class _BenchPageState extends State<BenchPage> {
                 TranscriptionService(
                   engine: widget.engine,
                   vadEngine: state?.activeVadEngine,
+                  decoderPreference:
+                      state?.audioDecoderPreference ??
+                      AudioDecoderPreference.automatic,
                 ),
             chunkSettings: state?.chunkSettings,
             neuralVad: state?.neuralVadSettings,
@@ -215,8 +220,8 @@ class _BenchPageState extends State<BenchPage> {
     } else {
       final groups = <String, List<ModelEntry>>{};
       for (final entry in downloaded) {
-        final engineId = entry.engine ??
-            AppState.engineIdForModelFile(store.pathFor(entry));
+        final engineId =
+            entry.engine ?? AppState.engineIdForModelFile(store.pathFor(entry));
         groups.putIfAbsent(engineId, () => []).add(entry);
       }
       for (final group in groups.values) {
@@ -230,9 +235,7 @@ class _BenchPageState extends State<BenchPage> {
         final engineId =
             entry.engine ?? AppState.engineIdForModelFile(model.path);
         final caseSpec = BenchmarkCase(id: entry.id, model: model);
-        setState(
-          () => _cells[entry.id] = const _Cell(_CellStatus.running),
-        );
+        setState(() => _cells[entry.id] = const _Cell(_CellStatus.running));
         late BenchmarkResult result;
         try {
           final BenchmarkRunner runner;
@@ -247,10 +250,14 @@ class _BenchPageState extends State<BenchPage> {
               final engine = widget.engineFactory!(engineId);
               ownedEngine = engine;
               ownedEngineId = engineId;
-              final service = widget.serviceFactory?.call(engine) ??
+              final service =
+                  widget.serviceFactory?.call(engine) ??
                   TranscriptionService(
                     engine: engine,
                     vadEngine: state?.activeVadEngine,
+                    decoderPreference:
+                        state?.audioDecoderPreference ??
+                        AudioDecoderPreference.automatic,
                   );
               ownedRunner = BenchmarkRunner(
                 engine,
@@ -327,12 +334,16 @@ class _BenchPageState extends State<BenchPage> {
         ? BenchmarkRunner.toJson(_results)
         : BenchmarkRunner.toCsv(_results);
     try {
-      await saver(asJson ? 'pocketasr_benchmark.json' : 'pocketasr_benchmark.csv',
-          contents);
+      await saver(
+        asJson ? 'pocketasr_benchmark.json' : 'pocketasr_benchmark.csv',
+        contents,
+      );
     } catch (error) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('${l10n.benchExportFailed}: $error')));
+        ..showSnackBar(
+          SnackBar(content: Text('${l10n.benchExportFailed}: $error')),
+        );
     }
   }
 
@@ -371,10 +382,10 @@ class _BenchPageState extends State<BenchPage> {
     final state = widget.state;
     // Neural mode without a real VAD model cannot run, exactly like the pages.
     final needsVad =
-        (state?.chunkStrategy ?? ChunkStrategy.fixed) ==
-            ChunkStrategy.neural &&
+        (state?.chunkStrategy ?? ChunkStrategy.fixed) == ChunkStrategy.neural &&
         !(state?.neuralVadReady ?? false);
-    final canRun = setup.engineAvailable &&
+    final canRun =
+        setup.engineAvailable &&
         _audioName != null &&
         setup.downloaded.isNotEmpty &&
         store != null &&
@@ -418,9 +429,9 @@ class _BenchPageState extends State<BenchPage> {
                     Text(
                       l10n.benchSampleHint,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            height: 1.45,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
                     ),
                   ],
                 ),
@@ -448,10 +459,7 @@ class _BenchPageState extends State<BenchPage> {
             body: l10n.benchNoModelsBody,
           )
         else
-          _MatrixCard(
-            downloaded: setup.downloaded,
-            cells: _cells,
-          ),
+          _MatrixCard(downloaded: setup.downloaded, cells: _cells),
         const SizedBox(height: 24),
         _SectionLabel(l10n.benchResults),
         const SizedBox(height: 12),
@@ -577,10 +585,8 @@ class _MatrixCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
-        );
+    final style = Theme.of(context).textTheme.labelSmall
+        ?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600);
 
     return _Card(
       child: Column(
@@ -590,7 +596,10 @@ class _MatrixCard extends StatelessWidget {
             children: [
               Expanded(flex: 4, child: Text(l10n.benchFamily, style: style)),
               Expanded(flex: 2, child: Text(l10n.benchQuant, style: style)),
-              Expanded(flex: 2, child: Text(l10n.transcribeBackend, style: style)),
+              Expanded(
+                flex: 2,
+                child: Text(l10n.transcribeBackend, style: style),
+              ),
               Expanded(
                 flex: 4,
                 child: Text(
@@ -679,7 +688,9 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         label,
         style: theme.textTheme.labelSmall?.copyWith(
-          color: blocked ? scheme.onErrorContainer : scheme.onSecondaryContainer,
+          color: blocked
+              ? scheme.onErrorContainer
+              : scheme.onSecondaryContainer,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -756,8 +767,8 @@ class _ResultCard extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),

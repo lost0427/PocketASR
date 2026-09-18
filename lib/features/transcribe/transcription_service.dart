@@ -21,6 +21,7 @@ class TranscriptionJobResult {
     required this.backend,
     required this.originalLufs,
     required this.gainDb,
+    this.decoderInfo,
   });
 
   final String text;
@@ -31,6 +32,7 @@ class TranscriptionJobResult {
   final Backend backend;
   final double originalLufs;
   final double gainDb;
+  final AudioDecoderInfo? decoderInfo;
 
   double? get rtf => audioDuration.inMicroseconds == 0
       ? null
@@ -64,6 +66,7 @@ class TranscriptionService {
   TranscriptionService({
     required this.engine,
     this.vadEngine,
+    this.decoderPreference = AudioDecoderPreference.automatic,
     this._source = const FileAudioSource(),
     this._preprocessor = const AudioPreprocessor(),
   });
@@ -75,22 +78,42 @@ class TranscriptionService {
   /// (e.g. `WorkerAsrEngine.sherpa()`) when [engine] is CrispASR, so neural
   /// VAD is not bound to one ASR engine. The caller owns its disposal.
   final AsrEngine? vadEngine;
+  final AudioDecoderPreference decoderPreference;
   final AudioSource _source;
   final AudioPreprocessor _preprocessor;
+  AudioDecoderInfo? _lastDecoderInfo;
 
-  Future<PcmFile> _decode(String path, Directory dir, bool Function()? cancelled) async {
+  /// Actual decoder selected for the most recent decode in this service.
+  AudioDecoderInfo? get lastDecoderInfo => _lastDecoderInfo;
+
+  Future<PcmFile> _decode(
+    String path,
+    Directory dir,
+    bool Function()? cancelled,
+  ) async {
     final source = _source;
     if (source is FileAudioSource) {
-      return source.decodeToDisk(path, dir, isCancelled: cancelled);
+      return source.decodeToDisk(
+        path,
+        dir,
+        decoderPreference: decoderPreference,
+        isCancelled: cancelled,
+      );
     }
     // Injected sources used by tests already own their small in-memory input.
-    return PcmFile.fromBuffer(await source.read(path), '${dir.path}/decoded.f32');
+    return PcmFile.fromBuffer(
+      await source.read(path),
+      '${dir.path}/decoded.f32',
+    );
   }
 
-  Future<({double lufs, double gainDb})> _measure(PcmFile audio, bool Function()? cancelled) =>
-      _preprocessor.enabled
-          ? LoudnessNormalizer(targetLufs: _preprocessor.targetLufs).measureFile(audio, isCancelled: cancelled)
-          : Future.value((lufs: double.nan, gainDb: 0.0));
+  Future<({double lufs, double gainDb})> _measure(
+    PcmFile audio,
+    bool Function()? cancelled,
+  ) => _preprocessor.enabled
+      ? LoudnessNormalizer(targetLufs: _preprocessor.targetLufs)
+            .measureFile(audio, isCancelled: cancelled)
+      : Future.value((lufs: double.nan, gainDb: 0.0));
 
   /// Runs one file through [engine].
   ///
@@ -148,30 +171,39 @@ class TranscriptionService {
     chunkSettings?.validate();
     final dir = await Directory.systemTemp.createTemp('pocket_asr_');
     try {
-    onStage?.call(TranscriptionStage.decoding);
-    final audio = await _decode(audioPath, dir, isCancelled);
-    onStage?.call(TranscriptionStage.analyzing);
-    final measured = await _measure(audio, isCancelled);
-    final gain = math.pow(10, measured.gainDb / 20).toDouble();
-    List<List<AudioChunk>> windows = const [];
-    onStage?.call(TranscriptionStage.segmenting);
-    if (neuralVad == null) {
-      // Fixed/energy windows are planned before the temp dir exists, so an
-      // invalid or speechless plan leaves no debris.
-      final chunks = chunkSettings == null
-          ? await const ChunkPlanner().planFile(audio, gain: gain, isCancelled: isCancelled)
-          : await ChunkPlanner(settings: chunkSettings).planFile(audio, gain: gain, isCancelled: isCancelled);
-      if (chunks.isEmpty) {
-        throw const EngineUnavailableException(
-          'Chunk planner found no speech to transcribe (energy gate, not a '
-          'neural VAD); nothing was sent to the engine.',
-        );
+      _lastDecoderInfo = null;
+      onStage?.call(TranscriptionStage.decoding);
+      final audio = await _decode(audioPath, dir, isCancelled);
+      _lastDecoderInfo = audio.decoderInfo;
+      onStage?.call(TranscriptionStage.analyzing);
+      final measured = await _measure(audio, isCancelled);
+      final gain = math.pow(10, measured.gainDb / 20).toDouble();
+      List<List<AudioChunk>> windows = const [];
+      onStage?.call(TranscriptionStage.segmenting);
+      if (neuralVad == null) {
+        // Fixed/energy windows are planned before the temp dir exists, so an
+        // invalid or speechless plan leaves no debris.
+        final chunks = chunkSettings == null
+            ? await const ChunkPlanner().planFile(
+                audio,
+                gain: gain,
+                isCancelled: isCancelled,
+              )
+            : await ChunkPlanner(settings: chunkSettings)
+                  .planFile(audio, gain: gain, isCancelled: isCancelled);
+        if (chunks.isEmpty) {
+          throw const EngineUnavailableException(
+            'Chunk planner found no speech to transcribe (energy gate, not a '
+            'neural VAD); nothing was sent to the engine.',
+          );
+        }
+        windows = [
+          for (final chunk in chunks) <AudioChunk>[chunk],
+        ];
       }
-      windows = [for (final chunk in chunks) <AudioChunk>[chunk]];
-    }
-    // One directory for the whole job; every chunk WAV lives in it and the
-    // directory itself (not just the files) is removed in `finally`, on
-    // success and on failure alike.
+      // One directory for the whole job; every chunk WAV lives in it and the
+      // directory itself (not just the files) is removed in `finally`, on
+      // success and on failure alike.
       if (neuralVad != null) {
         // Real VAD needs a file for the (worker) engine; plan first, so the
         // ASR model is only loaded once there is known speech to send.
@@ -190,7 +222,9 @@ class TranscriptionService {
         }
       }
       if (isCancelled?.call() ?? false) {
-        throw const EngineCancelledException('Cancelled before loading the ASR model.');
+        throw const EngineCancelledException(
+          'Cancelled before loading the ASR model.',
+        );
       }
       onStage?.call(TranscriptionStage.loadingModel);
       await engine.load(model, backend);
@@ -213,7 +247,12 @@ class TranscriptionService {
         final window = windows[i];
         final chunkUs = math.max(1, _windowSpeechUs(window));
         final file = File('${dir.path}${Platform.pathSeparator}chunk$i.wav');
-        await audio.writeWave(file, spans: window, gain: gain, isCancelled: isCancelled);
+        await audio.writeWave(
+          file,
+          spans: window,
+          gain: gain,
+          isCancelled: isCancelled,
+        );
         TranscribeProgress? last;
         await for (final progress in engine.transcribe(
           TranscribeRequest(
@@ -231,9 +270,10 @@ class TranscriptionService {
               ratio: progress.ratio < 0
                   ? -1
                   : (doneUs + progress.ratio * chunkUs) / math.max(1, totalUs),
-              partialText: <String>[...parts, progress.partialText]
-                  .join(' ')
-                  .trim(),
+              partialText: <String>[
+                ...parts,
+                progress.partialText,
+              ].join(' ').trim(),
               completedChunkText: completed
                   ? progress.partialText.trim()
                   : null,
@@ -282,6 +322,7 @@ class TranscriptionService {
         backend: backend,
         originalLufs: measured.lufs,
         gainDb: measured.gainDb,
+        decoderInfo: audio.decoderInfo,
       );
     } finally {
       await dir.delete(recursive: true);
@@ -329,10 +370,8 @@ class TranscriptionService {
   }
 
   /// Speech (not span) length of a window in microseconds.
-  static int _windowSpeechUs(List<AudioChunk> window) => window.fold(
-    0,
-    (sum, span) => sum + span.duration.inMicroseconds,
-  );
+  static int _windowSpeechUs(List<AudioChunk> window) =>
+      window.fold(0, (sum, span) => sum + span.duration.inMicroseconds);
 
   /// Real neural-VAD boundaries for [audioPath] without touching the ASR
   /// engine at all — no [AsrEngine.load], no transcribe call.

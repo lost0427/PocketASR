@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/audio/chunk_planner.dart';
+import '../core/audio/audio_source.dart';
 import '../engine/asr_engine.dart';
 import '../engine/embedder.dart';
 import '../engine/embedding_worker.dart';
@@ -94,6 +95,10 @@ class AppState extends ChangeNotifier {
     _loudnessTargetLufs =
         double.tryParse(database.getSetting('loudness_target') ?? '') ??
         _loudnessTargetLufs;
+    _audioDecoderPreference = AudioDecoderPreference.values.firstWhere(
+      (value) => value.name == database.getSetting('audio_decoder_preference'),
+      orElse: () => AudioDecoderPreference.automatic,
+    );
     _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
@@ -281,6 +286,16 @@ class AppState extends ChangeNotifier {
     if (value == _loudnessTargetLufs) return;
     _loudnessTargetLufs = value;
     _save('loudness_target', value.toString());
+    notifyListeners();
+  }
+
+  AudioDecoderPreference _audioDecoderPreference =
+      AudioDecoderPreference.automatic;
+  AudioDecoderPreference get audioDecoderPreference => _audioDecoderPreference;
+  set audioDecoderPreference(AudioDecoderPreference value) {
+    if (value == _audioDecoderPreference) return;
+    _audioDecoderPreference = value;
+    _save('audio_decoder_preference', value.name);
     notifyListeners();
   }
 

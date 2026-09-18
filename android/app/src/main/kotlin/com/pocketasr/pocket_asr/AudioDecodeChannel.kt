@@ -3,9 +3,11 @@ package com.pocketasr.pocket_asr
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
+import android.media.MediaCodecList
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -32,8 +34,9 @@ import kotlin.math.max
  * executor: decode (the linear PCM format reported by the codec),
  * mono downmix (mean, clamped), continuous linear resample to the target
  * rate, streaming into a little-endian float32 temp file in the app cache.
- * The reply is only `{path, sampleRate, count}` — bulk PCM never crosses
- * the channel. On any failure the temp file is deleted and the extractor,
+ * The reply contains the temp path, PCM shape and selected codec diagnostics;
+ * bulk PCM never crosses the channel. On any failure the temp file is deleted
+ * and the extractor,
  * descriptor and codec are released; Dart retains PCM on disk until job cleanup.
  *
  * Memory is per codec buffer, not per file: two hours of audio touches the
@@ -80,6 +83,7 @@ class AudioDecodeChannel(
         }
         val path = call.argument<String>("path")
         val targetRate = call.argument<Int>("targetSampleRate")
+        val decoderPreference = call.argument<String>("decoderPreference") ?: "automatic"
         if (path.isNullOrBlank() || targetRate == null || targetRate <= 0) {
             result.error("bad_args", "path and positive targetSampleRate are required", null)
             return
@@ -93,7 +97,7 @@ class AudioDecodeChannel(
                 if (!directory.isDirectory || !directory.path.startsWith(root.path + File.separator)) {
                     throw IOException("PCM output directory must be inside app storage")
                 }
-                val payload = decodeToTemp(path, targetRate, directory)
+                val payload = decodeToTemp(path, targetRate, directory, decoderPreference)
                 mainHandler.post { result.success(payload) }
             } catch (t: Throwable) {
                 mainHandler.post {
@@ -107,6 +111,7 @@ class AudioDecodeChannel(
         source: String,
         targetRate: Int,
         outputDirectory: File,
+        decoderPreference: String,
     ): Map<String, Any> {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -145,9 +150,9 @@ class AudioDecodeChannel(
             val channels = max(1, trackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
             if (inRate <= 0) throw IOException("Invalid source sample rate $inRate")
 
-            val decoder = openDecoder(mime, trackFormat)
+            val decoder = openDecoder(mime, trackFormat, decoderPreference)
             codec = decoder
-            decoder.start()
+            val codecInfo = decoder.codecInfo
             var pcmEncoding = outputPcmEncoding(
                 decoder,
                 sourcePcmEncoding(mime, trackFormat),
@@ -226,11 +231,17 @@ class AudioDecodeChannel(
                 throw IOException("Temp file truncated: ${out.length()} bytes for $written frames")
             }
             ok = true
-            return mapOf(
+            val payload = mutableMapOf<String, Any>(
                 "path" to out.absolutePath,
                 "sampleRate" to targetRate,
                 "count" to written,
+                "decoderName" to codecInfo.name,
             )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                payload["hardwareAccelerated"] = codecInfo.isHardwareAccelerated
+                payload["softwareOnly"] = codecInfo.isSoftwareOnly
+            }
+            return payload
         } finally {
             if (!ok) runCatching { out.delete() }
             runCatching { sink?.close() }
@@ -241,14 +252,46 @@ class AudioDecodeChannel(
         }
     }
 
-    /** Configures the decoder without changing the extractor's source format. */
+    /** Selects, configures and starts a decoder, falling back to system auto. */
     private fun openDecoder(
         mime: String,
         trackFormat: MediaFormat,
+        preference: String,
     ): MediaCodec {
-        val decoder = MediaCodec.createDecoderByType(mime)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && preference != "automatic") {
+            val preferHardware = preference == "preferHardware"
+            val preferSoftware = preference == "preferSoftware"
+            if (preferHardware || preferSoftware) {
+                val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                    .asSequence()
+                    .filter { !it.isEncoder && !it.isAlias }
+                    .filter { info ->
+                        info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
+                    }
+                    .filter { info ->
+                        if (preferHardware) info.isHardwareAccelerated else info.isSoftwareOnly
+                    }
+                    .filter { info ->
+                        runCatching {
+                            info.getCapabilitiesForType(mime).isFormatSupported(trackFormat)
+                        }.getOrDefault(false)
+                    }
+                for (info in codecs) {
+                    try {
+                        return startDecoder(MediaCodec.createByCodecName(info.name), trackFormat)
+                    } catch (_: Exception) {
+                        // Try the next matching implementation, then system auto.
+                    }
+                }
+            }
+        }
+        return startDecoder(MediaCodec.createDecoderByType(mime), trackFormat)
+    }
+
+    private fun startDecoder(decoder: MediaCodec, trackFormat: MediaFormat): MediaCodec {
         try {
             decoder.configure(trackFormat, null, null, 0)
+            decoder.start()
         } catch (e: Exception) {
             runCatching { decoder.release() }
             throw e

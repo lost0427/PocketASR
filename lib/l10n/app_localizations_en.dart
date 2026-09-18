@@ -190,6 +190,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get metricMemory => 'Memory';
 
   @override
+  String get metricDecoder => 'Decoder';
+
+  @override
+  String get decoderHardware => 'Hardware';
+
+  @override
+  String get decoderSoftware => 'Software';
+
+  @override
+  String get decoderUnknown => 'Unknown';
+
+  @override
   String get metricUnavailable => '—';
 
   @override
@@ -487,6 +499,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsThreadsHint => 'Defaults to half the CPU cores.';
+
+  @override
+  String get settingsDecoderPreference => 'Audio decoder';
+
+  @override
+  String get decoderPreferenceAutomatic => 'Automatic';
+
+  @override
+  String get decoderPreferenceHardware => 'Prefer hardware';
+
+  @override
+  String get decoderPreferenceSoftware => 'Prefer software';
+
+  @override
+  String get settingsDecoderPreferenceHint =>
+      'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.';
 
   @override
   String get settingsAudio => 'Audio';

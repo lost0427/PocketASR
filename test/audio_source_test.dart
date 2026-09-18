@@ -67,32 +67,37 @@ void main() {
     );
   });
 
-  test('native branch sends path + target rate and reads back the f32 temp', () async {
-    final temp = writeF32([0.25, -0.5, 0.75]);
-    mock((call) async {
-      calls.add(call);
-      return {'path': temp.path, 'sampleRate': 16000, 'count': 3};
-    });
+  test(
+    'native branch sends path + target rate and reads back the f32 temp',
+    () async {
+      final temp = writeF32([0.25, -0.5, 0.75]);
+      mock((call) async {
+        calls.add(call);
+        return {'path': temp.path, 'sampleRate': 16000, 'count': 3};
+      });
 
-    final audio = await nativeSource().read('content://media/external/audio/1');
+      final audio = await nativeSource().read(
+        'content://media/external/audio/1',
+      );
 
-    expect(calls.single.method, 'decodeToPcm');
-    expect(calls.single.arguments, {
-      'path': 'content://media/external/audio/1',
-      'targetSampleRate': 16000,
-    });
-    expect(audio.sampleRate, 16000);
-    expect(audio.samples, [0.25, -0.5, 0.75]);
-    expect(temp.existsSync(), isFalse, reason: 'native temp must be cleaned up');
-  });
+      expect(calls.single.method, 'decodeToPcm');
+      expect(calls.single.arguments, {
+        'path': 'content://media/external/audio/1',
+        'targetSampleRate': 16000,
+      });
+      expect(audio.sampleRate, 16000);
+      expect(audio.samples, [0.25, -0.5, 0.75]);
+      expect(
+        temp.existsSync(),
+        isFalse,
+        reason: 'native temp must be cleaned up',
+      );
+    },
+  );
 
   test('native branch handles a zero-length decode', () async {
     final temp = writeF32([]);
-    mock((call) async => {
-      'path': temp.path,
-      'sampleRate': 16000,
-      'count': 0,
-    });
+    mock((call) async => {'path': temp.path, 'sampleRate': 16000, 'count': 0});
 
     final audio = await nativeSource().read('/sdcard/Download/empty.m4a');
 
@@ -103,11 +108,13 @@ void main() {
 
   test('size mismatch against reported count fails and cleans up', () async {
     final temp = writeF32([0.1, 0.2]);
-    mock((call) async => {
-      'path': temp.path,
-      'sampleRate': 16000,
-      'count': 5, // claims 20 bytes, file has 8
-    });
+    mock(
+      (call) async => {
+        'path': temp.path,
+        'sampleRate': 16000,
+        'count': 5, // claims 20 bytes, file has 8
+      },
+    );
 
     await expectLater(
       nativeSource().read('/sdcard/Download/bogus.mp3'),
@@ -136,11 +143,13 @@ void main() {
   });
 
   test('missing temp file reported by native propagates and is swallowed by cleanup', () async {
-    mock((call) async => {
-      'path': '${dir.path}${Platform.pathSeparator}gone.f32',
-      'sampleRate': 16000,
-      'count': 1,
-    });
+    mock(
+      (call) async => {
+        'path': '${dir.path}${Platform.pathSeparator}gone.f32',
+        'sampleRate': 16000,
+        'count': 1,
+      },
+    );
 
     await expectLater(
       nativeSource().read('/sdcard/Download/x.m4a'),
@@ -149,10 +158,12 @@ void main() {
   });
 
   test('native decode errors propagate as PlatformException', () async {
-    mock((call) async => throw PlatformException(
-          code: 'decode_failed',
-          message: 'No audio track',
-        ));
+    mock(
+      (call) async => throw PlatformException(
+        code: 'decode_failed',
+        message: 'No audio track',
+      ),
+    );
 
     await expectLater(
       nativeSource().read('/sdcard/Download/silent.bin'),
@@ -161,39 +172,55 @@ void main() {
     expect(calls, isEmpty); // handler never recorded a successful reply
   });
 
-  test('decodeToDisk keeps native PCM in place and passes the job directory', () async {
-    final job = Directory('${dir.path}${Platform.pathSeparator}job')
-      ..createSync();
-    final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_1.f32')
-      ..writeAsBytesSync(writeF32([0.25, -0.5, 0.75]).readAsBytesSync());
-    mock((call) async {
-      calls.add(call);
-      return {'path': decoded.path, 'sampleRate': 16000, 'count': 3};
-    });
+  test(
+    'decodeToDisk keeps native PCM in place and passes the job directory',
+    () async {
+      final job = Directory('${dir.path}${Platform.pathSeparator}job')
+        ..createSync();
+      final decoded = File(
+        '${job.path}${Platform.pathSeparator}pocketasr_1.f32',
+      )..writeAsBytesSync(writeF32([0.25, -0.5, 0.75]).readAsBytesSync());
+      mock((call) async {
+        calls.add(call);
+        return {
+          'path': decoded.path,
+          'sampleRate': 16000,
+          'count': 3,
+          'decoderName': 'c2.qti.mp3.decoder',
+          'hardwareAccelerated': true,
+          'softwareOnly': false,
+        };
+      });
 
-    final pcm = await nativeSource().decodeToDisk('x.m4a', job);
+      final pcm = await nativeSource().decodeToDisk('x.m4a', job);
 
-    expect(calls.single.arguments, {
-      'path': 'x.m4a',
-      'targetSampleRate': 16000,
-      'outputDirectory': job.path,
-    });
-    expect(pcm.path, decoded.path);
-    expect(pcm.count, 3);
-    expect(pcm.sampleRate, 16000);
-    expect(decoded.existsSync(), isTrue, reason: 'job file is retained');
-  });
+      expect(calls.single.arguments, {
+        'path': 'x.m4a',
+        'targetSampleRate': 16000,
+        'outputDirectory': job.path,
+        'decoderPreference': 'automatic',
+      });
+      expect(pcm.path, decoded.path);
+      expect(pcm.count, 3);
+      expect(pcm.sampleRate, 16000);
+      expect(pcm.decoderInfo?.name, 'c2.qti.mp3.decoder');
+      expect(pcm.decoderInfo?.isHardware, isTrue);
+      expect(decoded.existsSync(), isTrue, reason: 'job file is retained');
+    },
+  );
 
   test('decodeToDisk validates size and cleans up on failure', () async {
     final job = Directory('${dir.path}${Platform.pathSeparator}job')
       ..createSync();
     final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_2.f32')
       ..writeAsBytesSync(List.filled(8, 0));
-    mock((call) async => {
-      'path': decoded.path,
-      'sampleRate': 16000,
-      'count': 5, // claims 20 bytes
-    });
+    mock(
+      (call) async => {
+        'path': decoded.path,
+        'sampleRate': 16000,
+        'count': 5, // claims 20 bytes
+      },
+    );
 
     await expectLater(
       nativeSource().decodeToDisk('x.m4a', job),
@@ -206,11 +233,9 @@ void main() {
     final job = Directory('${dir.path}${Platform.pathSeparator}job')
       ..createSync();
     final foreign = writeF32([0.5], name: 'foreign.f32');
-    mock((call) async => {
-      'path': foreign.path,
-      'sampleRate': 16000,
-      'count': 1,
-    });
+    mock(
+      (call) async => {'path': foreign.path, 'sampleRate': 16000, 'count': 1},
+    );
 
     await expectLater(
       nativeSource().decodeToDisk('x.m4a', job),

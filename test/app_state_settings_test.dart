@@ -5,6 +5,7 @@ import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
+import 'package:pocket_asr/core/audio/audio_source.dart';
 
 /// Chunking and the shared model selection must survive a restart; anything
 /// unparseable or out of range falls back to defaults, and a selection whose
@@ -40,9 +41,27 @@ void main() {
     expect(restored.chunkSeconds, 12);
     expect(restored.energyThreshold, 0.02);
     expect(restored.speechPadMs, 40);
+    expect(restored.audioDecoderPreference, AudioDecoderPreference.automatic);
     expect(restored.modelPath, path);
     // Overlap is never exposed and stays off by default.
     expect(restored.chunkSettings!.overlapSeconds, 0);
+  });
+
+  test('audio decoder preference persists and restores', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final state = AppState(database: db)
+      ..audioDecoderPreference = AudioDecoderPreference.preferHardware;
+
+    expect(
+      AppState(database: db).audioDecoderPreference,
+      AudioDecoderPreference.preferHardware,
+    );
+    state.audioDecoderPreference = AudioDecoderPreference.preferSoftware;
+    expect(
+      AppState(database: db).audioDecoderPreference,
+      AudioDecoderPreference.preferSoftware,
+    );
   });
 
   test('invalid stored values fall back to the defaults', () {
@@ -56,7 +75,10 @@ void main() {
     final state = AppState(database: db);
     expect(state.chunkStrategy, ChunkStrategy.fixed);
     expect(state.chunkSeconds, AppState.defaultChunkSettings.chunkSeconds);
-    expect(state.energyThreshold, AppState.defaultChunkSettings.energyThreshold);
+    expect(
+      state.energyThreshold,
+      AppState.defaultChunkSettings.energyThreshold,
+    );
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
   });
 
@@ -107,7 +129,10 @@ void main() {
         family: entry.family,
         quant: entry.quant,
       );
-    expect(state.modelSpec!.decoderPath, store.pathToFile(entry, entry.files[1]));
+    expect(
+      state.modelSpec!.decoderPath,
+      store.pathToFile(entry, entry.files[1]),
+    );
     expect(state.selectionNeedsMissingCompanion, isFalse);
 
     final restored = AppState(database: db);
@@ -182,8 +207,7 @@ void main() {
   test('clearing the selection notifies and persists the empty choice', () {
     final db = AppDatabase.open();
     addTearDown(db.close);
-    final state = AppState(database: db)
-      ..modelPath = write('m.onnx', [1]);
+    final state = AppState(database: db)..modelPath = write('m.onnx', [1]);
 
     var notified = 0;
     state.addListener(() => notified++);

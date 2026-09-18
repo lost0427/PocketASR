@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/audio/audio_source.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
@@ -86,7 +87,15 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsPerformance),
         const SizedBox(height: 12),
-        _Card(child: _ThreadsControl(state: state)),
+        _Card(
+          child: Column(
+            children: [
+              _ThreadsControl(state: state),
+              const SizedBox(height: 20),
+              _DecoderPreferenceControl(state: state),
+            ],
+          ),
+        ),
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsAudio),
         const SizedBox(height: 12),
@@ -277,6 +286,70 @@ class _ThreadsControl extends StatelessWidget {
           l10n.settingsThreadsHint,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DecoderPreferenceControl extends StatelessWidget {
+  const _DecoderPreferenceControl({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.audio_file_outlined,
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l10n.settingsDecoderPreference,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SegmentedButton<AudioDecoderPreference>(
+          expandedInsets: EdgeInsets.zero,
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(
+              value: AudioDecoderPreference.automatic,
+              label: Text(l10n.decoderPreferenceAutomatic),
+            ),
+            ButtonSegment(
+              value: AudioDecoderPreference.preferHardware,
+              label: Text(l10n.decoderPreferenceHardware),
+            ),
+            ButtonSegment(
+              value: AudioDecoderPreference.preferSoftware,
+              label: Text(l10n.decoderPreferenceSoftware),
+            ),
+          ],
+          selected: {state.audioDecoderPreference},
+          onSelectionChanged: (selection) =>
+              state.audioDecoderPreference = selection.first,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.settingsDecoderPreferenceHint,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.45,
           ),
         ),
       ],

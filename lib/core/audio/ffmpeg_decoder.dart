@@ -67,7 +67,14 @@ Future<PcmFile> decodeWithFfmpeg(
     if (bytes == 0 || bytes % 4 != 0) {
       throw const FormatException('FFmpeg produced invalid PCM');
     }
-    return PcmFile(destination, bytes ~/ 4);
+    return PcmFile(
+      destination,
+      bytes ~/ 4,
+      decoderInfo: const AudioDecoderInfo(
+        name: 'FFmpeg',
+        isHardware: false,
+      ),
+    );
   } finally {
     timer.cancel();
     await errors.cancel();

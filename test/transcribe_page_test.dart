@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/core/audio/pcm_file.dart';
 import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/data/transcript_repo.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
@@ -107,6 +108,10 @@ class _ScriptedService extends TranscriptionService {
       backend: backend,
       originalLufs: -16,
       gainDb: 0,
+      decoderInfo: const AudioDecoderInfo(
+        name: 'c2.qti.aac.decoder',
+        isHardware: true,
+      ),
     );
   }
 }
@@ -326,6 +331,7 @@ void main() {
     expect(find.text('2.5'), findsOneWidget); // chars/s
     expect(find.text('4.00'), findsOneWidget); // RTF
     expect(find.text('2.0s'), findsOneWidget); // elapsed
+    expect(find.text('c2.qti.aac.decoder\nHardware'), findsOneWidget);
 
     expect(find.text('hello'), findsOneWidget); // final transcript
 

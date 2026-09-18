@@ -18,14 +18,18 @@ const audioDecodeChannel = MethodChannel('pocket_asr/audio_decode');
 
 bool _isAndroid() => Platform.isAndroid;
 
+/// How Android should choose a MediaCodec audio decoder.
+enum AudioDecoderPreference { automatic, preferHardware, preferSoftware }
+
 /// Reads an audio file into a 16 kHz mono [AudioBuffer].
 ///
 /// On non-Android platforms this is the historic [WavDecoder]-only path.
 /// On Android the work goes through [channel]: native MediaExtractor +
 /// MediaCodec decode/downmix/resample any platform codec (m4a, mp3, flac,
 /// wav) and stream the result into a temporary little-endian float32 file;
-/// only `{path, sampleRate, count}` crosses the channel — never the raw
-/// PCM. The temp file is read back as a zero-copy Float32List view and
+/// only metadata (`path`, `sampleRate`, `count` and decoder diagnostics)
+/// crosses the channel — never the raw PCM. The temp file is read back as a
+/// zero-copy Float32List view and
 /// deleted in `finally`, success or failure alike (decode failures clean
 /// up on the native side before the channel replies).
 class FileAudioSource implements AudioSource {
@@ -40,19 +44,28 @@ class FileAudioSource implements AudioSource {
   final bool Function() usesNativeDecoder;
 
   /// Production processing retains the native output on disk until job cleanup.
-  Future<PcmFile> decodeToDisk(String path, Directory directory, {
+  Future<PcmFile> decodeToDisk(
+    String path,
+    Directory directory, {
+    AudioDecoderPreference decoderPreference = AudioDecoderPreference.automatic,
     bool Function()? isCancelled,
   }) async {
     checkAudioCancellation(isCancelled);
     if (!usesNativeDecoder()) {
-      return decodeWithFfmpeg(path, '${directory.path}/decoded.f32', isCancelled: isCancelled);
+      return decodeWithFfmpeg(
+        path,
+        '${directory.path}/decoded.f32',
+        isCancelled: isCancelled,
+      );
     }
     final result = await channel.invokeMethod<Object?>('decodeToPcm', {
       'path': path,
       'targetSampleRate': 16000,
       'outputDirectory': directory.path,
+      'decoderPreference': decoderPreference.name,
     });
-    if (result is! Map || result['path'] is! String ||
+    if (result is! Map ||
+        result['path'] is! String ||
         (result['path'] as String).isEmpty) {
       throw const FormatException('Invalid native PCM response');
     }
@@ -63,11 +76,17 @@ class FileAudioSource implements AudioSource {
     try {
       checkAudioCancellation(isCancelled);
       final count = result['count'];
-      if (result['sampleRate'] != 16000 || count is! int || count <= 0 ||
+      if (result['sampleRate'] != 16000 ||
+          count is! int ||
+          count <= 0 ||
           await temp.length() != count * 4) {
         throw const FormatException('Invalid native PCM size or rate');
       }
-      return PcmFile(temp.path, count);
+      return PcmFile(
+        temp.path,
+        count,
+        decoderInfo: AudioDecoderInfo.fromNativeResult(result),
+      );
     } catch (_) {
       await _tryDelete(temp);
       rethrow;
@@ -81,12 +100,14 @@ class FileAudioSource implements AudioSource {
   }
 
   Future<AudioBuffer> _readNative(String path) async {
-    final result = await channel.invokeMethod<Object?>(
-      'decodeToPcm',
-      {'path': path, 'targetSampleRate': decoder.targetSampleRate},
-    );
+    final result = await channel.invokeMethod<Object?>('decodeToPcm', {
+      'path': path,
+      'targetSampleRate': decoder.targetSampleRate,
+    });
     if (result is! Map) {
-      throw FormatException('Native decoder returned unexpected result: $result');
+      throw FormatException(
+        'Native decoder returned unexpected result: $result',
+      );
     }
     final tempPath = result['path'];
     final sampleRate = result['sampleRate'];
@@ -99,8 +120,12 @@ class FileAudioSource implements AudioSource {
         count < 0) {
       // Malformed reply: still try to remove the temp file so a half-trusting
       // native side cannot leak it into the cache.
-      if (tempPath is String && tempPath.isNotEmpty) await _tryDelete(File(tempPath));
-      throw FormatException('Native decoder returned an invalid result: $result');
+      if (tempPath is String && tempPath.isNotEmpty) {
+        await _tryDelete(File(tempPath));
+      }
+      throw FormatException(
+        'Native decoder returned an invalid result: $result',
+      );
     }
     final temp = File(tempPath);
     try {

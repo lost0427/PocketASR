@@ -9,6 +9,8 @@ import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_preprocessor.dart';
+import '../../core/audio/audio_source.dart';
+import '../../core/audio/pcm_file.dart';
 import '../../core/text/token_counter.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
@@ -83,6 +85,7 @@ class _TranscribePageState extends State<TranscribePage> {
   Duration? _elapsed;
   double? _rtf;
   Backend? _runBackend;
+  AudioDecoderInfo? _decoderInfo;
 
   /// Process readings taken only while a run is active; null means "not
   /// measured", which renders as `—` rather than a made-up number.
@@ -192,6 +195,8 @@ class _TranscribePageState extends State<TranscribePage> {
       TranscriptionService(
         engine: widget.engine,
         vadEngine: state?.activeVadEngine,
+        decoderPreference:
+            state?.audioDecoderPreference ?? AudioDecoderPreference.automatic,
         preprocessor: AudioPreprocessor(
           enabled: state?.loudnessEnabled ?? true,
           targetLufs: state?.loudnessTargetLufs ?? -16,
@@ -234,6 +239,7 @@ class _TranscribePageState extends State<TranscribePage> {
       _elapsed = null;
       _rtf = null;
       _runBackend = null;
+      _decoderInfo = null;
       _cpuPercent = null;
       _memoryBytes = null;
     });
@@ -245,7 +251,12 @@ class _TranscribePageState extends State<TranscribePage> {
         backend: state?.backend ?? Backend.cpu,
         chunkSettings: state?.chunkSettings,
         neuralVad: neuralVad,
-        onStage: _onStage,
+        onStage: (stage) {
+          _onStage(stage);
+          if (stage == TranscriptionStage.analyzing && mounted) {
+            setState(() => _decoderInfo = service.lastDecoderInfo);
+          }
+        },
         onProgress: _onProgress,
         isCancelled: () => _cancelRequested,
       );
@@ -273,6 +284,7 @@ class _TranscribePageState extends State<TranscribePage> {
           _elapsed = result.elapsed;
           _rtf = result.rtf;
           _runBackend = result.backend;
+          _decoderInfo = result.decoderInfo;
           _charsPerSec = result.text.isEmpty
               ? null
               : graphemesPerSecond(result.text, result.elapsed);
@@ -720,6 +732,7 @@ class _TranscribePageState extends State<TranscribePage> {
                     elapsed: _elapsed,
                     cpuPercent: _cpuPercent,
                     memoryBytes: _memoryBytes,
+                    decoderInfo: _decoderInfo,
                   ),
                   const SizedBox(height: 28),
                   Row(
@@ -1173,7 +1186,7 @@ String? _elapsed(Duration? value) {
 String? _memory(int? bytes) =>
     bytes == null ? null : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-/// Five metric tiles fed by the live run. CPU and memory come from the periodic
+/// Metric tiles fed by the live run. CPU and memory come from the periodic
 /// sampler and stay `—` whenever a reading could not be taken — the page never
 /// invents numbers.
 class _MetricsGrid extends StatelessWidget {
@@ -1183,6 +1196,7 @@ class _MetricsGrid extends StatelessWidget {
     required this.elapsed,
     required this.cpuPercent,
     required this.memoryBytes,
+    required this.decoderInfo,
   });
 
   final double? charsPerSec;
@@ -1190,6 +1204,7 @@ class _MetricsGrid extends StatelessWidget {
   final Duration? elapsed;
   final double? cpuPercent;
   final int? memoryBytes;
+  final AudioDecoderInfo? decoderInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -1209,6 +1224,11 @@ class _MetricsGrid extends StatelessWidget {
         cpuPercent == null ? unknown : '${cpuPercent!.toStringAsFixed(0)}%',
       ),
       (l10n.metricMemory, Icons.storage, _memory(memoryBytes) ?? unknown),
+      (
+        l10n.metricDecoder,
+        Icons.audio_file_outlined,
+        _decoderMode(decoderInfo, l10n),
+      ),
     ];
 
     return GridView.count(
@@ -1224,6 +1244,16 @@ class _MetricsGrid extends StatelessWidget {
       ],
     );
   }
+}
+
+String _decoderMode(AudioDecoderInfo? info, AppLocalizations l10n) {
+  if (info == null) return l10n.metricUnavailable;
+  final mode = switch (info.isHardware) {
+    true => l10n.decoderHardware,
+    false => l10n.decoderSoftware,
+    null => l10n.decoderUnknown,
+  };
+  return '${info.name}\n$mode';
 }
 
 class _MetricTile extends StatelessWidget {
@@ -1263,11 +1293,16 @@ class _MetricTile extends StatelessWidget {
               ),
             ],
           ),
-          Text(
-            value,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
+          Tooltip(
+            message: value,
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

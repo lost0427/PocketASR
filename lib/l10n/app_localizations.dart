@@ -434,6 +434,30 @@ abstract class AppLocalizations {
   /// **'Memory'**
   String get metricMemory;
 
+  /// No description provided for @metricDecoder.
+  ///
+  /// In en, this message translates to:
+  /// **'Decoder'**
+  String get metricDecoder;
+
+  /// No description provided for @decoderHardware.
+  ///
+  /// In en, this message translates to:
+  /// **'Hardware'**
+  String get decoderHardware;
+
+  /// No description provided for @decoderSoftware.
+  ///
+  /// In en, this message translates to:
+  /// **'Software'**
+  String get decoderSoftware;
+
+  /// No description provided for @decoderUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get decoderUnknown;
+
   /// No description provided for @metricUnavailable.
   ///
   /// In en, this message translates to:
@@ -955,6 +979,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Defaults to half the CPU cores.'**
   String get settingsThreadsHint;
+
+  /// No description provided for @settingsDecoderPreference.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio decoder'**
+  String get settingsDecoderPreference;
+
+  /// No description provided for @decoderPreferenceAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get decoderPreferenceAutomatic;
+
+  /// No description provided for @decoderPreferenceHardware.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer hardware'**
+  String get decoderPreferenceHardware;
+
+  /// No description provided for @decoderPreferenceSoftware.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer software'**
+  String get decoderPreferenceSoftware;
+
+  /// No description provided for @settingsDecoderPreferenceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.'**
+  String get settingsDecoderPreferenceHint;
 
   /// No description provided for @settingsAudio.
   ///

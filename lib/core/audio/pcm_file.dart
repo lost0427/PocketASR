@@ -14,12 +14,38 @@ void checkAudioCancellation(bool Function()? isCancelled) {
   }
 }
 
+/// Decoder selected for the current audio file.
+class AudioDecoderInfo {
+  const AudioDecoderInfo({required this.name, this.isHardware});
+
+  final String name;
+  final bool? isHardware;
+
+  static AudioDecoderInfo? fromNativeResult(Object? value) {
+    if (value is! Map) return null;
+    final name = value['decoderName'];
+    if (name is! String || name.isEmpty) return null;
+    final hardware = value['hardwareAccelerated'];
+    final software = value['softwareOnly'];
+    return AudioDecoderInfo(
+      name: name,
+      isHardware: hardware == true ? true : software == true ? false : null,
+    );
+  }
+}
+
 /// Canonical little-endian mono float32 on disk. The job owns its directory.
 class PcmFile {
-  const PcmFile(this.path, this.count, {this.sampleRate = 16000});
+  const PcmFile(
+    this.path,
+    this.count, {
+    this.sampleRate = 16000,
+    this.decoderInfo,
+  });
   final String path;
   final int count;
   final int sampleRate;
+  final AudioDecoderInfo? decoderInfo;
   Duration get duration =>
       Duration(microseconds: (count * 1000000 / sampleRate).round());
 

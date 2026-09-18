@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../../core/audio/audio_picker.dart';
+import '../../core/audio/audio_source.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
 import '../../l10n/app_localizations.dart';
@@ -116,6 +117,9 @@ class _QueuePageState extends State<QueuePage> {
           TranscriptionService(
             engine: widget.engine,
             vadEngine: state?.activeVadEngine,
+            decoderPreference:
+                state?.audioDecoderPreference ??
+                AudioDecoderPreference.automatic,
           ),
       model,
       transcriptRepo: widget.transcriptRepo,

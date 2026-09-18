@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
+import 'package:pocket_asr/core/audio/audio_source.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/engine_registry.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
@@ -104,6 +105,10 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(state.loudnessEnabled, isFalse);
+
+    await tester.tap(find.text('Prefer hardware'));
+    await tester.pumpAndSettle();
+    expect(state.audioDecoderPreference, AudioDecoderPreference.preferHardware);
   });
 
   testWidgets('the version row opens the benchmark on the seventh tap', (

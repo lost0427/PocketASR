@@ -183,6 +183,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get metricMemory => '内存';
 
   @override
+  String get metricDecoder => '解码器';
+
+  @override
+  String get decoderHardware => '硬件';
+
+  @override
+  String get decoderSoftware => '软件';
+
+  @override
+  String get decoderUnknown => '未知';
+
+  @override
   String get metricUnavailable => '—';
 
   @override
@@ -452,6 +464,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsThreadsHint => '默认使用一半的 CPU 核心。';
+
+  @override
+  String get settingsDecoderPreference => '音频解码器';
+
+  @override
+  String get decoderPreferenceAutomatic => '自动';
+
+  @override
+  String get decoderPreferenceHardware => '优先硬件';
+
+  @override
+  String get decoderPreferenceSoftware => '优先软件';
+
+  @override
+  String get settingsDecoderPreferenceHint =>
+      'Android 会在支持时尝试所选类型，失败后回退到系统解码器。实际使用的 codec 会在解码后显示。';
 
   @override
   String get settingsAudio => '音频';
