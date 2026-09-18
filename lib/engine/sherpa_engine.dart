@@ -138,7 +138,11 @@ class SherpaEngine implements AsrEngine {
       case 'sensevoice':
       case 'sense_voice':
         return sherpa.OfflineModelConfig(
-          senseVoice: sherpa.OfflineSenseVoiceModelConfig(model: spec.path),
+          senseVoice: sherpa.OfflineSenseVoiceModelConfig(
+            model: spec.path,
+            language: 'auto',
+            useInverseTextNormalization: true,
+          ),
           tokens: tokens,
           numThreads: threads,
         );
