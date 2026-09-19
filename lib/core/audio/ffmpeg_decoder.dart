@@ -5,6 +5,10 @@ import 'dart:io';
 import 'pcm_file.dart';
 
 /// Run the bundled executable directly; paths are arguments, never shell text.
+///
+/// FFmpeg covers every format on desktop. The decode is followed by a bounded
+/// AGC (`dynaudnorm`) so Windows output is level-consistent too; Android does
+/// the same job in-process with SpeexDSP during decode.
 Future<PcmFile> decodeWithFfmpeg(
   String source,
   String destination, {
@@ -32,6 +36,8 @@ Future<PcmFile> decodeWithFfmpeg(
     '1',
     '-ar',
     '16000',
+    '-af',
+    'dynaudnorm=f=200:m=10',
     '-c:a',
     'pcm_f32le',
     '-f',
@@ -71,7 +77,7 @@ Future<PcmFile> decodeWithFfmpeg(
       destination,
       bytes ~/ 4,
       decoderInfo: const AudioDecoderInfo(
-        name: 'FFmpeg',
+        name: 'FFmpeg+agc',
         isHardware: false,
       ),
     );
