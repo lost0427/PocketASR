@@ -21,6 +21,35 @@ bool _isAndroid() => Platform.isAndroid;
 /// How Android should choose a MediaCodec audio decoder.
 enum AudioDecoderPreference { automatic, preferHardware, preferSoftware }
 
+/// Which decode implementation Android must use. `auto` is the production
+/// behaviour (dr_libs for its formats, MediaCodec otherwise); the benchmark
+/// page pins one side to compare them on the same file.
+enum AudioDecoderBackend { auto, builtin, platform }
+
+/// The chain's fixed target rate; [DecodeProbe] frames are counted at it.
+const decodeProbeSampleRate = 16000;
+
+/// One measured decode, used to compare decoders on one file.
+class DecodeProbe {
+  const DecodeProbe({
+    required this.elapsed,
+    required this.frames,
+    this.decoder,
+  });
+
+  /// Native decode wall time reported by the platform code.
+  final Duration elapsed;
+
+  /// Output samples at [decodeProbeSampleRate].
+  final int frames;
+
+  final AudioDecoderInfo? decoder;
+
+  Duration get audioDuration => Duration(
+    microseconds: (frames * 1000000 / decodeProbeSampleRate).round(),
+  );
+}
+
 /// Reads an audio file into a 16 kHz mono [AudioBuffer].
 ///
 /// On non-Android platforms this is the historic [WavDecoder]-only path.
@@ -48,6 +77,7 @@ class FileAudioSource implements AudioSource {
     String path,
     Directory directory, {
     AudioDecoderPreference decoderPreference = AudioDecoderPreference.automatic,
+    AudioDecoderBackend decoderBackend = AudioDecoderBackend.auto,
     bool Function()? isCancelled,
   }) async {
     checkAudioCancellation(isCancelled);
@@ -63,6 +93,7 @@ class FileAudioSource implements AudioSource {
       'targetSampleRate': 16000,
       'outputDirectory': directory.path,
       'decoderPreference': decoderPreference.name,
+      'decoderBackend': decoderBackend.name,
     });
     if (result is! Map ||
         result['path'] is! String ||
@@ -90,6 +121,48 @@ class FileAudioSource implements AudioSource {
     } catch (_) {
       await _tryDelete(temp);
       rethrow;
+    }
+  }
+
+  /// Decodes [path] once with [backend] and reports the native decode time,
+  /// discarding the PCM. Only Android exposes the backend choice.
+  Future<DecodeProbe> decodeProbe(
+    String path,
+    Directory directory, {
+    required AudioDecoderBackend backend,
+    bool Function()? isCancelled,
+  }) async {
+    checkAudioCancellation(isCancelled);
+    if (!usesNativeDecoder()) {
+      throw UnsupportedError('Decoder comparison needs the Android decoder');
+    }
+    final result = await channel.invokeMethod<Object?>('decodeToPcm', {
+      'path': path,
+      'targetSampleRate': decodeProbeSampleRate,
+      'outputDirectory': directory.path,
+      'decoderBackend': backend.name,
+    });
+    final tempPath = result is Map ? result['path'] : null;
+    final count = result is Map ? result['count'] : null;
+    final micros = result is Map ? result['decodeMicros'] : null;
+    final temp = tempPath is String && tempPath.isNotEmpty
+        ? File(tempPath)
+        : null;
+    // Never delete a path the native side should not have produced.
+    final ours =
+        temp != null &&
+        await FileSystemEntity.identical(temp.parent.path, directory.path);
+    try {
+      if (!ours || count is! int || count <= 0 || micros is! int || micros <= 0) {
+        throw const FormatException('Invalid native decode probe response');
+      }
+      return DecodeProbe(
+        elapsed: Duration(microseconds: micros),
+        frames: count,
+        decoder: AudioDecoderInfo.fromNativeResult(result),
+      );
+    } finally {
+      if (ours) await _tryDelete(temp);
     }
   }
 

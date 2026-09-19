@@ -631,6 +631,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchExportFailed => '导出失败';
 
   @override
+  String get benchDecodeTitle => '解码速度对比';
+
+  @override
+  String get benchDecodeHint => '对同一文件分别用内置解码器与平台解码器各解码三次，取中位数。不运行语音模型。';
+
+  @override
+  String get benchDecodeRun => '对比解码器';
+
+  @override
+  String get benchDecodeBuiltin => '内置（dr_libs）';
+
+  @override
+  String get benchDecodePlatform => '平台（MediaCodec）';
+
+  @override
+  String get benchDecodeElapsed => '解码耗时';
+
+  @override
+  String get benchDecodeRealtime => '实时倍率';
+
+  @override
+  String get benchDecodeAudioRequired => '请先选择音频文件再对比。';
+
+  @override
   String get benchExitHint => '连续点击标题七次可退出。';
 
   @override

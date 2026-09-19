@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocket_asr/core/audio/audio_source.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/core/audio/pcm_file.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
@@ -194,6 +196,7 @@ void main() {
     List<ModelEntry> entries = const [],
     String? audio,
     Future<void> Function(String, String)? exportFile,
+    BenchmarkDecodeProbe? decodeProbe,
   }) async {
     tester.view.physicalSize = const Size(1200, 3200);
     tester.view.devicePixelRatio = 1.0;
@@ -211,6 +214,7 @@ void main() {
           store: store,
           pickAudio: () async => audio,
           exportFile: exportFile,
+          decodeProbe: decodeProbe,
         ),
       ),
     );
@@ -393,5 +397,74 @@ void main() {
 
     expect(engine.cancelCalls, 1);
     expect(find.text('Cancelled'), findsOneWidget);
+  });
+
+  testWidgets('compares both decoders on the same file and shows the median', (
+    tester,
+  ) async {
+    final seen = <(String, AudioDecoderBackend)>[];
+    await pumpBench(
+      tester,
+      entries: const [_sense],
+      audio: 'picked.wav',
+      decodeProbe: (path, directory, backend) async {
+        final run = seen.length;
+        seen.add((path, backend));
+        final builtin = backend == AudioDecoderBackend.builtin;
+        return DecodeProbe(
+          elapsed: Duration(milliseconds: (builtin ? 100 : 400) + run),
+          frames: 16000, // one second of audio
+          decoder: AudioDecoderInfo(
+            name: builtin ? 'dr_wav' : 'MediaCodec',
+            builtin: builtin,
+          ),
+        );
+      },
+    );
+
+    await tester.tap(find.text('Choose audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Compare decoders'));
+    await tester.pumpAndSettle();
+
+    expect(seen, hasLength(6)); // two backends, three runs each
+    expect(seen.every((call) => call.$1 == 'picked.wav'), isTrue);
+    expect(find.text('Built-in (dr_libs)'), findsOneWidget);
+    expect(find.text('Platform (MediaCodec)'), findsOneWidget);
+    expect(find.text('dr_wav'), findsOneWidget);
+    expect(find.text('MediaCodec'), findsOneWidget);
+    expect(find.text('3/3'), findsNWidgets(2));
+    expect(find.text('101ms'), findsOneWidget); // median of 100/101/102 ms
+    expect(find.text('404ms'), findsOneWidget); // median of 403/404/405 ms
+  });
+
+  testWidgets('a decoder that cannot run says so instead of a number', (
+    tester,
+  ) async {
+    await pumpBench(
+      tester,
+      entries: const [_sense],
+      audio: 'picked.wav',
+      decodeProbe: (path, directory, backend) async {
+        if (backend == AudioDecoderBackend.platform) {
+          throw const FormatException('no audio track');
+        }
+        return const DecodeProbe(
+          elapsed: Duration(milliseconds: 50),
+          frames: 16000,
+        );
+      },
+    );
+
+    await tester.tap(find.text('Choose audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Compare decoders'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('no audio track'), findsOneWidget);
+    expect(find.text('Built-in (dr_libs)'), findsOneWidget);
+    expect(find.text('50ms'), findsOneWidget);
+    expect(find.text('0/3'), findsOneWidget); // the platform row never ran
+    expect(find.text('3/3'), findsOneWidget);
   });
 }

@@ -19,6 +19,14 @@ typedef BenchmarkServiceFactory = TranscriptionService Function(
   AsrEngine engine,
 );
 
+/// Runs one decode through a pinned backend; production uses
+/// [FileAudioSource.decodeProbe].
+typedef BenchmarkDecodeProbe = Future<DecodeProbe> Function(
+  String path,
+  Directory directory,
+  AudioDecoderBackend backend,
+);
+
 /// Hidden benchmark page (requirement 15), reached by tapping the version row
 /// seven times in Settings and left the same way on this page's title.
 ///
@@ -40,6 +48,7 @@ class BenchPage extends StatefulWidget {
     this.state,
     this.pickAudio,
     this.exportFile,
+    this.decodeProbe,
   }) : assert(engineFactory == null || service == null),
        assert(engineFactory != null || serviceFactory == null);
 
@@ -72,6 +81,10 @@ class BenchPage extends StatefulWidget {
   final Future<void> Function(String suggestedName, String contents)?
   exportFile;
 
+  /// Decode-comparison seam; production probes through [FileAudioSource].
+  /// Its presence also enables the section on the desktop test host.
+  final BenchmarkDecodeProbe? decodeProbe;
+
   @override
   State<BenchPage> createState() => _BenchPageState();
 }
@@ -89,6 +102,9 @@ class _BenchPageState extends State<BenchPage> {
   bool _cancelRequested = false;
   AsrEngine? _activeEngine;
   List<BenchmarkResult> _results = const [];
+
+  bool _decodeRunning = false;
+  List<_DecodeRow> _decodeRows = const [];
 
   Future<_BenchSetup> _loadSetup() async {
     var engineAvailable = widget.engineFactory != null;
@@ -316,6 +332,77 @@ class _BenchPageState extends State<BenchPage> {
     }
   }
 
+  /// Probes the two decode backends on the picked file, median of [_repeats].
+  /// A backend that cannot decode the format reports its failure, never a number.
+  Future<void> _runDecodeCompare() async {
+    final audioPath = _audioPath;
+    if (_decodeRunning || _running || audioPath == null) return;
+    final probe =
+        widget.decodeProbe ??
+        (path, directory, backend) =>
+            const FileAudioSource().decodeProbe(path, directory, backend: backend);
+    setState(() {
+      _decodeRunning = true;
+      _decodeRows = const [];
+    });
+
+    final rows = <_DecodeRow>[];
+    Directory? directory;
+    try {
+      // Sync so the widget test host is not blocked on real async IO.
+      directory = Directory.systemTemp.createTempSync('pocket_asr_decode_');
+      for (final backend in const [
+        AudioDecoderBackend.builtin,
+        AudioDecoderBackend.platform,
+      ]) {
+        rows.add(await _probeDecode(probe, audioPath, directory, backend));
+        if (!mounted) return;
+        setState(() => _decodeRows = List.of(rows));
+      }
+    } catch (error) {
+      rows.add(_DecodeRow(backend: null, error: error.toString()));
+    } finally {
+      if (directory != null) {
+        try {
+          directory.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Best effort, like the decoder's own temp file cleanup.
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _decodeRunning = false;
+          _decodeRows = List.of(rows);
+        });
+      }
+    }
+  }
+
+  Future<_DecodeRow> _probeDecode(
+    BenchmarkDecodeProbe probe,
+    String audioPath,
+    Directory directory,
+    AudioDecoderBackend backend,
+  ) async {
+    final samples = <Duration>[];
+    DecodeProbe? last;
+    try {
+      for (var i = 0; i < _repeats; i++) {
+        last = await probe(audioPath, directory, backend);
+        samples.add(last.elapsed);
+      }
+    } catch (error) {
+      return _DecodeRow(backend: backend, error: error.toString());
+    }
+    samples.sort();
+    return _DecodeRow(
+      backend: backend,
+      elapsed: samples[samples.length ~/ 2],
+      probe: last,
+      runs: samples.length,
+    );
+  }
+
   void _cancel() {
     if (!_running || _cancelRequested) return;
     setState(() => _cancelRequested = true);
@@ -390,6 +477,7 @@ class _BenchPageState extends State<BenchPage> {
         setup.downloaded.isNotEmpty &&
         store != null &&
         !_running &&
+        !_decodeRunning &&
         !(state?.engineBusy ?? false) &&
         !needsVad;
 
@@ -448,6 +536,43 @@ class _BenchPageState extends State<BenchPage> {
             ],
           ),
         ),
+        if (widget.decodeProbe != null || Platform.isAndroid) ...[
+          const SizedBox(height: 24),
+          _SectionLabel(l10n.benchDecodeTitle),
+          const SizedBox(height: 8),
+          _Muted(l10n.benchDecodeHint, height: 1.45),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed:
+                      !_decodeRunning && !_running && _audioPath != null
+                      ? _runDecodeCompare
+                      : null,
+                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  label: Text(l10n.benchDecodeRun),
+                ),
+              ),
+              if (_decodeRunning) ...[
+                const SizedBox(width: 12),
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
+          if (_audioName == null) ...[
+            const SizedBox(height: 8),
+            _Muted(l10n.benchDecodeAudioRequired),
+          ],
+          for (final row in _decodeRows) ...[
+            const SizedBox(height: 12),
+            _DecodeRowCard(row: row),
+          ],
+        ],
         const SizedBox(height: 24),
         _SectionLabel(l10n.benchMatrix),
         const SizedBox(height: 8),
@@ -551,6 +676,23 @@ class _Cell {
   const _Cell(this.status, {this.result});
   final _CellStatus status;
   final BenchmarkResult? result;
+}
+
+/// One decoder's median decode time, or the reason it could not run.
+class _DecodeRow {
+  const _DecodeRow({
+    required this.backend,
+    this.elapsed,
+    this.probe,
+    this.runs = 0,
+    this.error,
+  });
+
+  final AudioDecoderBackend? backend;
+  final Duration? elapsed;
+  final DecodeProbe? probe;
+  final int runs;
+  final String? error;
 }
 
 /// Rounded card matching the models/transcribe surfaces.
@@ -781,6 +923,94 @@ class _ResultCard extends StatelessWidget {
     if (value == null) return '—';
     final ms = value.inMilliseconds;
     return ms < 1000 ? '${ms}ms' : '${(ms / 1000).toStringAsFixed(2)}s';
+  }
+}
+
+/// One backend's median decode time, or its failure — never a guess.
+class _DecodeRowCard extends StatelessWidget {
+  const _DecodeRowCard({required this.row});
+
+  final _DecodeRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final label = switch (row.backend) {
+      AudioDecoderBackend.builtin => l10n.benchDecodeBuiltin,
+      AudioDecoderBackend.platform => l10n.benchDecodePlatform,
+      _ => l10n.benchStatusFailed,
+    };
+    final name = row.probe?.decoder?.name;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(label, style: theme.textTheme.titleSmall),
+              ),
+              if (name != null)
+                Text(
+                  name,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (row.error != null)
+            Text(
+              row.error!,
+              style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+            )
+          else ...[
+            _line(context, l10n.benchDecodeElapsed, _ResultCard._ms(row.elapsed)),
+            _line(
+              context,
+              l10n.benchDecodeRealtime,
+              _realtime(row.elapsed, row.probe?.audioDuration),
+            ),
+          ],
+          _line(
+            context,
+            l10n.benchRuns,
+            '${row.runs}/${_BenchPageState._repeats}',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _line(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  /// Higher is faster: seconds of audio decoded per real second.
+  static String _realtime(Duration? elapsed, Duration? audio) {
+    if (elapsed == null || audio == null || elapsed.inMicroseconds <= 0) {
+      return '—';
+    }
+    return '${(audio.inMicroseconds / elapsed.inMicroseconds).toStringAsFixed(1)}×';
   }
 }
 

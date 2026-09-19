@@ -1292,6 +1292,54 @@ abstract class AppLocalizations {
   /// **'Export failed'**
   String get benchExportFailed;
 
+  /// No description provided for @benchDecodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Decode speed'**
+  String get benchDecodeTitle;
+
+  /// No description provided for @benchDecodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Decodes the same file three times with the built-in and the platform decoder and reports the median. No speech model runs.'**
+  String get benchDecodeHint;
+
+  /// No description provided for @benchDecodeRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare decoders'**
+  String get benchDecodeRun;
+
+  /// No description provided for @benchDecodeBuiltin.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in (dr_libs)'**
+  String get benchDecodeBuiltin;
+
+  /// No description provided for @benchDecodePlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform (MediaCodec)'**
+  String get benchDecodePlatform;
+
+  /// No description provided for @benchDecodeElapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Decode'**
+  String get benchDecodeElapsed;
+
+  /// No description provided for @benchDecodeRealtime.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get benchDecodeRealtime;
+
+  /// No description provided for @benchDecodeAudioRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an audio file before comparing.'**
+  String get benchDecodeAudioRequired;
+
   /// No description provided for @benchExitHint.
   ///
   /// In en, this message translates to:

@@ -27,13 +27,15 @@ import kotlin.math.max
  * Dart<->native audio decode boundary (`pocket_asr/audio_decode`).
  *
  * Method `decodeToPcm{path, targetSampleRate, decoderPreference,
- * outputDirectory}` accepts a local file path or a `content://` URI. The file
- * header is sniffed first: mp3/wav/flac are decoded in-process by
- * `libpocketasr_decode` (dr_libs), everything else by MediaExtractor +
- * MediaCodec. Both paths feed the shared SpeexDSP resample + AGC chain, which
- * writes little-endian float32 into a temp file in the job directory. Only
- * metadata crosses the channel; bulk PCM never does. On failure the temp file
- * is deleted and every native resource is released.
+ * decoderBackend, outputDirectory}` accepts a local file path or a
+ * `content://` URI. The file header is sniffed first: mp3/wav/flac are decoded
+ * in-process by `libpocketasr_decode` (dr_libs), everything else by
+ * MediaExtractor + MediaCodec. Both paths feed the shared SpeexDSP resample +
+ * AGC chain, which writes little-endian float32 into a temp file in the job
+ * directory. Only metadata crosses the channel; bulk PCM never does. The reply
+ * also carries `decodeMicros`, the native wall time of the decode, which the
+ * benchmark page compares across `decoderBackend` values. On failure the temp
+ * file is deleted and every native resource is released.
  */
 class AudioDecodeChannel(
     messenger: BinaryMessenger,
@@ -87,8 +89,13 @@ class AudioDecodeChannel(
         val path = call.argument<String>("path")
         val targetRate = call.argument<Int>("targetSampleRate")
         val decoderPreference = call.argument<String>("decoderPreference") ?: "automatic"
+        val backend = call.argument<String>("decoderBackend") ?: "auto"
         if (path.isNullOrBlank() || targetRate == null || targetRate <= 0) {
             result.error("bad_args", "path and positive targetSampleRate are required", null)
+            return
+        }
+        if (backend != "auto" && backend != "builtin" && backend != "platform") {
+            result.error("bad_args", "unknown decoderBackend $backend", null)
             return
         }
         executor.execute {
@@ -100,8 +107,11 @@ class AudioDecodeChannel(
                 if (!directory.isDirectory || !directory.path.startsWith(root.path + File.separator)) {
                     throw IOException("PCM output directory must be inside app storage")
                 }
-                val payload = decodeToTemp(path, targetRate, directory, decoderPreference)
-                mainHandler.post { result.success(payload) }
+                val started = System.nanoTime()
+                val payload =
+                    decodeToTemp(path, targetRate, directory, decoderPreference, backend)
+                val micros = (System.nanoTime() - started) / 1000
+                mainHandler.post { result.success(payload + mapOf("decodeMicros" to micros)) }
             } catch (t: Throwable) {
                 mainHandler.post {
                     result.error("decode_failed", t.message ?: t.javaClass.simpleName, null)
@@ -115,6 +125,7 @@ class AudioDecodeChannel(
         targetRate: Int,
         outputDirectory: File,
         decoderPreference: String,
+        backend: String,
     ): Map<String, Any> {
         val out = File.createTempFile("pocketasr_", ".f32", outputDirectory)
         var pfd: ParcelFileDescriptor? = null
@@ -128,7 +139,11 @@ class AudioDecodeChannel(
 
             // In-process dr_libs decode for the formats it owns.
             val kind = sniff(descriptor.fileDescriptor)
-            if (NativeDecode.available && kind >= 0) {
+            val builtinReady = NativeDecode.available && kind >= 0
+            if (backend == "builtin" && !builtinReady) {
+                throw IOException("Built-in decoder does not support this format")
+            }
+            if (backend != "platform" && builtinReady) {
                 val count = NativeDecode.decodeFd(
                     descriptor.fd, kind, out.absolutePath, targetRate, AGC,
                 )
@@ -140,9 +155,12 @@ class AudioDecodeChannel(
                         builtin = true, hardware = null, softwareOnly = null,
                     )
                 }
-                // Corrupt or unsupported despite the header: fall through to
-                // MediaCodec rather than failing a decodable file.
                 out.delete()
+                // A pinned backend must report its own failure; only auto falls
+                // through to MediaCodec rather than failing a decodable file.
+                if (backend == "builtin") {
+                    throw IOException("Built-in decoder failed on this file")
+                }
             }
 
             extractor = MediaExtractor()

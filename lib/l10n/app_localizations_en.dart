@@ -673,6 +673,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get benchExportFailed => 'Export failed';
 
   @override
+  String get benchDecodeTitle => 'Decode speed';
+
+  @override
+  String get benchDecodeHint =>
+      'Decodes the same file three times with the built-in and the platform decoder and reports the median. No speech model runs.';
+
+  @override
+  String get benchDecodeRun => 'Compare decoders';
+
+  @override
+  String get benchDecodeBuiltin => 'Built-in (dr_libs)';
+
+  @override
+  String get benchDecodePlatform => 'Platform (MediaCodec)';
+
+  @override
+  String get benchDecodeElapsed => 'Decode';
+
+  @override
+  String get benchDecodeRealtime => 'Speed';
+
+  @override
+  String get benchDecodeAudioRequired =>
+      'Choose an audio file before comparing.';
+
+  @override
   String get benchExitHint => 'Tap the title seven times to leave.';
 
   @override

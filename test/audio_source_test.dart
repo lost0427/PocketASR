@@ -201,6 +201,7 @@ void main() {
         'targetSampleRate': 16000,
         'outputDirectory': job.path,
         'decoderPreference': 'automatic',
+        'decoderBackend': 'auto',
       });
       expect(pcm.path, decoded.path);
       expect(pcm.count, 3);
@@ -234,6 +235,102 @@ void main() {
       throwsFormatException,
     );
     expect(decoded.existsSync(), isFalse);
+  });
+
+  test('decodeProbe pins the backend and reports the native time', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_3.f32')
+      ..writeAsBytesSync(writeF32([0.1, 0.2, 0.3]).readAsBytesSync());
+    mock((call) async {
+      calls.add(call);
+      return {
+        'path': decoded.path,
+        'sampleRate': 16000,
+        'count': 3,
+        'decodeMicros': 2500,
+        'decoderName': 'dr_wav',
+        'codecName': 'dr_wav + SpeexDSP AGC',
+        'decoderKind': 'builtin',
+      };
+    });
+
+    final probe = await nativeSource().decodeProbe(
+      'x.wav',
+      job,
+      backend: AudioDecoderBackend.builtin,
+    );
+
+    expect(calls.single.arguments, {
+      'path': 'x.wav',
+      'targetSampleRate': 16000,
+      'outputDirectory': job.path,
+      'decoderBackend': 'builtin',
+    });
+    expect(probe.elapsed, const Duration(microseconds: 2500));
+    expect(probe.frames, 3);
+    expect(probe.audioDuration, const Duration(microseconds: 188));
+    expect(probe.decoder?.name, 'dr_wav');
+    expect(probe.decoder?.builtin, isTrue);
+    expect(decoded.existsSync(), isFalse, reason: 'the probe discards the PCM');
+  });
+
+  test('decodeProbe rejects a reply without native timing and cleans up', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final decoded = File('${job.path}${Platform.pathSeparator}pocketasr_4.f32')
+      ..writeAsBytesSync(writeF32([0.5]).readAsBytesSync());
+    mock(
+      (call) async => {
+        'path': decoded.path,
+        'sampleRate': 16000,
+        'count': 1, // no decodeMicros
+      },
+    );
+
+    await expectLater(
+      nativeSource().decodeProbe(
+        'x.wav',
+        job,
+        backend: AudioDecoderBackend.platform,
+      ),
+      throwsFormatException,
+    );
+    expect(decoded.existsSync(), isFalse);
+  });
+
+  test('decodeProbe rejects PCM outside the job directory', () async {
+    final job = Directory('${dir.path}${Platform.pathSeparator}job')
+      ..createSync();
+    final foreign = writeF32([0.5], name: 'foreign.f32');
+    mock(
+      (call) async => {
+        'path': foreign.path,
+        'sampleRate': 16000,
+        'count': 1,
+        'decodeMicros': 100,
+      },
+    );
+
+    await expectLater(
+      nativeSource().decodeProbe(
+        'x.wav',
+        job,
+        backend: AudioDecoderBackend.builtin,
+      ),
+      throwsFormatException,
+    );
+    expect(foreign.existsSync(), isTrue, reason: 'not ours to delete');
+  });
+
+  test('decodeProbe needs the native decoder', () async {
+    await expectLater(
+      FileAudioSource(
+        channel: _channel,
+        usesNativeDecoder: () => false,
+      ).decodeProbe('x.wav', dir, backend: AudioDecoderBackend.builtin),
+      throwsUnsupportedError,
+    );
   });
 
   test('decodeToDisk rejects PCM outside the job directory', () async {
