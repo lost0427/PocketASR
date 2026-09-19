@@ -11,6 +11,16 @@ and under which licenses.
 | `CrispAsrEngine` | [CrispStrobe/CrispASR](https://github.com/CrispStrobe/CrispASR) | `crispasr` | 0.8.32 | MIT | `libcrispasr.so` / `libcrispasr.dylib` / `crispasr.dll` |
 | `CrispEmbedder` | [CrispStrobe/CrispEmbed](https://github.com/CrispStrobe/CrispEmbed) | `crispembed` | 0.16.1 | MIT | `libcrispembed.so` / `libcrispembed.dylib` / `crispembed.dll` |
 | `SherpaEngine` | [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | `sherpa_onnx` | 1.13.8 | Apache-2.0 | bundled by the plugin (`sherpa-onnx-c-api` + `onnxruntime`) |
+| Android decode | [mackron/dr_libs](https://github.com/mackron/dr_libs) (dr_mp3/dr_wav/dr_flac) | (JNI, no Dart package) | commit `dfe8377` | public domain / MIT-0 | `libpocketasr_decode.so` |
+| Android decode | [xiph/speexdsp](https://github.com/xiph/speexdsp) (resampler + AGC) | (JNI) | 1.2.1 | BSD-3-Clause | same `libpocketasr_decode.so` |
+
+`libpocketasr_decode.so` is PocketASR's own C bridge
+(`native/decode/`). It decodes mp3/wav/flac in-process with dr_libs and runs
+every path — including MediaCodec-decoded AAC/M4A — through one SpeexDSP
+resampler + AGC chain, writing mono 16 kHz float32. SpeexDSP is built
+**floating point**: its own source compiles the AGC out under `FIXED_POINT`
+("doesn't work yet with fixed-point"), so a fixed-point AGC is not available
+upstream.
 
 ## Current state
 
@@ -24,6 +34,9 @@ and under which licenses.
   (`sherpa_onnx_android_arm64`, …). `SherpaEngine` becomes available once the
   app is built for a platform the plugin covers; in a bare `flutter test` it may
   or may not resolve the library, so no test depends on it.
+- **Android decode**: the same script builds `libpocketasr_decode.so` from the
+  pinned dr_libs/SpeexDSP commits. When it is missing, `AudioDecodeChannel`
+  falls back to MediaCodec (no AGC chain); desktop stays on FFmpeg.
 
 ## Android (arm64-v8a): built from source, 16KB-aligned
 
@@ -107,8 +120,8 @@ and hardware AAC/MP3 via the Android Media NDK are unaffected).
    `PT_LOAD` `p_align >= 16384` and `p_offset ≡ p_vaddr (mod 16384)`; full
    `DT_NEEDED` closure against "bundled or known Android system library";
    required libraries and required exported symbols
-   (`whisper_full`, `crispembed_init`). Covers third-party `.so` in the APK
-   too (flutter, sherpa-onnx).
+   (`whisper_full`, `crispembed_init`, `pocketasr_chain_begin`). Covers
+   third-party `.so` in the APK too (flutter, sherpa-onnx).
 2. `zipalign -c -P 16 4 <apk>` from the newest installed build-tools.
 3. A `.so` entry in the APK must be STORED (uncompressed) and 16KB-aligned
    within the archive (the offset padded by `zipalign -P 16`, so the loader
