@@ -65,6 +65,13 @@ CRISPEMBED_URL="https://github.com/CrispStrobe/CrispEmbed"
 CRISPEMBED_COMMIT="e6411e48bfd2572cc29a7c04eccee8a8153bef2e" # v0.16.1
 CRISPEMBED_GGML="0714117daca2471b00e09554c7eaa74a06b0b2c5"   # pinned gitlink (CrispStrobe/ggml)
 
+# PocketASR decode chain (native/decode): dr_libs + SpeexDSP. dr_libs master
+# carries dr_mp3/dr_wav/dr_flac; SpeexDSP 1.2.1 is the last release tag.
+DRLIBS_URL="https://github.com/mackron/dr_libs"
+DRLIBS_COMMIT="dfe8377631000664666519fdb83da193fd8037f4"
+SPEEXDSP_URL="https://github.com/xiph/speexdsp"
+SPEEXDSP_COMMIT="e762196693c487249d7061081915c8eaf7511f4f" # SpeexDSP-1.2.1
+
 # NDK r28+ defaults to 16KB alignment; explicit flags below preserve the
 # requirement independently of upstream defaults.
 NDK_VERSION="${NDK_VERSION:-30.0.16248370}" # r30 LTS
@@ -188,10 +195,19 @@ cmake -S "$WORK/crispembed" -B "$WORK/crispembed-build" "${common_cmake[@]}" \
   -DCMAKE_CXX_FLAGS="-fvisibility=hidden -fvisibility-inlines-hidden"
 cmake --build "$WORK/crispembed-build" --target crispembed-shared
 
+# --- PocketASR decode chain: dr_libs + SpeexDSP -> libpocketasr_decode.so ---
+clone_at "$DRLIBS_URL" "$DRLIBS_COMMIT" "$WORK/dr_libs"
+clone_at "$SPEEXDSP_URL" "$SPEEXDSP_COMMIT" "$WORK/speexdsp"
+cmake -S "$ROOT/native/decode" -B "$WORK/decode-build" "${common_cmake[@]}" \
+  -DDRLIBS_DIR="$WORK/dr_libs" \
+  -DSPEEXDSP_DIR="$WORK/speexdsp"
+cmake --build "$WORK/decode-build" --target pocketasr_decode
+
 # --- stage (cp -L resolves CMake's unversioned .so symlinks to real files) ---
 mkdir -p "$OUT"
 cp -Lf "$(find "$WORK/crispasr-build/src" -maxdepth 1 -name 'libcrispasr.so*' -type f | sort | tail -1)" "$OUT/libcrispasr.so"
 cp -Lf "$(find "$WORK/crispembed-build" -maxdepth 1 -name 'libcrispembed.so*' -type f | sort | tail -1)" "$OUT/libcrispembed.so"
+cp -Lf "$WORK/decode-build/libpocketasr_decode.so" "$OUT/libpocketasr_decode.so"
 
 # --- NDK runtime deps are NOT bundled by AGP for jniLibs inputs: stage
 # whatever the built libraries actually request (libc++_shared.so / libomp.so
@@ -218,6 +234,7 @@ fi
 
 log "pre-check (the authoritative run happens against the built APK):"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \
-  --require libcrispasr.so --require libcrispembed.so \
+  --require libcrispasr.so --require libcrispembed.so --require libpocketasr_decode.so \
   --require-symbol libcrispasr.so:whisper_full \
-  --require-symbol libcrispembed.so:crispembed_init
+  --require-symbol libcrispembed.so:crispembed_init \
+  --require-symbol libpocketasr_decode.so:pocketasr_chain_begin

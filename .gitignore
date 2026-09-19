@@ -50,9 +50,13 @@ app.*.map.json
 .slim/deepwork/
 
 # Native CrispASR/CrispEmbed binaries are fetched by scripts/ci, never committed.
-# native/ is ignored except its README, which documents versions/licenses.
+# native/ is ignored except its README, which documents versions/licenses, and
+# the first-party decode source tree (third_party/ is cloned by scripts/ci).
 native/*
 !native/README.md
+!native/FFMPEG-NOTICE.txt
+!native/decode/
+native/decode/third_party/
 *.so
 
 # ccache for the native Android build (CI caches it via actions/cache).

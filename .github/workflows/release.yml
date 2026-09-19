@@ -84,7 +84,7 @@ jobs:
       - name: Check native libs
         id: native-check
         run: |
-          if [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so ]; then
+          if [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libpocketasr_decode.so ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
