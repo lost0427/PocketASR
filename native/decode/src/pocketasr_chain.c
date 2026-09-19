@@ -7,6 +7,7 @@
  */
 #include "pocketasr_chain.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,14 @@ void speex_echo_get_residual(SpeexEchoState *st, int32_t *Yout, int len) {
 #define POCKETASR_CHUNK 4096
 #define POCKETASR_OUT_FLOATS 8192
 #define POCKETASR_AGC_MS 20
+
+/*
+ * Init-stage failures return distinct codes so a JNI caller can report which
+ * step failed instead of a bare "unavailable". fopen folds in errno (low 7
+ * bits) so a permission / missing-directory cause survives too.
+ */
+#define POCKETASR_ERR_STAGE(s) (-(200 + (s)))
+#define POCKETASR_ERR_FOPEN (-(300 + (errno & 0x7f)))
 
 typedef struct {
   FILE *out;
@@ -183,8 +192,9 @@ intptr_t pocketasr_chain_begin(const char *out_path, int in_rate, int channels,
   }
 
   PocketAsrChain *c = (PocketAsrChain *)calloc(1, sizeof(PocketAsrChain));
-  if (!c) return POCKETASR_ERR;
+  if (!c) return POCKETASR_ERR_STAGE(1);
 
+  int code = POCKETASR_ERR;
   c->in_rate = in_rate;
   c->channels = channels;
   c->target_rate = target_rate;
@@ -192,30 +202,45 @@ intptr_t pocketasr_chain_begin(const char *out_path, int in_rate, int channels,
   if (c->frame_size < 1) c->frame_size = 1;
 
   c->out = fopen(out_path, "wb");
-  if (!c->out) goto fail;
+  if (!c->out) {
+    code = POCKETASR_ERR_FOPEN;
+    goto fail;
+  }
 
   c->frame = (int16_t *)calloc((size_t)c->frame_size, sizeof(int16_t));
   c->mono = (int16_t *)malloc((size_t)POCKETASR_CHUNK * sizeof(int16_t));
   c->outbuf = (float *)malloc(POCKETASR_OUT_FLOATS * sizeof(float));
-  if (!c->frame || !c->mono || !c->outbuf) goto fail;
+  if (!c->frame || !c->mono || !c->outbuf) {
+    code = POCKETASR_ERR_STAGE(2);
+    goto fail;
+  }
 
   if (in_rate != target_rate) {
     int err = 0;
     c->rs = speex_resampler_init(1, (spx_uint32_t)in_rate,
                                  (spx_uint32_t)target_rate,
                                  SPEEX_RESAMPLER_QUALITY_DESKTOP, &err);
-    if (!c->rs || err != 0) goto fail;
+    if (!c->rs || err != 0) {
+      code = POCKETASR_ERR_STAGE(3);
+      goto fail;
+    }
     /* Worst case one output frame per input frame, plus a small margin. */
     int ratio = (target_rate + in_rate - 1) / in_rate;
     if (ratio < 1) ratio = 1;
     c->rs_out_cap = POCKETASR_CHUNK * ratio + 64;
     c->rs_out = (int16_t *)malloc((size_t)c->rs_out_cap * sizeof(int16_t));
-    if (!c->rs_out) goto fail;
+    if (!c->rs_out) {
+      code = POCKETASR_ERR_STAGE(4);
+      goto fail;
+    }
   }
 
   if (cfg->enabled) {
     c->agc = speex_preprocess_state_init(c->frame_size, target_rate);
-    if (!c->agc) goto fail;
+    if (!c->agc) {
+      code = POCKETASR_ERR_STAGE(5);
+      goto fail;
+    }
     int v = cfg->enabled;
     speex_preprocess_ctl(c->agc, SPEEX_PREPROCESS_SET_AGC, &v);
     v = cfg->target;
@@ -244,7 +269,7 @@ fail:
   free(c->rs_out);
   free(c->outbuf);
   free(c);
-  return POCKETASR_ERR;
+  return code;
 }
 
 int pocketasr_chain_feed(intptr_t handle, const void *data, int bytes, int fmt) {

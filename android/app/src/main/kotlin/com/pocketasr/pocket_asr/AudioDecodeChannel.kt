@@ -53,6 +53,12 @@ class AudioDecodeChannel(
         // PocketAsrAgcConfig: target, max gain dB, rise dB/s, fall dB/s,
         // speech-gated, enabled.
         private val AGC = intArrayOf(8000, 24, 12, 40, 1, 1)
+
+        // A chain handle is an opaque pointer: arm64 tagged pointers set bit 63,
+        // so a live handle reads as a large negative Long. Only 0 and the small
+        // negative init-failure codes are invalid (POCKETASR_HANDLE_OK in C).
+        private fun isChainHandle(value: Long): Boolean =
+            value != 0L && (value > 0L || value < -4096L)
     }
 
     private val channel = MethodChannel(messenger, NAME)
@@ -150,8 +156,14 @@ class AudioDecodeChannel(
             if (inRate <= 0) throw IOException("Invalid source sample rate $inRate")
 
             codec = openDecoder(mime, trackFormat, decoderPreference)
-            chain = NativeDecode.chainBegin(out.absolutePath, inRate, channels, targetRate, AGC)
-            if (chain <= 0) throw IOException("Audio decode chain unavailable")
+            val handle = NativeDecode.chainBegin(out.absolutePath, inRate, channels, targetRate, AGC)
+            if (!isChainHandle(handle)) {
+                throw IOException(
+                    "Audio decode chain unavailable (code=$handle, mime=$mime, " +
+                        "inRate=$inRate, channels=$channels, lib=${NativeDecode.available})",
+                )
+            }
+            chain = handle
 
             var pcmEncoding = sourcePcmEncoding(mime, trackFormat)
             val info = MediaCodec.BufferInfo()
@@ -225,7 +237,7 @@ class AudioDecodeChannel(
             )
         } finally {
             if (!ok) out.delete()
-            if (chain > 0) NativeDecode.chainAbort(chain)
+            if (chain != 0L) NativeDecode.chainAbort(chain)
             runCatching { codec?.stop() }
             runCatching { codec?.release() }
             runCatching { extractor?.release() }

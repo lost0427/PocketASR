@@ -98,8 +98,10 @@ jobs:
           APK=build/app/outputs/flutter-apk/app-release.apk
           python3 scripts/ci/verify_apk_native.py "$APK" \
             --require libcrispasr.so --require libcrispembed.so \
+            --require libpocketasr_decode.so \
             --require-symbol libcrispasr.so:whisper_full \
-            --require-symbol libcrispembed.so:crispembed_init
+            --require-symbol libcrispembed.so:crispembed_init \
+            --require-symbol libpocketasr_decode.so:pocketasr_chain_begin
           ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
           "$ZIPALIGN" -c -P 16 4 "$APK"
       - uses: actions/upload-artifact@v4

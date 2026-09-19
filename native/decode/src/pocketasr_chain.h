@@ -19,6 +19,15 @@ enum {
   POCKETASR_ERR_ARG = -3,
 };
 
+/*
+ * A chain handle is an opaque pointer, not a signed number. Android's arm64
+ * allocator (tagged pointers / MTE) returns addresses with bit 63 set, so a
+ * live handle reads as a large negative value and a bare `handle > 0` test
+ * rejects it. Only 0 and the small negative init-failure codes are invalid.
+ */
+#define POCKETASR_HANDLE_OK(h) \
+  ((h) != 0 && ((intptr_t)(h) > 0 || (intptr_t)(h) < -(intptr_t)4096))
+
 /* Interleaved input sample formats. */
 enum {
   POCKETASR_FMT_S16 = 0,
@@ -40,8 +49,8 @@ typedef struct {
 /* Fall back to defaults when cfg is NULL. */
 void pocketasr_agc_defaults(PocketAsrAgcConfig *cfg);
 
-/* Begin a chain writing little-endian float32 to out_path. Returns a handle > 0
- * or a negative POCKETASR_ERR_*. */
+/* Begin a chain writing little-endian float32 to out_path. Returns a handle to
+ * test with POCKETASR_HANDLE_OK, or 0 / a negative POCKETASR_ERR_*. */
 intptr_t pocketasr_chain_begin(const char *out_path, int in_rate, int channels,
                            int target_rate, const PocketAsrAgcConfig *cfg);
 

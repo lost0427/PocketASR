@@ -94,7 +94,7 @@ static long run_chain(const char *out, int rate, int channels, int target_rate,
                       read_frames_fn read_frames) {
   if (rate <= 0 || channels <= 0) return POCKETASR_ERR;
   intptr_t h = pocketasr_chain_begin(out, rate, channels, target_rate, cfg);
-  if (h <= 0) return POCKETASR_ERR;
+  if (!POCKETASR_HANDLE_OK(h)) return POCKETASR_ERR;
 
   const size_t cap = 4096;
   int16_t *buf = (int16_t *)malloc(cap * (size_t)channels * sizeof(int16_t));
