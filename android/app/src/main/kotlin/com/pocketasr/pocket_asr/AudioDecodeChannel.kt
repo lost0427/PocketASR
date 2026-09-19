@@ -128,7 +128,11 @@ class AudioDecodeChannel(
                 )
                 if (count > 0) {
                     ok = true
-                    return payload(out, targetRate, count, nativeDecoderName(kind), false, true)
+                    val lib = nativeDecoderName(kind)
+                    return payload(
+                        out, targetRate, count, lib, "$lib + SpeexDSP AGC",
+                        builtin = true, hardware = null, softwareOnly = null,
+                    )
                 }
                 // Corrupt or unsupported despite the header: fall through to
                 // MediaCodec rather than failing a decodable file.
@@ -210,13 +214,14 @@ class AudioDecodeChannel(
             ok = true
             val info2 = codec.codecInfo
             return payload(
-                out, targetRate, count, "${info2.name}+speexdsp",
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                out, targetRate, count, "MediaCodec",
+                "${info2.name} + SpeexDSP AGC", builtin = false,
+                hardware = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     info2.isHardwareAccelerated
-                } else false,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                } else null,
+                softwareOnly = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     info2.isSoftwareOnly
-                } else true,
+                } else null,
             )
         } finally {
             if (!ok) out.delete()
@@ -283,9 +288,9 @@ class AudioDecodeChannel(
     }
 
     private fun nativeDecoderName(kind: Int): String = when (kind) {
-        NativeDecode.KIND_MP3 -> "dr_mp3+speexdsp"
-        NativeDecode.KIND_WAV -> "dr_wav+speexdsp"
-        else -> "dr_flac+speexdsp"
+        NativeDecode.KIND_MP3 -> "dr_mp3"
+        NativeDecode.KIND_WAV -> "dr_wav"
+        else -> "dr_flac"
     }
 
     private fun payload(
@@ -293,19 +298,21 @@ class AudioDecodeChannel(
         rate: Int,
         count: Long,
         name: String,
-        hardware: Boolean,
-        softwareOnly: Boolean,
+        codecName: String,
+        builtin: Boolean,
+        hardware: Boolean?,
+        softwareOnly: Boolean?,
     ): Map<String, Any> {
         val result = mutableMapOf<String, Any>(
             "path" to out.absolutePath,
             "sampleRate" to rate,
             "count" to count,
             "decoderName" to name,
+            "codecName" to codecName,
+            "decoderKind" to if (builtin) "builtin" else "mediacodec",
         )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            result["hardwareAccelerated"] = hardware
-            result["softwareOnly"] = softwareOnly
-        }
+        if (hardware != null) result["hardwareAccelerated"] = hardware
+        if (softwareOnly != null) result["softwareOnly"] = softwareOnly
         return result
     }
 

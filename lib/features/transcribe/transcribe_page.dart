@@ -1205,24 +1205,27 @@ class _MetricsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final unknown = l10n.metricUnavailable;
-    final metrics = <(String, IconData, String)>[
-      (l10n.metricCharsPerSec, Icons.speed, _rate(charsPerSec) ?? unknown),
+    final metrics = <(String, IconData, String, String?)>[
+      (l10n.metricCharsPerSec, Icons.speed, _rate(charsPerSec) ?? unknown, null),
       (
         l10n.metricRtf,
         Icons.timer_outlined,
         rtf?.toStringAsFixed(2) ?? unknown,
+        null,
       ),
-      (l10n.metricElapsed, Icons.schedule, _elapsed(elapsed) ?? unknown),
+      (l10n.metricElapsed, Icons.schedule, _elapsed(elapsed) ?? unknown, null),
       (
         l10n.metricCpu,
         Icons.memory,
         cpuPercent == null ? unknown : '${cpuPercent!.toStringAsFixed(0)}%',
+        null,
       ),
-      (l10n.metricMemory, Icons.storage, _memory(memoryBytes) ?? unknown),
+      (l10n.metricMemory, Icons.storage, _memory(memoryBytes) ?? unknown, null),
       (
         l10n.metricDecoder,
         Icons.audio_file_outlined,
         _decoderMode(decoderInfo, l10n),
+        _decoderDetail(decoderInfo, l10n),
       ),
     ];
 
@@ -1234,8 +1237,13 @@ class _MetricsGrid extends StatelessWidget {
       mainAxisSpacing: 12,
       childAspectRatio: 1.9,
       children: [
-        for (final (label, icon, value) in metrics)
-          _MetricTile(label: label, icon: icon, value: value),
+        for (final (label, icon, value, tooltip) in metrics)
+          _MetricTile(
+            label: label,
+            icon: icon,
+            value: value,
+            tooltip: tooltip,
+          ),
       ],
     );
   }
@@ -1243,24 +1251,29 @@ class _MetricsGrid extends StatelessWidget {
 
 String _decoderMode(AudioDecoderInfo? info, AppLocalizations l10n) {
   if (info == null) return l10n.metricUnavailable;
-  final mode = switch (info.isHardware) {
+  if (info.builtin) return info.name;
+  return switch (info.isHardware) {
     true => l10n.decoderHardware,
     false => l10n.decoderSoftware,
     null => l10n.decoderUnknown,
   };
-  return '${info.name}\n$mode';
 }
+
+String _decoderDetail(AudioDecoderInfo? info, AppLocalizations l10n) =>
+    info?.codecName ?? _decoderMode(info, l10n);
 
 class _MetricTile extends StatelessWidget {
   const _MetricTile({
     required this.label,
     required this.icon,
     required this.value,
+    this.tooltip,
   });
 
   final String label;
   final IconData icon;
   final String value;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -1289,7 +1302,7 @@ class _MetricTile extends StatelessWidget {
             ],
           ),
           Tooltip(
-            message: value,
+            message: tooltip ?? value,
             child: Text(
               value,
               maxLines: 2,

@@ -16,9 +16,22 @@ void checkAudioCancellation(bool Function()? isCancelled) {
 
 /// Decoder selected for the current audio file.
 class AudioDecoderInfo {
-  const AudioDecoderInfo({required this.name, this.isHardware});
+  const AudioDecoderInfo({
+    required this.name,
+    this.codecName,
+    this.builtin = false,
+    this.isHardware,
+  });
 
+  /// Short label shown on the metrics tile (`dr_mp3`, `MediaCodec`, `FFmpeg`).
   final String name;
+
+  /// Full descriptor for the tooltip, including the canonical codec name.
+  final String? codecName;
+
+  /// Built into the app (dr_libs / FFmpeg) rather than a platform codec.
+  final bool builtin;
+
   final bool? isHardware;
 
   static AudioDecoderInfo? fromNativeResult(Object? value) {
@@ -27,8 +40,11 @@ class AudioDecoderInfo {
     if (name is! String || name.isEmpty) return null;
     final hardware = value['hardwareAccelerated'];
     final software = value['softwareOnly'];
+    final codec = value['codecName'];
     return AudioDecoderInfo(
       name: name,
+      codecName: codec is String && codec.isNotEmpty ? codec : null,
+      builtin: value['decoderKind'] == 'builtin',
       isHardware: hardware == true ? true : software == true ? false : null,
     );
   }

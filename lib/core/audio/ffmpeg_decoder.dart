@@ -77,8 +77,9 @@ Future<PcmFile> decodeWithFfmpeg(
       destination,
       bytes ~/ 4,
       decoderInfo: const AudioDecoderInfo(
-        name: 'FFmpeg+agc',
-        isHardware: false,
+        name: 'FFmpeg',
+        codecName: 'FFmpeg + dynaudnorm',
+        builtin: true,
       ),
     );
   } finally {

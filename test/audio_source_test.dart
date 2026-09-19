@@ -186,7 +186,9 @@ void main() {
           'path': decoded.path,
           'sampleRate': 16000,
           'count': 3,
-          'decoderName': 'c2.qti.mp3.decoder',
+          'decoderName': 'MediaCodec',
+          'codecName': 'c2.qti.mp3.decoder + SpeexDSP AGC',
+          'decoderKind': 'mediacodec',
           'hardwareAccelerated': true,
           'softwareOnly': false,
         };
@@ -203,7 +205,12 @@ void main() {
       expect(pcm.path, decoded.path);
       expect(pcm.count, 3);
       expect(pcm.sampleRate, 16000);
-      expect(pcm.decoderInfo?.name, 'c2.qti.mp3.decoder');
+      expect(pcm.decoderInfo?.name, 'MediaCodec');
+      expect(
+        pcm.decoderInfo?.codecName,
+        'c2.qti.mp3.decoder + SpeexDSP AGC',
+      );
+      expect(pcm.decoderInfo?.builtin, isFalse);
       expect(pcm.decoderInfo?.isHardware, isTrue);
       expect(decoded.existsSync(), isTrue, reason: 'job file is retained');
     },

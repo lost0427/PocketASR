@@ -107,7 +107,8 @@ class _ScriptedService extends TranscriptionService {
       model: model,
       backend: backend,
       decoderInfo: const AudioDecoderInfo(
-        name: 'c2.qti.aac.decoder',
+        name: 'MediaCodec',
+        codecName: 'c2.qti.aac.decoder + SpeexDSP AGC',
         isHardware: true,
       ),
     );
@@ -327,7 +328,7 @@ void main() {
     expect(find.text('2.5'), findsOneWidget); // chars/s
     expect(find.text('4.00'), findsOneWidget); // RTF
     expect(find.text('2.0s'), findsOneWidget); // elapsed
-    expect(find.text('c2.qti.aac.decoder\nHardware'), findsOneWidget);
+    expect(find.text('Hardware'), findsOneWidget);
 
     expect(find.text('hello'), findsOneWidget); // final transcript
 
