@@ -91,10 +91,6 @@ class AppState extends ChangeNotifier {
     _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
     _engineId = database.getSetting('engine_id') ?? _engineId;
     _restoreSelection();
-    _loudnessEnabled = database.getSetting('loudness_enabled') != 'false';
-    _loudnessTargetLufs =
-        double.tryParse(database.getSetting('loudness_target') ?? '') ??
-        _loudnessTargetLufs;
     _audioDecoderPreference = AudioDecoderPreference.values.firstWhere(
       (value) => value.name == database.getSetting('audio_decoder_preference'),
       orElse: () => AudioDecoderPreference.automatic,
@@ -268,26 +264,6 @@ class AppState extends ChangeNotifier {
 
   /// Cores the device reports; the thread slider's upper bound.
   int get maxThreads => Platform.numberOfProcessors;
-
-  /// Whether loudness normalization runs before transcription.
-  bool _loudnessEnabled = true;
-  bool get loudnessEnabled => _loudnessEnabled;
-  set loudnessEnabled(bool value) {
-    if (value == _loudnessEnabled) return;
-    _loudnessEnabled = value;
-    _save('loudness_enabled', value.toString());
-    notifyListeners();
-  }
-
-  /// Target integrated loudness in LUFS for loudness normalization.
-  double _loudnessTargetLufs = -16.0;
-  double get loudnessTargetLufs => _loudnessTargetLufs;
-  set loudnessTargetLufs(double value) {
-    if (value == _loudnessTargetLufs) return;
-    _loudnessTargetLufs = value;
-    _save('loudness_target', value.toString());
-    notifyListeners();
-  }
 
   AudioDecoderPreference _audioDecoderPreference =
       AudioDecoderPreference.automatic;

@@ -117,7 +117,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeStageDecoding => 'Decoding audio';
 
   @override
-  String get transcribeStageAnalyzing => 'Analyzing loudness';
+  String get transcribeStageAnalyzing => 'Preparing audio';
 
   @override
   String get transcribeStageSegmenting => 'Segmenting audio';
@@ -515,22 +515,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsDecoderPreferenceHint =>
       'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.';
-
-  @override
-  String get settingsAudio => 'Audio';
-
-  @override
-  String get settingsLoudness => 'Loudness normalization';
-
-  @override
-  String get settingsLoudnessHint =>
-      'Lifts quiet recordings to the target level before transcription. This is loudness, not peak.';
-
-  @override
-  String get settingsLoudnessTarget => 'Target loudness';
-
-  @override
-  String get settingsLoudnessUnit => 'LUFS';
 
   @override
   String get settingsChunking => 'Chunking';

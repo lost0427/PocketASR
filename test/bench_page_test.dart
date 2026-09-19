@@ -77,8 +77,6 @@ class _RoutingService extends TranscriptionService {
       engine: engine.id,
       model: model,
       backend: backend,
-      originalLufs: -16,
-      gainDb: 0,
     );
   }
 }
@@ -112,8 +110,6 @@ class _ScriptedService extends TranscriptionService {
       engine: 'fake',
       model: model,
       backend: backend,
-      originalLufs: -16,
-      gainDb: 0,
     );
   }
 }

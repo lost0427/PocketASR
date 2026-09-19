@@ -114,7 +114,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeStageDecoding => '正在解码音频';
 
   @override
-  String get transcribeStageAnalyzing => '正在分析响度';
+  String get transcribeStageAnalyzing => '准备音频';
 
   @override
   String get transcribeStageSegmenting => '正在切分音频';
@@ -480,21 +480,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get settingsDecoderPreferenceHint =>
       'Android 会在支持时尝试所选类型，失败后回退到系统解码器。实际使用的 codec 会在解码后显示。';
-
-  @override
-  String get settingsAudio => '音频';
-
-  @override
-  String get settingsLoudness => '响度归一';
-
-  @override
-  String get settingsLoudnessHint => '转录前把偏小的声音抬到目标响度。这是响度，不是峰值。';
-
-  @override
-  String get settingsLoudnessTarget => '目标响度';
-
-  @override
-  String get settingsLoudnessUnit => 'LUFS';
 
   @override
   String get settingsChunking => '切割';

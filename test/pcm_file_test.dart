@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_buffer.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
-import 'package:pocket_asr/core/audio/loudness.dart';
 import 'package:pocket_asr/core/audio/pcm_file.dart';
 import 'package:pocket_asr/core/audio/wav.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
@@ -87,31 +86,6 @@ void main() {
         expect(
           disk.map((c) => (c.start, c.end)),
           memory.map((c) => (c.start, c.end)),
-        );
-      }
-    },
-  );
-
-  test(
-    'whole-file loudness agrees with memory measurement across boundaries',
-    () async {
-      for (final count in [1700, 48000]) {
-        final audio = AudioBuffer(
-          samples: Float32List.fromList(
-            List.generate(count, (i) => 0.08 * sin(2 * pi * 997 * i / 16000)),
-          ),
-          sampleRate: 16000,
-        );
-        final pcm = await PcmFile.fromBuffer(audio, '${dir.path}/audio.f32');
-        const normalizer = LoudnessNormalizer();
-        final measured = await normalizer.measureFile(pcm);
-        expect(
-          measured.lufs,
-          closeTo(normalizer.integratedLufs(audio.samples), 0.01),
-        );
-        expect(
-          measured.gainDb,
-          closeTo(normalizer.gainDbFor(audio.samples), 0.01),
         );
       }
     },

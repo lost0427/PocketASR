@@ -113,8 +113,6 @@ class _RecordingService extends TranscriptionService {
       engine: 'fake',
       model: model,
       backend: backend,
-      originalLufs: -16,
-      gainDb: 0,
     );
   }
 

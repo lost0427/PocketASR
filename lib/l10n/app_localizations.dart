@@ -299,7 +299,7 @@ abstract class AppLocalizations {
   /// No description provided for @transcribeStageAnalyzing.
   ///
   /// In en, this message translates to:
-  /// **'Analyzing loudness'**
+  /// **'Preparing audio'**
   String get transcribeStageAnalyzing;
 
   /// No description provided for @transcribeStageSegmenting.
@@ -1009,36 +1009,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.'**
   String get settingsDecoderPreferenceHint;
-
-  /// No description provided for @settingsAudio.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio'**
-  String get settingsAudio;
-
-  /// No description provided for @settingsLoudness.
-  ///
-  /// In en, this message translates to:
-  /// **'Loudness normalization'**
-  String get settingsLoudness;
-
-  /// No description provided for @settingsLoudnessHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Lifts quiet recordings to the target level before transcription. This is loudness, not peak.'**
-  String get settingsLoudnessHint;
-
-  /// No description provided for @settingsLoudnessTarget.
-  ///
-  /// In en, this message translates to:
-  /// **'Target loudness'**
-  String get settingsLoudnessTarget;
-
-  /// No description provided for @settingsLoudnessUnit.
-  ///
-  /// In en, this message translates to:
-  /// **'LUFS'**
-  String get settingsLoudnessUnit;
 
   /// No description provided for @settingsChunking.
   ///

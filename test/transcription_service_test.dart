@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_buffer.dart';
-import 'package:pocket_asr/core/audio/audio_preprocessor.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/core/audio/wav.dart';
@@ -173,7 +172,6 @@ TranscriptionService _service(AsrEngine engine, [AudioBuffer? audio]) =>
     TranscriptionService(
       engine: engine,
       source: audio == null ? const _FakeSource() : _BufferSource(audio),
-      preprocessor: const AudioPreprocessor(enabled: false),
     );
 
 AudioBuffer _stereoLevels() {
@@ -632,7 +630,6 @@ void main() {
       engine: asr,
       vadEngine: vad,
       source: _BufferSource(audio),
-      preprocessor: const AudioPreprocessor(enabled: false),
     );
 
     test(
@@ -889,7 +886,6 @@ void main() {
         engine: asr,
         vadEngine: vad,
         source: _BufferSource(audio),
-        preprocessor: const AudioPreprocessor(enabled: false),
       ).transcribe(
         audioPath: 'ignored.wav',
         model: const EngineModelSpec(path: 'model.gguf'),

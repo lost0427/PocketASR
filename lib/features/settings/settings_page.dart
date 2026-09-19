@@ -8,16 +8,13 @@ import '../bench/seven_tap.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
 
-/// Target loudness values in LUFS (plan Phase 3).
-const List<double> settingsLoudnessTargets = <double>[-16, -14, -23];
-
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
 const String settingsAppVersion = '1.0.13';
 
 const String _systemLanguage = 'system';
 
 /// Settings tab: appearance, language, the active downloaded model, CPU thread
-/// count and loudness normalization.
+/// count and the decoder preference.
 ///
 /// Every control writes to the in-memory [AppState] — nothing is persisted yet
 /// (plan Phase 5 adds the settings table). Backend has no picker on purpose:
@@ -96,10 +93,6 @@ class SettingsPage extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsAudio),
-        const SizedBox(height: 12),
-        _Card(child: _LoudnessControl(state: state)),
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsChunking),
         const SizedBox(height: 12),
@@ -350,71 +343,6 @@ class _DecoderPreferenceControl extends StatelessWidget {
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
             height: 1.45,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LoudnessControl extends StatelessWidget {
-  const _LoudnessControl({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.graphic_eq, size: 18, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                l10n.settingsLoudness,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            Switch(
-              value: state.loudnessEnabled,
-              onChanged: (value) => state.loudnessEnabled = value,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          l10n.settingsLoudnessHint,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-            height: 1.45,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _ControlLabel(l10n.settingsLoudnessTarget),
-        const SizedBox(height: 10),
-        SegmentedButton<double>(
-          expandedInsets: EdgeInsets.zero,
-          showSelectedIcon: false,
-          segments: [
-            for (final lufs in settingsLoudnessTargets)
-              ButtonSegment(value: lufs, label: Text('${lufs.toInt()}')),
-          ],
-          selected: {state.loudnessTargetLufs},
-          onSelectionChanged: state.loudnessEnabled
-              ? (selection) => state.loudnessTargetLufs = selection.first
-              : null,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          l10n.settingsLoudnessUnit,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
           ),
         ),
       ],

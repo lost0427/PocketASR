@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import '../../core/audio/audio_preprocessor.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/audio/chunk_planner.dart';
 import '../../core/audio/pcm_file.dart';
-import '../../core/audio/loudness.dart';
 import '../../engine/asr_engine.dart';
 import 'transcription_stage.dart';
 
@@ -19,8 +17,6 @@ class TranscriptionJobResult {
     required this.engine,
     required this.model,
     required this.backend,
-    required this.originalLufs,
-    required this.gainDb,
     this.decoderInfo,
   });
 
@@ -30,8 +26,6 @@ class TranscriptionJobResult {
   final String engine;
   final EngineModelSpec model;
   final Backend backend;
-  final double originalLufs;
-  final double gainDb;
   final AudioDecoderInfo? decoderInfo;
 
   double? get rtf => audioDuration.inMicroseconds == 0
@@ -68,7 +62,6 @@ class TranscriptionService {
     this.vadEngine,
     this.decoderPreference = AudioDecoderPreference.automatic,
     this._source = const FileAudioSource(),
-    this._preprocessor = const AudioPreprocessor(),
   });
 
   final AsrEngine engine;
@@ -80,7 +73,6 @@ class TranscriptionService {
   final AsrEngine? vadEngine;
   final AudioDecoderPreference decoderPreference;
   final AudioSource _source;
-  final AudioPreprocessor _preprocessor;
   AudioDecoderInfo? _lastDecoderInfo;
 
   /// Actual decoder selected for the most recent decode in this service.
@@ -106,14 +98,6 @@ class TranscriptionService {
       '${dir.path}/decoded.f32',
     );
   }
-
-  Future<({double lufs, double gainDb})> _measure(
-    PcmFile audio,
-    bool Function()? cancelled,
-  ) => _preprocessor.enabled
-      ? LoudnessNormalizer(targetLufs: _preprocessor.targetLufs)
-            .measureFile(audio, isCancelled: cancelled)
-      : Future.value((lufs: double.nan, gainDb: 0.0));
 
   /// Runs one file through [engine].
   ///
@@ -176,8 +160,6 @@ class TranscriptionService {
       final audio = await _decode(audioPath, dir, isCancelled);
       _lastDecoderInfo = audio.decoderInfo;
       onStage?.call(TranscriptionStage.analyzing);
-      final measured = await _measure(audio, isCancelled);
-      final gain = math.pow(10, measured.gainDb / 20).toDouble();
       List<List<AudioChunk>> windows = const [];
       onStage?.call(TranscriptionStage.segmenting);
       if (neuralVad == null) {
@@ -186,11 +168,10 @@ class TranscriptionService {
         final chunks = chunkSettings == null
             ? await const ChunkPlanner().planFile(
                 audio,
-                gain: gain,
                 isCancelled: isCancelled,
               )
             : await ChunkPlanner(settings: chunkSettings)
-                  .planFile(audio, gain: gain, isCancelled: isCancelled);
+                  .planFile(audio, isCancelled: isCancelled);
         if (chunks.isEmpty) {
           throw const EngineUnavailableException(
             'Chunk planner found no speech to transcribe (energy gate, not a '
@@ -209,7 +190,6 @@ class TranscriptionService {
         // ASR model is only loaded once there is known speech to send.
         windows = await _planNeuralWindows(
           audio: audio,
-          gain: gain,
           vad: neuralVad,
           dir: dir,
           isCancelled: isCancelled,
@@ -250,7 +230,6 @@ class TranscriptionService {
         await audio.writeWave(
           file,
           spans: window,
-          gain: gain,
           isCancelled: isCancelled,
         );
         TranscribeProgress? last;
@@ -320,8 +299,6 @@ class TranscriptionService {
         engine: engine.id,
         model: model,
         backend: backend,
-        originalLufs: measured.lufs,
-        gainDb: measured.gainDb,
         decoderInfo: audio.decoderInfo,
       );
     } finally {
@@ -335,7 +312,6 @@ class TranscriptionService {
   /// is removed as soon as planning returns, whatever the outcome.
   Future<List<List<AudioChunk>>> _planNeuralWindows({
     required PcmFile audio,
-    required double gain,
     required NeuralVadSettings vad,
     required Directory dir,
     required bool Function()? isCancelled,
@@ -347,7 +323,7 @@ class TranscriptionService {
       );
     }
     final file = File('${dir.path}${Platform.pathSeparator}vad_input.wav');
-    await audio.writeWave(file, gain: gain, isCancelled: isCancelled);
+    await audio.writeWave(file, isCancelled: isCancelled);
     final VadPlan plan;
     try {
       plan = await (vadEngine ?? engine).planVad(
@@ -376,7 +352,7 @@ class TranscriptionService {
   /// Real neural-VAD boundaries for [audioPath] without touching the ASR
   /// engine at all — no [AsrEngine.load], no transcribe call.
   ///
-  /// Same decode + loudness normalization + VAD + grouping as the
+  /// Same decode + VAD + grouping as the
   /// [transcribe] `neuralVad` path, so the returned windows are exactly the
   /// ones a job would use. Silent audio throws [EngineUnavailableException]
   /// rather than previewing an empty success. The VAD engine is not disposed
@@ -390,10 +366,8 @@ class TranscriptionService {
     final dir = await Directory.systemTemp.createTemp('pocket_asr_vad_');
     try {
       final audio = await _decode(audioPath, dir, isCancelled);
-      final measured = await _measure(audio, isCancelled);
       final windows = await _planNeuralWindows(
         audio: audio,
-        gain: math.pow(10, measured.gainDb / 20).toDouble(),
         vad: neuralVad,
         dir: dir,
         isCancelled: isCancelled,

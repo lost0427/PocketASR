@@ -106,8 +106,6 @@ class _ScriptedService extends TranscriptionService {
       engine: 'fake',
       model: model,
       backend: backend,
-      originalLufs: -16,
-      gainDb: 0,
       decoderInfo: const AudioDecoderInfo(
         name: 'c2.qti.aac.decoder',
         isHardware: true,
@@ -167,8 +165,6 @@ class _SlowService extends TranscriptionService {
       engine: 'fake',
       model: model,
       backend: backend,
-      originalLufs: -16,
-      gainDb: 0,
     );
   }
 }

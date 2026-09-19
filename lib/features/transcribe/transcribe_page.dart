@@ -8,7 +8,6 @@ import '../../engine/system_metrics.dart';
 import '../../app/app_state.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_picker.dart';
-import '../../core/audio/audio_preprocessor.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/audio/pcm_file.dart';
 import '../../core/text/token_counter.dart';
@@ -197,10 +196,6 @@ class _TranscribePageState extends State<TranscribePage> {
         vadEngine: state?.activeVadEngine,
         decoderPreference:
             state?.audioDecoderPreference ?? AudioDecoderPreference.automatic,
-        preprocessor: AudioPreprocessor(
-          enabled: state?.loudnessEnabled ?? true,
-          targetLufs: state?.loudnessTargetLufs ?? -16,
-        ),
       );
 
   Future<void> _start() async {

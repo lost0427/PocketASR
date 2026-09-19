@@ -66,7 +66,7 @@ void main() {
     expect(find.text('外观'), findsOneWidget);
   });
 
-  testWidgets('downloaded model, threads and loudness write to AppState', (
+  testWidgets('downloaded model, threads and decoder write to AppState', (
     tester,
   ) async {
     final state = AppState();
@@ -100,11 +100,6 @@ void main() {
     expect(find.text('Whisper Base'), findsOneWidget);
 
     expect(find.byType(Slider), findsWidgets);
-
-    expect(state.loudnessEnabled, isTrue);
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    expect(state.loudnessEnabled, isFalse);
 
     await tester.tap(find.text('Prefer hardware'));
     await tester.pumpAndSettle();
