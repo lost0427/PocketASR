@@ -151,7 +151,7 @@
   "decoderPreferenceAutomatic": "自动",
   "decoderPreferenceHardware": "优先硬件",
   "decoderPreferenceSoftware": "优先软件",
-  "settingsDecoderPreferenceHint": "Android 会在支持时尝试所选类型，失败后回退到系统解码器。实际使用的 codec 会在解码后显示。",
+  "settingsDecoderPreferenceHint": "仅影响 Android 的 MediaCodec 格式（如 AAC/M4A）；MP3、WAV、FLAC 由内置解码器处理。实际使用的 codec 会在解码后显示。",
   "settingsChunking": "切割",
   "settingsChunkMode": "模式",
   "settingsChunkFixed": "固定时长",

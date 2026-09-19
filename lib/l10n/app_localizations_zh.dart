@@ -479,7 +479,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDecoderPreferenceHint =>
-      'Android 会在支持时尝试所选类型，失败后回退到系统解码器。实际使用的 codec 会在解码后显示。';
+      '仅影响 Android 的 MediaCodec 格式（如 AAC/M4A）；MP3、WAV、FLAC 由内置解码器处理。实际使用的 codec 会在解码后显示。';
 
   @override
   String get settingsChunking => '切割';

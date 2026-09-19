@@ -514,7 +514,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDecoderPreferenceHint =>
-      'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.';
+      'Applies only to the formats Android\'s MediaCodec handles, such as AAC/M4A. MP3, WAV and FLAC use the built-in decoders. The codec actually used is shown after decoding.';
 
   @override
   String get settingsChunking => 'Chunking';

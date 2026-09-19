@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -14,23 +16,32 @@ const String settingsAppVersion = '1.0.13';
 const String _systemLanguage = 'system';
 
 /// Settings tab: appearance, language, the active downloaded model, CPU thread
-/// count and the decoder preference.
+/// count and — on Android only — the decoder preference.
 ///
 /// Every control writes to the in-memory [AppState] — nothing is persisted yet
 /// (plan Phase 5 adds the settings table). Backend has no picker on purpose:
 /// the first release is CPU-only, and [AppState.backend] already carries the
 /// value so one can be added later without touching callers (plan D17).
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, this.modelLibrary, this.onManageModels});
+  const SettingsPage({
+    super.key,
+    this.modelLibrary,
+    this.onManageModels,
+    this.showDecoderPreference,
+  });
 
   final ModelLibrary? modelLibrary;
   final VoidCallback? onManageModels;
+
+  /// Overrides the Android-only decoder preference visibility (test seam).
+  final bool? showDecoderPreference;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final state = AppStateScope.of(context);
+    final showDecoder = showDecoderPreference ?? Platform.isAndroid;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -88,8 +99,10 @@ class SettingsPage extends StatelessWidget {
           child: Column(
             children: [
               _ThreadsControl(state: state),
-              const SizedBox(height: 20),
-              _DecoderPreferenceControl(state: state),
+              if (showDecoder) ...[
+                const SizedBox(height: 20),
+                _DecoderPreferenceControl(state: state),
+              ],
             ],
           ),
         ),

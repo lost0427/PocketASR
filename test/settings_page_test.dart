@@ -12,17 +12,25 @@ import 'package:pocket_asr/features/models/model_library.dart';
 import 'package:pocket_asr/features/settings/settings_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
-Widget host(AppState state, {ModelLibrary? modelLibrary}) => AppStateScope(
+Widget host(
+  AppState state, {
+  ModelLibrary? modelLibrary,
+  bool showDecoderPreference = true,
+}) => AppStateScope(
   notifier: state,
-  child: _Host(modelLibrary: modelLibrary),
+  child: _Host(
+    modelLibrary: modelLibrary,
+    showDecoderPreference: showDecoderPreference,
+  ),
 );
 
 /// Mirrors [main.dart]'s `_LocalizedApp`: it depends on [AppStateScope], so a
 /// locale or theme change rebuilds the [MaterialApp] under test.
 class _Host extends StatelessWidget {
-  const _Host({this.modelLibrary});
+  const _Host({this.modelLibrary, required this.showDecoderPreference});
 
   final ModelLibrary? modelLibrary;
+  final bool showDecoderPreference;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +40,12 @@ class _Host extends StatelessWidget {
       themeMode: state.themeMode,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SettingsPage(modelLibrary: modelLibrary)),
+      home: Scaffold(
+        body: SettingsPage(
+          modelLibrary: modelLibrary,
+          showDecoderPreference: showDecoderPreference,
+        ),
+      ),
     );
   }
 }
@@ -43,11 +56,18 @@ void main() {
     WidgetTester tester,
     AppState state, {
     ModelLibrary? modelLibrary,
+    bool showDecoderPreference = true,
   }) async {
     tester.view.physicalSize = const Size(1200, 4200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(host(state, modelLibrary: modelLibrary));
+    await tester.pumpWidget(
+      host(
+        state,
+        modelLibrary: modelLibrary,
+        showDecoderPreference: showDecoderPreference,
+      ),
+    );
   }
 
   testWidgets('theme and language controls still drive AppState', (
@@ -104,6 +124,16 @@ void main() {
     await tester.tap(find.text('Prefer hardware'));
     await tester.pumpAndSettle();
     expect(state.audioDecoderPreference, AudioDecoderPreference.preferHardware);
+  });
+
+  testWidgets('decoder preference is hidden when the platform is not Android', (
+    tester,
+  ) async {
+    final state = AppState();
+    await pumpSettings(tester, state, showDecoderPreference: false);
+
+    expect(find.text('Audio decoder'), findsNothing);
+    expect(find.byType(Slider), findsWidgets);
   });
 
   testWidgets('the version row opens the benchmark on the seventh tap', (

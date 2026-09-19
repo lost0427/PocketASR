@@ -1007,7 +1007,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDecoderPreferenceHint.
   ///
   /// In en, this message translates to:
-  /// **'Android tries the selected type when supported, then falls back to the system decoder. The actual codec is shown after decoding.'**
+  /// **'Applies only to the formats Android\'s MediaCodec handles, such as AAC/M4A. MP3, WAV and FLAC use the built-in decoders. The codec actually used is shown after decoding.'**
   String get settingsDecoderPreferenceHint;
 
   /// No description provided for @settingsChunking.
