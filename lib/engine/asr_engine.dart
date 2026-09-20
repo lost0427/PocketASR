@@ -196,6 +196,7 @@ class TranscribeRequest {
     this.backend = Backend.cpu,
     this.language,
     this.vadPlan,
+    this.rawPcm = false,
   });
 
   /// Decoded, loudness-normalized audio file on disk.
@@ -208,6 +209,11 @@ class TranscribeRequest {
 
   /// Cut boundaries previously produced by [AsrEngine.planVad], if any.
   final VadPlan? vadPlan;
+
+  /// True when [audioPath] is raw mono 16 kHz little-endian float32 PCM rather
+  /// than a WAV. [AsrEngine.planVad] reads it directly, so a neural-VAD job
+  /// does not have to materialize a second whole-file WAV copy.
+  final bool rawPcm;
 }
 
 /// A progress update emitted while [AsrEngine.transcribe] runs.

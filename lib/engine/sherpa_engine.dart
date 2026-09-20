@@ -7,6 +7,7 @@
 /// failures always surface as [EngineUnavailableException].
 library;
 
+import '../core/audio/pcm_file.dart';
 import '../core/audio/wav.dart';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
@@ -249,10 +250,13 @@ class SherpaEngine implements AsrEngine {
     }
 
     try {
-      await for (final samples in readCanonicalWave(
-        request.audioPath,
-        blockSize: windowSize,
-      )) {
+      // A raw-PCM job skips the second whole-file WAV the caller used to
+      // write; either way the detector still sees exactly [windowSize] samples
+      // per call, read from disk in large blocks.
+      final blocks = request.rawPcm
+          ? readRawFloat32(request.audioPath, blockSize: _vadReadBlock)
+          : readCanonicalWave(request.audioPath, blockSize: _vadReadBlock);
+      await for (final samples in fixedWindows(blocks, windowSize)) {
         detector.acceptWaveform(samples);
         drain();
       }
@@ -270,6 +274,10 @@ class SherpaEngine implements AsrEngine {
 
   static Duration _durationFromSample(int sample, int rate) =>
       Duration(microseconds: (sample * 1000000 / rate).round());
+
+  /// Samples read per disk call; [fixedWindows] re-slices to the detector's
+  /// window, so this only bounds read overhead.
+  static const int _vadReadBlock = 16384;
 
   static sherpa.VadModelConfig _vadConfig(
     NeuralVadSettings vad,

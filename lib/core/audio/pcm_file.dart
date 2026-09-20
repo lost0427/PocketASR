@@ -50,6 +50,52 @@ class AudioDecoderInfo {
   }
 }
 
+/// Reads the canonical little-endian float32 file as zero-copy views, without
+/// a per-sample pass. Callers that only need the samples (the neural VAD) skip
+/// the gain/clamp loop [PcmFile.blocks] runs for engine input.
+Stream<Float32List> readRawFloat32(String path, {int blockSize = 16384}) async* {
+  if (blockSize <= 0) {
+    throw ArgumentError.value(blockSize, 'blockSize', 'must be > 0');
+  }
+  final input = await File(path).open();
+  try {
+    final bytes = await input.length();
+    if (bytes % 4 != 0) {
+      throw const FormatException('Raw f32 PCM is not 4-byte aligned');
+    }
+    for (var at = 0; at < bytes; at += blockSize * 4) {
+      final block = await input.read(math.min(blockSize * 4, bytes - at));
+      yield float32FromBytes(block);
+    }
+  } finally {
+    await input.close();
+  }
+}
+
+/// Re-chunks [blocks] into fixed [size]-sample windows, passing the final
+/// short tail through unchanged. A neural VAD needs exactly one window per
+/// call, while reading the file in much larger blocks is far cheaper.
+Stream<Float32List> fixedWindows(Stream<Float32List> blocks, int size) async* {
+  if (size <= 0) throw ArgumentError.value(size, 'size', 'must be > 0');
+  var window = Float32List(size);
+  var fill = 0;
+  await for (final block in blocks) {
+    var at = 0;
+    while (at < block.length) {
+      final take = math.min(size - fill, block.length - at);
+      window.setRange(fill, fill + take, block, at);
+      fill += take;
+      at += take;
+      if (fill == size) {
+        yield window;
+        window = Float32List(size);
+        fill = 0;
+      }
+    }
+  }
+  if (fill > 0) yield Float32List.sublistView(window, 0, fill);
+}
+
 /// Canonical little-endian mono float32 on disk. The job owns its directory.
 class PcmFile {
   const PcmFile(

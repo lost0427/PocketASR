@@ -191,7 +191,6 @@ class TranscriptionService {
         windows = await _planNeuralWindows(
           audio: audio,
           vad: neuralVad,
-          dir: dir,
           isCancelled: isCancelled,
         );
         if (windows.isEmpty) {
@@ -308,12 +307,12 @@ class TranscriptionService {
 
   /// Runs real neural VAD ([AsrEngine.planVad], no ASR load) over [audio] and
   /// returns grouped windows; throws [EngineCancelledException] before the
-  /// single planning call if the job was already cancelled. The VAD input WAV
-  /// is removed as soon as planning returns, whatever the outcome.
+  /// single planning call if the job was already cancelled. The detector reads
+  /// the decoded PCM directly (`rawPcm`), so no second whole-file WAV is
+  /// written or cleaned up.
   Future<List<List<AudioChunk>>> _planNeuralWindows({
     required PcmFile audio,
     required NeuralVadSettings vad,
-    required Directory dir,
     required bool Function()? isCancelled,
   }) async {
     if (isCancelled?.call() ?? false) {
@@ -322,17 +321,12 @@ class TranscriptionService {
         'engine.',
       );
     }
-    final file = File('${dir.path}${Platform.pathSeparator}vad_input.wav');
-    await audio.writeWave(file, isCancelled: isCancelled);
-    final VadPlan plan;
-    try {
-      plan = await (vadEngine ?? engine).planVad(
-        TranscribeRequest(audioPath: file.path),
-        vad,
-      );
-    } finally {
-      await file.delete();
-    }
+    // The decoded PCM is already on disk: the detector reads it raw instead of
+    // a second whole-file WAV copy.
+    final plan = await (vadEngine ?? engine).planVad(
+      TranscribeRequest(audioPath: audio.path, rawPcm: true),
+      vad,
+    );
     return ChunkPlanner.groupVad(
       segments: [
         for (final segment in plan.segments)
@@ -369,7 +363,6 @@ class TranscriptionService {
       final windows = await _planNeuralWindows(
         audio: audio,
         vad: neuralVad,
-        dir: dir,
         isCancelled: isCancelled,
       );
       if (isCancelled?.call() ?? false) {

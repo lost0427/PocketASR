@@ -109,4 +109,37 @@ void main() {
       expect(blocks.expand((block) => block), [0.25, 0, 0, 0, -0.5]);
     },
   );
+
+  test('raw f32 reads slice whole values for the neural VAD', () async {
+    final audio = AudioBuffer(
+      samples: Float32List.fromList(List.generate(10, (i) => (i - 5) / 8)),
+      sampleRate: 16000,
+    );
+    final path = '${dir.path}/raw.f32';
+    await PcmFile.fromBuffer(audio, path);
+
+    final lengths = <int>[];
+    final samples = <double>[];
+    await for (final block in readRawFloat32(path, blockSize: 4)) {
+      lengths.add(block.length);
+      samples.addAll(block);
+    }
+    expect(lengths, [4, 4, 2]);
+    expect(samples, audio.samples);
+
+    await expectLater(
+      readRawFloat32('${dir.path}/missing.f32').drain<void>(),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
+  test('fixed windows re-slice blocks and pass a short tail through', () async {
+    final blocks = Stream.fromIterable([
+      Float32List.fromList([1, 2, 3]),
+      Float32List.fromList([4, 5, 6, 7, 8, 9]),
+    ]);
+    final windows = await fixedWindows(blocks, 2).toList();
+    expect(windows.map((w) => w.length), [2, 2, 2, 2, 1]);
+    expect(windows.expand((w) => w), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
 }

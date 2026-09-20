@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_buffer.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
+import 'package:pocket_asr/core/audio/pcm.dart';
 import 'package:pocket_asr/core/audio/wav.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/features/transcribe/transcription_service.dart';
@@ -658,10 +659,9 @@ void main() {
         expect(asrLoadedDuringPlanning, isFalse);
         expect(vad.requests, hasLength(1));
         expect(vad.lastSettings, same(nopad));
-        // The VAD worker got the full 16 kHz mono normalized audio as a WAV.
-        final wave = WavDecoder().decode(vad.inputBytes!);
-        expect(wave.sampleRate, 16000);
-        expect(wave.samples, hasLength(64000));
+        // The VAD worker read the decoded PCM directly: no second WAV copy.
+        expect(vad.requests.single.rawPcm, isTrue);
+        expect(float32FromBytes(vad.inputBytes!), hasLength(64000));
 
         // One request: 1 s + 1 s of speech back-to-back. A first-to-last
         // slice would have been 3 s long with a silent middle.
@@ -939,9 +939,8 @@ void main() {
         expect(asr.loadCount, 0);
         expect(asr.requests, isEmpty);
         expect(vad.requests, hasLength(1));
-        final wave = WavDecoder().decode(vad.inputBytes!);
-        expect(wave.sampleRate, 16000);
-        expect(wave.samples, hasLength(64000));
+        expect(vad.requests.single.rawPcm, isTrue);
+        expect(float32FromBytes(vad.inputBytes!), hasLength(64000));
 
         // Real boundaries with pad, on the audio timeline — two spans, not
         // one first-to-last slice over the silence.
