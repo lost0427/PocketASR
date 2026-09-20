@@ -16,21 +16,29 @@
   because there is no Windows CrispASR native build step. That is not "no ASR
   on Windows": **SherpaEngine works there** — its DLLs are bundled by the
   `sherpa_onnx` plugin (`sherpa_onnx_windows`).
-- **Android** release restores a matching native cache or runs
+- **Android** release ships **two** arm64-v8a APKs built in parallel from the
+  same source, because ggml selects its ARM int8 kernels at *compile* time:
+  `pocket-asr-android-<tag>.apk` (i8mm) and `...-<tag>-legacy.apk` (baseline).
+  Each job restores a native cache or runs
   `scripts/ci/build_native_android.sh` before `flutter build apk`: NDK r28+
   (r30 LTS pinned), arm64-v8a / android-24,
   16KB `max-page-size` link flags; each engine statically embeds its own
   pinned ggml (the two repos pin **different** ggml commits and the versions
   are never shared), and needed NDK runtimes (`libc++_shared.so` /
   `libomp.so`) are staged explicitly — AGP does not add them for jniLibs.
-  ggml is built with `-DGGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm`:
-  ggml's ARM int8 kernels are chosen at *compile* time, and the arm64
-  libraries shipped before that flag contained **zero** `sdot`/`smmla`
-  instructions (measured with `llvm-objdump`), i.e. every Q8_0 matmul ran the
-  plain-NEON path. Consequence to state plainly: the arm64 APK now requires an
-  **i8mm-capable** CPU (armv8.6-a, ~2021+ SoCs); older arm64 devices fault.
-  `build_native_android.sh` re-checks `sdot`/`smmla` in `libcrispembed.so` and
-  fails the build if the option stops reaching the kernels.
+  `GGML_CPU_ARM_ARCH_ANDROID` selects the target: unset/`armv8.6-a+dotprod+
+  fp16+i8mm` for the i8mm APK, an explicitly **empty** value for the legacy
+  APK (substitution is `${VAR-default}`, not `:-`, so empty really means the
+  baseline). The libraries shipped before any of this contained **zero**
+  `sdot`/`smmla` instructions (measured with `llvm-objdump`), i.e. every Q8_0
+  matmul ran the plain-NEON path. Consequences to state plainly: the i8mm APK
+  requires an **i8mm-capable** CPU (armv8.6-a, ~2021+ SoCs) and older arm64
+  devices fault on it; the legacy APK runs anywhere and is genuinely slower at
+  embedding — that is its purpose, not a bug. `build_native_android.sh`
+  re-checks `sdot`/`smmla` in `libcrispembed.so` in **both** directions (i8mm
+  build must contain them, legacy build must not) and fails otherwise, so
+  neither artifact can lie about its CPU floor. Native caches are keyed per
+  variant so one APK can never consume the other's payload.
   Before any artifact is uploaded, `scripts/ci/verify_apk_native.py` checks
   every `lib/arm64-v8a/*.so` for `PT_LOAD` `p_align >= 16K` with
   offset≡vaddr (mod 16K), full `DT_NEEDED` closure and required exports, and
@@ -43,8 +51,8 @@
   `assets/model_allowlist.json`). Never present a build artifact as a model
   bundle or fabricate a model download.
 - CI (`ci.yml`) runs `flutter analyze` and `flutter test` on `windows-latest`.
-  Release builds Windows and Android in parallel, then publishes only after
-  both jobs succeed; CI does not build or upload debug artifacts.
+  Release builds Windows and both Android variants in parallel, then publishes
+  only after every job succeeds; CI does not build or upload debug artifacts.
 - API 36 / AGP 9.1 / Gradle 9.3.1 is the intended toolchain; do not downgrade
   to work around plugin issues — disable the offending task and stage outputs.
 - The retired 4KB-aligned prebuilts are **not** "cannot install" claims: some

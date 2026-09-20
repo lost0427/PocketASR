@@ -92,8 +92,12 @@ PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 # the baseline there rather than failing. Targets that consume no ggml at all
 # (native/decode) ignore it too.
 # Cost of the choice: the APK's arm64 floor rises to armv8.6-a (i8mm, ~2021+
-# SoCs). Devices without it would fault on these kernels.
-GGML_CPU_ARM_ARCH_ANDROID="armv8.6-a+dotprod+fp16+i8mm"
+# SoCs). Devices without it would fault on these kernels, so the release also
+# ships a second, -legacy APK built from the plain armv8-a baseline: set this
+# variable to an explicitly EMPTY value for that build. The `-` substitution
+# (not `:-`) is what makes empty mean "baseline" rather than "unset, use the
+# default" — with `:-` the legacy job would silently build i8mm kernels.
+GGML_CPU_ARM_ARCH_ANDROID="${GGML_CPU_ARM_ARCH_ANDROID-armv8.6-a+dotprod+fp16+i8mm}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/android/app/src/main/jniLibs/$ANDROID_ABI}"
@@ -107,6 +111,8 @@ mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
 log() { echo "build_native_android: $*"; }
+
+log "ggml arm arch: ${GGML_CPU_ARM_ARCH_ANDROID:-<empty: plain armv8-a baseline>}"
 
 # --- ccache ---
 # Optional but strongly recommended: makes fallback rebuilds reusable across
@@ -156,8 +162,14 @@ common_cmake=(
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
   -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS"
-  -DGGML_CPU_ARM_ARCH="$GGML_CPU_ARM_ARCH_ANDROID"
 )
+# Baseline (legacy) builds deliberately leave GGML_CPU_ARM_ARCH unset: ggml
+# then uses the NDK default armv8-a, which is what the -legacy APK ships.
+# Explicit `if`, not `[ -n ... ] && ...`: under `set -e` the short-circuit form
+# returns 1 on an empty value and would abort the very build it is guarding.
+if [ -n "$GGML_CPU_ARM_ARCH_ANDROID" ]; then
+  common_cmake+=(-DGGML_CPU_ARM_ARCH="$GGML_CPU_ARM_ARCH_ANDROID")
+fi
 if [ "$USE_CCACHE" = "1" ]; then
   common_cmake+=(
     -DCMAKE_C_COMPILER_LAUNCHER=ccache
@@ -243,28 +255,41 @@ for dep in libc++_shared.so libomp.so; do
   cp -Lf "$src" "$OUT/$dep"
 done
 
-# --- ARM ISA gate: the -march above must really reach ggml's kernels. A pinned
-# tree that stops honoring GGML_CPU_ARM_ARCH, or a configure that quietly drops
-# it, would put every Q8_0 matmul back on the armv8-a path with nothing in the
-# ELF to show for it — the previous release shipped exactly that state. Fail
-# closed on the engine whose ggml option is verified; only report the other.
-arm_isa_report() { # so required|optional
-  local so="$1" required="$2" mnemonic dump
+# --- ARM ISA gate: the -march chosen above must really reach ggml's kernels. A
+# pinned tree that stops honoring GGML_CPU_ARM_ARCH, or a configure that quietly
+# drops it, would put every Q8_0 matmul back on the armv8-a path with nothing in
+# the ELF to show for it — the previous release shipped exactly that state. The
+# check runs in both directions: an i8mm build must CONTAIN sdot/smmla, and a
+# baseline (-legacy) build must NOT, so neither artifact's name can lie about
+# its CPU floor. Fail closed on the engine whose ggml option is verified; only
+# report the other.
+arm_isa_report() { # so required|optional|forbidden
+  local so="$1" mode="$2" mnemonic dump
   dump="$WORK/$(basename "$so").dis"
   "$OBJDUMP" -d --no-show-raw-insn "$so" > "$dump"
   for mnemonic in sdot smmla; do
     if grep -qE "\b${mnemonic}\b" "$dump"; then
+      if [ "$mode" = "forbidden" ]; then
+        log "FATAL: $(basename "$so") contains '$mnemonic' but this build requested the armv8-a baseline (GGML_CPU_ARM_ARCH is empty); it would fault on pre-i8mm devices"
+        exit 1
+      fi
       log "$(basename "$so"): $mnemonic kernels present"
-    elif [ "$required" = "required" ]; then
+    elif [ "$mode" = "required" ]; then
       log "FATAL: $(basename "$so") has no '$mnemonic': GGML_CPU_ARM_ARCH=$GGML_CPU_ARM_ARCH_ANDROID did not reach ggml's kernels"
       exit 1
+    elif [ "$mode" = "forbidden" ]; then
+      log "$(basename "$so"): no $mnemonic (armv8-a baseline confirmed)"
     else
       log "NOTE: $(basename "$so") has no '$mnemonic' (its pinned ggml may predate GGML_CPU_ARM_ARCH)"
     fi
   done
 }
 
-arm_isa_report "$OUT/libcrispembed.so" required
+if [ -n "$GGML_CPU_ARM_ARCH_ANDROID" ]; then
+  arm_isa_report "$OUT/libcrispembed.so" required
+else
+  arm_isa_report "$OUT/libcrispembed.so" forbidden
+fi
 arm_isa_report "$OUT/libcrispasr.so" optional
 
 log "staged:"

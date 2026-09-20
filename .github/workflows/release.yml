@@ -49,17 +49,38 @@ jobs:
           path: pocket-asr-windows-${{ github.ref_name }}.zip
           if-no-files-found: error
 
-  # Android: restore the pinned native libraries from cache when possible;
-  # otherwise rebuild them from source with NDK r28+ and 16KB LOAD alignment.
-  # The APK is always checked for ELF alignment, DT_NEEDED closure and zipalign
-  # before upload. If any check fails, this job fails and `publish` never runs.
+  # Android: two arm64 variants, built in parallel from the same source — the
+  # i8mm APK (dotprod/fp16/i8mm kernels) and a -legacy APK for pre-i8mm devices.
+  # Each restores its own pinned native libraries from cache when possible;
+  # otherwise it rebuilds them from source with NDK r28+ and 16KB LOAD
+  # alignment. Both APKs are checked for ELF alignment, DT_NEEDED closure and
+  # zipalign before upload, and the native build gates each variant's ISA
+  # instructions in both directions (i8mm must have sdot/smmla, legacy must
+  # not). If any check fails, that job fails and `publish` never runs.
   #
   # The APK bundles native ENGINE libraries only. Model files (see
   # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
   # users must provide models at runtime. Do not present this artifact as a model
   # bundle or fabricate a model download.
   android:
+    name: android (${{ matrix.variant }})
     runs-on: ubuntu-latest
+    strategy:
+      # Keep both variants running: when the ARM ISA gate fires, the useful
+      # signal is whether one payload is wrong or both are.
+      fail-fast: false
+      matrix:
+        include:
+          # Default APK, unsuffixed file name: ggml built with dotprod/fp16/i8mm
+          # kernels. Needs an armv8.6-a SoC (~2021+); pre-i8mm devices fault.
+          - variant: i8mm
+            arch: armv8.6-a+dotprod+fp16+i8mm
+            suffix: ""
+          # -legacy APK: plain armv8-a baseline, installs on any arm64 device.
+          # Runs the slow NEON Q8_0 path — that is the point, not a regression.
+          - variant: legacy
+            arch: ""
+            suffix: -legacy
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -72,15 +93,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: native-ccache-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+          key: native-ccache-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh') }}
           restore-keys: |
-            native-ccache-
+            native-ccache-${{ matrix.variant }}-
       - name: Restore cached native build
         id: native-cache
         uses: actions/cache@v4
         with:
           path: android/app/src/main/jniLibs/arm64-v8a
-          key: native-android-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+          key: native-android-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh') }}
       - name: Check native libs
         id: native-check
         run: |
@@ -91,6 +112,9 @@ jobs:
           fi
       - name: Build 16KB-aligned native libraries from pinned sources
         if: steps.native-check.outputs.found != 'true'
+        env:
+          # Empty selects the armv8-a baseline (see build_native_android.sh).
+          GGML_CPU_ARM_ARCH_ANDROID: ${{ matrix.arch }}
         run: bash scripts/ci/build_native_android.sh
       - run: flutter build apk --release --target-platform android-arm64
       - name: Verify APK native payload
@@ -104,10 +128,14 @@ jobs:
             --require-symbol libpocketasr_decode.so:pocketasr_chain_begin
           ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
           "$ZIPALIGN" -c -P 16 4 "$APK"
+      - name: Name the APK for this variant
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+            "build/app/outputs/flutter-apk/pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: pocket-asr-android-${{ github.ref_name }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}
+          path: build/app/outputs/flutter-apk/pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}.apk
           if-no-files-found: error
 
   publish:
@@ -119,12 +147,23 @@ jobs:
           pattern: pocket-asr-*
           path: release-assets
           merge-multiple: true
-      - name: Rename Android package
-        run: mv release-assets/app-release.apk release-assets/pocket-asr-android-${{ github.ref_name }}.apk
+      - name: List release assets
+        run: ls -l release-assets
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: PocketASR ${{ github.ref_name }}
           generate_release_notes: true
+          body: |
+            Android: two arm64 APKs.
+
+            - `pocket-asr-android-${{ github.ref_name }}.apk` — ggml built with
+              dotprod/fp16/i8mm. Fastest. Needs an armv8.6-a SoC (~2021 or
+              newer); older devices crash on load.
+            - `pocket-asr-android-${{ github.ref_name }}-legacy.apk` — plain
+              armv8-a build of the same code. Installs on any arm64 device;
+              embedding runs on the slow NEON path.
+
+            Not sure which SoC you have? Install the legacy APK.
           files: release-assets/*
