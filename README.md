@@ -45,7 +45,7 @@ Tap the version seven times in Settings to open benchmarks using your own audio.
     (armv8.6-a, roughly 2021 and newer). Older arm64 CPUs fault on load.
   - `pocket-asr-android-<tag>-legacy.apk` — the same code with ggml at the plain
     `armv8-a` baseline. Installs on any arm64 device; embedding runs the slow
-    NEON path (the pre-1.0.16 behavior).
+    NEON path that earlier releases used.
 
   Not sure which SoC the device has? Use the legacy APK. Installing one over the
   other is an in-place replacement, not a side-by-side install.
