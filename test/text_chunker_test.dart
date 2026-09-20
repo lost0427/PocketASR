@@ -34,7 +34,10 @@ void main() {
   test('paragraphs form their own chunks once the budget is reached', () {
     const one = '第一段讨论了整体计划和一个大概的方向。';
     const two = '第二段说明了人员分工以及重要的时间节点。';
-    final chunks = chunkForEmbedding('$one\n$two', maxTokens: estimatedTokens(one) + 1);
+    final chunks = chunkForEmbedding(
+      '$one\n$two',
+      maxTokens: estimatedTokens(one) + 1,
+    );
     expect(chunks.length, 2);
     expect(chunks.first, '$one\n');
     expectTiles('$one\n$two', maxTokens: estimatedTokens(one) + 1);

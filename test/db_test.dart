@@ -31,7 +31,10 @@ void main() {
       text: 'beef noodles for lunch',
     );
 
-    expect(transcripts.list().map((t) => t.id), containsAll([tea, wifi, lunch]));
+    expect(
+      transcripts.list().map((t) => t.id),
+      containsAll([tea, wifi, lunch]),
+    );
 
     expect(search.searchLiteral('tea').map((t) => t.id), [tea]);
     expect(search.searchLiteral('wifi').single.id, wifi);
@@ -78,7 +81,13 @@ void main() {
     database.db.execute(
       'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
       'VALUES(?,?,?,?,?)',
-      [id, 4, Uint8List.fromList([0, 0, 0, 0]), 'test', 0],
+      [
+        id,
+        4,
+        Uint8List.fromList([0, 0, 0, 0]),
+        'test',
+        0,
+      ],
     );
 
     expect(
@@ -112,16 +121,16 @@ void main() {
   test('arbitrary user input cannot inject FTS syntax', () {
     transcripts.insert(title: 'Note', text: 'safe text');
 
-    expect(() => search.searchLiteral('"; DROP TABLE transcript; --'), returnsNormally);
+    expect(
+      () => search.searchLiteral('"; DROP TABLE transcript; --'),
+      returnsNormally,
+    );
     expect(search.searchLiteral('   '), isEmpty);
     expect(transcripts.list(), hasLength(1)); // table still there
   });
 
   test('CJK whole-run queries match; substrings ride the LIKE pass', () {
-    final id = transcripts.insert(
-      title: 'Meeting notes',
-      text: '连接无线网络设置',
-    );
+    final id = transcripts.insert(title: 'Meeting notes', text: '连接无线网络设置');
 
     expect(search.searchLiteral('连接无线网络设置').single.id, id);
     // unicode61 still indexes one token per CJK run (see db.dart); SearchRepo
@@ -129,27 +138,33 @@ void main() {
     expect(search.searchLiteral('网络').single.id, id);
   });
 
-  test('searchHybrid falls back to literal results with topK/trash shape', () async {
-    final a = transcripts.insert(title: 'A', text: 'shared keyword alpha');
-    final b = transcripts.insert(title: 'B', text: 'shared keyword beta');
-    final c = transcripts.insert(title: 'C', text: 'shared keyword gamma');
+  test(
+    'searchHybrid falls back to literal results with topK/trash shape',
+    () async {
+      final a = transcripts.insert(title: 'A', text: 'shared keyword alpha');
+      final b = transcripts.insert(title: 'B', text: 'shared keyword beta');
+      final c = transcripts.insert(title: 'C', text: 'shared keyword gamma');
 
-    expect(
-      (await search.searchHybrid('shared')).map((t) => t.id),
-      containsAll([a, b, c]),
-    );
-    expect(await search.searchHybrid('shared', topK: 2), hasLength(2));
+      expect(
+        (await search.searchHybrid('shared')).map((t) => t.id),
+        containsAll([a, b, c]),
+      );
+      expect(await search.searchHybrid('shared', topK: 2), hasLength(2));
 
-    transcripts.softDelete(c);
-    expect(
-      (await search.searchHybrid('shared')).map((t) => t.id),
-      isNot(contains(c)),
-    );
-    expect(
-      (await search.searchHybrid('shared', includeTrash: true)).map((t) => t.id),
-      contains(c),
-    );
-  });
+      transcripts.softDelete(c);
+      expect(
+        (await search.searchHybrid('shared')).map((t) => t.id),
+        isNot(contains(c)),
+      );
+      expect(
+        (await search.searchHybrid(
+          'shared',
+          includeTrash: true,
+        )).map((t) => t.id),
+        contains(c),
+      );
+    },
+  );
 
   test('opening a database newer than schemaVersion throws', () {
     final dir = Directory.systemTemp.createTempSync('pocket_asr_db_test');
@@ -190,11 +205,7 @@ void main() {
     addTearDown(migrated.close);
 
     expect(
-      migrated.db
-          .select('PRAGMA user_version')
-          .first
-          .values
-          .first,
+      migrated.db.select('PRAGMA user_version').first.values.first,
       schemaVersion,
     );
     // Derived data: the stale mean vector is gone, so the next indexPending

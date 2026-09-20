@@ -23,10 +23,7 @@ class _FakeEngine extends UnavailableAsrEngine {
 
   @override
   Future<EngineCapabilities> capabilities() async => available
-      ? const EngineCapabilities(
-          available: true,
-          backends: {Backend.cpu},
-        )
+      ? const EngineCapabilities(available: true, backends: {Backend.cpu})
       : const EngineCapabilities.unavailable('no native library');
 
   @override
@@ -197,6 +194,7 @@ void main() {
     String? audio,
     Future<void> Function(String, String)? exportFile,
     BenchmarkDecodeProbe? decodeProbe,
+    BenchmarkEmbedProbe? embedProbe,
   }) async {
     tester.view.physicalSize = const Size(1200, 3200);
     tester.view.devicePixelRatio = 1.0;
@@ -215,6 +213,7 @@ void main() {
           pickAudio: () async => audio,
           exportFile: exportFile,
           decodeProbe: decodeProbe,
+          embedProbe: embedProbe,
         ),
       ),
     );
@@ -466,5 +465,57 @@ void main() {
     expect(find.text('50ms'), findsOneWidget);
     expect(find.text('0/3'), findsOneWidget); // the platform row never ran
     expect(find.text('3/3'), findsOneWidget);
+  });
+
+  testWidgets('measures embedding at each tier on generated text', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    await pumpBench(
+      tester,
+      entries: const [_sense],
+      embedProbe: (text) async => inputs.add(text),
+    );
+
+    // No audio is picked: embedding runs on generated text, not the sample.
+    await tester.tap(find.text('Measure embedding'));
+    await tester.pumpAndSettle();
+
+    expect(inputs, hasLength(9)); // three tiers, three runs each
+    expect(inputs.toSet(), hasLength(3)); // one distinct sample per tier
+    expect(inputs.map((text) => text.length).toSet(), {200, 512, 1024});
+    // Pure Chinese sample: one code unit is one estimated token, so the
+    // measured size really is the tier size.
+    expect(find.text('~200 tokens'), findsOneWidget);
+    expect(find.text('~512 tokens'), findsOneWidget);
+    expect(find.text('~1024 tokens'), findsOneWidget);
+    expect(find.text('3/3'), findsNWidgets(3));
+  });
+
+  testWidgets('an embedder that cannot run says so instead of a number', (
+    tester,
+  ) async {
+    await pumpBench(
+      tester,
+      entries: const [_sense],
+      embedProbe: (text) async => throw StateError('no embedding model'),
+    );
+
+    await tester.tap(find.text('Measure embedding'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('no embedding model'), findsOneWidget);
+    expect(find.text('~200 tokens'), findsOneWidget);
+    expect(find.text('0/3'), findsOneWidget); // the first tier never ran
+    expect(find.text('~512 tokens'), findsNothing); // and the rest never tried
+  });
+
+  testWidgets('without an embedder the section says how to enable it', (
+    tester,
+  ) async {
+    await pumpBench(tester, entries: const [_sense]);
+
+    expect(find.text('Measure embedding'), findsNothing);
+    expect(find.textContaining('No embedding model is loaded'), findsOneWidget);
   });
 }

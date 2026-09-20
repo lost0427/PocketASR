@@ -670,6 +670,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get benchDecodeAudioRequired => '请先选择音频文件再对比。';
 
   @override
+  String get benchEmbedTitle => '向量速度';
+
+  @override
+  String get benchEmbedHint =>
+      '用已加载的向量模型对生成的中文样本分别做三次嵌入，按三种输入长度取中位数。这就是历史索引每段要付的代价：预算越小每字越快，但每段读到的上下文越短。';
+
+  @override
+  String get benchEmbedRun => '测量向量速度';
+
+  @override
+  String get benchEmbedUnavailable => '尚未加载向量模型。先在「模型」页选择一个再测量。';
+
+  @override
+  String benchEmbedTier(int tokens) {
+    return '约 $tokens token';
+  }
+
+  @override
   String get benchExitHint => '连续点击标题七次可退出。';
 
   @override

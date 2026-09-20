@@ -1358,6 +1358,36 @@ abstract class AppLocalizations {
   /// **'Choose an audio file before comparing.'**
   String get benchDecodeAudioRequired;
 
+  /// No description provided for @benchEmbedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedding speed'**
+  String get benchEmbedTitle;
+
+  /// No description provided for @benchEmbedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Embeds generated sample text with the loaded embedding model, three runs per input size. This is the cost the History index pays per chunk: a smaller budget is faster per character but reads less context around each match.'**
+  String get benchEmbedHint;
+
+  /// No description provided for @benchEmbedRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Measure embedding'**
+  String get benchEmbedRun;
+
+  /// No description provided for @benchEmbedUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No embedding model is loaded. Pick one on the Models tab to measure it.'**
+  String get benchEmbedUnavailable;
+
+  /// No description provided for @benchEmbedTier.
+  ///
+  /// In en, this message translates to:
+  /// **'~{tokens} tokens'**
+  String benchEmbedTier(int tokens);
+
   /// No description provided for @benchExitHint.
   ///
   /// In en, this message translates to:

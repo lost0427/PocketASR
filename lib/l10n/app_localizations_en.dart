@@ -714,6 +714,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose an audio file before comparing.';
 
   @override
+  String get benchEmbedTitle => 'Embedding speed';
+
+  @override
+  String get benchEmbedHint =>
+      'Embeds generated sample text with the loaded embedding model, three runs per input size. This is the cost the History index pays per chunk: a smaller budget is faster per character but reads less context around each match.';
+
+  @override
+  String get benchEmbedRun => 'Measure embedding';
+
+  @override
+  String get benchEmbedUnavailable =>
+      'No embedding model is loaded. Pick one on the Models tab to measure it.';
+
+  @override
+  String benchEmbedTier(int tokens) {
+    return '~$tokens tokens';
+  }
+
+  @override
   String get benchExitHint => 'Tap the title seven times to leave.';
 
   @override

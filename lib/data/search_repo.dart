@@ -200,10 +200,7 @@ class SearchRepo {
   static bool _isHan(String term) => _han.hasMatch(term);
 
   static String _likePattern(String term) =>
-      '%${term
-          .replaceAll(r'\', r'\\')
-          .replaceAll('%', r'\%')
-          .replaceAll('_', r'\_')}%';
+      '%${term.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_')}%';
 
   /// `' AND t.deleted_at ...'` SQL suffix shared by all three search modes.
   static String _trashFilter(

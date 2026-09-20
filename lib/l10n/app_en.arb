@@ -277,6 +277,18 @@
   "benchDecodeElapsed": "Decode",
   "benchDecodeRealtime": "Speed",
   "benchDecodeAudioRequired": "Choose an audio file before comparing.",
+  "benchEmbedTitle": "Embedding speed",
+  "benchEmbedHint": "Embeds generated sample text with the loaded embedding model, three runs per input size. This is the cost the History index pays per chunk: a smaller budget is faster per character but reads less context around each match.",
+  "benchEmbedRun": "Measure embedding",
+  "benchEmbedUnavailable": "No embedding model is loaded. Pick one on the Models tab to measure it.",
+  "benchEmbedTier": "~{tokens} tokens",
+  "@benchEmbedTier": {
+    "placeholders": {
+      "tokens": {
+        "type": "int"
+      }
+    }
+  },
   "benchExitHint": "Tap the title seven times to leave.",
   "settingsChunkNeural": "Neural VAD",
   "settingsVadHint": "Neural VAD runs the selected VAD model on a separate sherpa-onnx worker, so speech is cut by what the model hears, not by loudness. It is not the ASR model.",
