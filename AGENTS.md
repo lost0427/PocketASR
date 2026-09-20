@@ -23,6 +23,14 @@
   pinned ggml (the two repos pin **different** ggml commits and the versions
   are never shared), and needed NDK runtimes (`libc++_shared.so` /
   `libomp.so`) are staged explicitly — AGP does not add them for jniLibs.
+  ggml is built with `-DGGML_CPU_ARM_ARCH=armv8.6-a+dotprod+fp16+i8mm`:
+  ggml's ARM int8 kernels are chosen at *compile* time, and the arm64
+  libraries shipped before that flag contained **zero** `sdot`/`smmla`
+  instructions (measured with `llvm-objdump`), i.e. every Q8_0 matmul ran the
+  plain-NEON path. Consequence to state plainly: the arm64 APK now requires an
+  **i8mm-capable** CPU (armv8.6-a, ~2021+ SoCs); older arm64 devices fault.
+  `build_native_android.sh` re-checks `sdot`/`smmla` in `libcrispembed.so` and
+  fails the build if the option stops reaching the kernels.
   Before any artifact is uploaded, `scripts/ci/verify_apk_native.py` checks
   every `lib/arm64-v8a/*.so` for `PT_LOAD` `p_align >= 16K` with
   offset≡vaddr (mod 16K), full `DT_NEEDED` closure and required exports, and

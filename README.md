@@ -39,6 +39,9 @@ Tap the version seven times in Settings to open benchmarks using your own audio.
 
 - Flutter 3.47.x (stable), Dart 3.13.x
 - Android SDK for building/running
+- Android devices: arm64 with `i8mm` (armv8.6-a, roughly 2021 and newer SoCs).
+  Release APKs compile ggml with `-march=armv8.6-a+dotprod+fp16+i8mm`; older
+  arm64 CPUs fault instead of running slower.
 
 ## Commands
 

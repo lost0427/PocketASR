@@ -79,6 +79,22 @@ ANDROID_ABI="arm64-v8a"
 ANDROID_API="24"                            # minSdk floor, unchanged
 PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 
+# ggml picks its ARM kernels at COMPILE time (the int8 matmul paths are gated on
+# __ARM_FEATURE_DOTPROD / __ARM_FEATURE_MATMUL_INT8 / __ARM_FEATURE_FP16_*
+# in src/ggml-cpu/arch/arm), and ggml appends `-march=$GGML_CPU_ARM_ARCH`
+# verbatim to the ggml-cpu target (src/ggml-cpu/CMakeLists.txt:177 of the pinned
+# CrispEmbed ggml 0714117…). Without it the NDK default — plain armv8-a — is
+# used: the vdotq_s32/vmmlaq_s32 intrinsics do not even *compile* there, and the
+# arm64 libraries shipped so far were verified with llvm-objdump to contain ZERO
+# sdot / smmla instructions, i.e. every Q8_0 matmul ran the slow NEON path.
+# CrispASR's pinned ggml (5049ebb…) is a different commit and is not verified to
+# know this option; cmake ignores an unknown cache var, so it silently stays at
+# the baseline there rather than failing. Targets that consume no ggml at all
+# (native/decode) ignore it too.
+# Cost of the choice: the APK's arm64 floor rises to armv8.6-a (i8mm, ~2021+
+# SoCs). Devices without it would fault on these kernels.
+GGML_CPU_ARM_ARCH_ANDROID="armv8.6-a+dotprod+fp16+i8mm"
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/android/app/src/main/jniLibs/$ANDROID_ABI}"
 # Stable work dir under ROOT (not mktemp): ccache keys on absolute source
@@ -125,6 +141,7 @@ TOOLCHAIN="$NDK/build/cmake/android.toolchain.cmake"
 BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 READELF="$BIN/llvm-readelf"
+OBJDUMP="$BIN/llvm-objdump"
 # OpenMP is a clang resource-dir artifact, NOT a sysroot library:
 #   <resource-dir>/lib/linux/aarch64/libomp.so
 # (libc++_shared.so, by contrast, really does live in the sysroot.) The
@@ -139,6 +156,7 @@ common_cmake=(
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
   -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS"
+  -DGGML_CPU_ARM_ARCH="$GGML_CPU_ARM_ARCH_ANDROID"
 )
 if [ "$USE_CCACHE" = "1" ]; then
   common_cmake+=(
@@ -224,6 +242,30 @@ for dep in libc++_shared.so libomp.so; do
   log "staging NDK runtime dependency $dep"
   cp -Lf "$src" "$OUT/$dep"
 done
+
+# --- ARM ISA gate: the -march above must really reach ggml's kernels. A pinned
+# tree that stops honoring GGML_CPU_ARM_ARCH, or a configure that quietly drops
+# it, would put every Q8_0 matmul back on the armv8-a path with nothing in the
+# ELF to show for it — the previous release shipped exactly that state. Fail
+# closed on the engine whose ggml option is verified; only report the other.
+arm_isa_report() { # so required|optional
+  local so="$1" required="$2" mnemonic dump
+  dump="$WORK/$(basename "$so").dis"
+  "$OBJDUMP" -d --no-show-raw-insn "$so" > "$dump"
+  for mnemonic in sdot smmla; do
+    if grep -qE "\b${mnemonic}\b" "$dump"; then
+      log "$(basename "$so"): $mnemonic kernels present"
+    elif [ "$required" = "required" ]; then
+      log "FATAL: $(basename "$so") has no '$mnemonic': GGML_CPU_ARM_ARCH=$GGML_CPU_ARM_ARCH_ANDROID did not reach ggml's kernels"
+      exit 1
+    else
+      log "NOTE: $(basename "$so") has no '$mnemonic' (its pinned ggml may predate GGML_CPU_ARM_ARCH)"
+    fi
+  done
+}
+
+arm_isa_report "$OUT/libcrispembed.so" required
+arm_isa_report "$OUT/libcrispasr.so" optional
 
 log "staged:"
 ls -l "$OUT"
