@@ -126,11 +126,19 @@ class SearchRepo {
   /// Embeds [query] with the configured [Embedder]'s *query* prompt
   /// ([Embedder.embedQuery]) — awaited, because the production embedder runs
   /// the native encode on its worker isolate — and ranks stored vectors by
-  /// cosine similarity. Rows from a different model/dimension are skipped, so
-  /// a half-migrated table cannot mix incomparable vectors, and rows whose
-  /// blob is shorter than `dim` floats are skipped as not-indexable. Returns
-  /// nothing when no embedder is configured. Trash scoping works as in
+  /// cosine similarity. A transcript holds one row per chunk and is scored by
+  /// its *best* chunk: "does this transcript contain the answer" is a maximum
+  /// over its parts, and averaging them would let a mostly-unrelated transcript
+  /// dilute its one relevant passage. Rows from a different model/dimension are
+  /// skipped, so a half-migrated table cannot mix incomparable vectors, and rows
+  /// whose blob is shorter than `dim` floats are skipped as not-indexable.
+  /// Returns nothing when no embedder is configured. Trash scoping works as in
   /// [searchLiteral].
+  ///
+  /// ponytail: the scan is per chunk row, and each row carries the transcript's
+  /// full text, so a large history re-reads text it already has. Select only
+  /// `vec` here and fetch the top-K transcripts by id once this shows up in a
+  /// profile — the query embed dominates today.
   Future<List<Transcript>> searchSemantic(
     String query, {
     int topK = 20,
@@ -150,6 +158,9 @@ class SearchRepo {
 
     final index = EmbeddingIndex(embedder.dim);
     final byId = <int, Transcript>{};
+    // Index key -> transcript id: the index scores rows, the fold below turns
+    // those scores into one answer per transcript.
+    final owners = <int>[];
     for (final row in rows) {
       final blob = row['vec'] as Uint8List;
       if (blob.lengthInBytes < embedder.dim * 4) continue; // truncated blob
@@ -158,14 +169,21 @@ class SearchRepo {
         embedder.dim,
       );
       final id = row['transcript_id'] as int;
-      index.put(id, vector);
-      byId[id] = transcriptFromRow(row);
+      index.put(owners.length, vector);
+      owners.add(id);
+      byId.putIfAbsent(id, () => transcriptFromRow(row));
     }
 
     final queryVector = await embedder.embedQuery(query);
-    return [
-      for (final hit in index.search(queryVector, topK: topK)) byId[hit.id]!,
-    ];
+    final best = <int, double>{};
+    for (final hit in index.search(queryVector, topK: owners.length)) {
+      final id = owners[hit.id];
+      final score = best[id];
+      if (score == null || hit.score > score) best[id] = hit.score;
+    }
+    final ranked = best.keys.toList()
+      ..sort((a, b) => best[b]!.compareTo(best[a]!));
+    return [for (final id in ranked.take(topK)) byId[id]!];
   }
 
   static List<String> _terms(String query) =>

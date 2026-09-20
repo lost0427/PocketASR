@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../core/text/text_chunker.dart';
 import '../engine/embedder.dart';
 import 'db.dart';
 
@@ -58,14 +59,13 @@ class SemanticIndexer {
   /// Re-indexes from scratch for *this model*: the rows tagged with this
   /// model's id are deleted first, then every stored transcript is re-embedded.
   ///
-  /// Isolation ceiling (schema, not accident): `embedding` has
-  /// `transcript_id` as its primary key — one vector per transcript, total.
-  /// Indexing a transcript with this model therefore *replaces* whatever
-  /// other model's vector it held. Queries stay strictly model-filtered, so a
-  /// replaced/foreign vector can never answer a query from the wrong model.
-  /// ponytail: two models coexisting needs a `PRIMARY KEY (transcript_id,
-  /// model)` migration in db.dart — out of this lane's ownership; add it when
-  /// model switching stops being rare enough to re-embed.
+  /// Isolation ceiling (a choice, not the schema): one model owns the index at a
+  /// time — [indexTranscript] deletes a transcript's rows outright, whichever
+  /// model wrote them, so switching replaces rather than coexists. Queries stay
+  /// strictly model-filtered, so a foreign vector can never answer a query from
+  /// the wrong model. ponytail: coexisting models need `model` in the primary
+  /// key and a `WHERE model = ?` on that delete; add it when model switching
+  /// stops being rare enough to re-embed.
   Future<void> rebuild() => _enqueue(() async {
     _db.execute('DELETE FROM embedding WHERE model = ?', [_embedder.id]);
     await _runPending();
@@ -118,10 +118,13 @@ class SemanticIndexer {
   }
 
   Future<void> _runPending() async {
+    // NOT EXISTS rather than LEFT JOIN: a transcript holds one row per chunk, so
+    // a join would list a transcript once per row of a *foreign* model's index
+    // and re-embed it that many times per pass.
     final pending = _db.select(
       'SELECT t.id, t.text FROM transcript t '
-      'LEFT JOIN embedding e ON e.transcript_id = t.id AND e.model = ? '
-      'WHERE e.transcript_id IS NULL '
+      'WHERE NOT EXISTS (SELECT 1 FROM embedding e '
+      'WHERE e.transcript_id = t.id AND e.model = ?) '
       'ORDER BY t.id',
       [_embedder.id],
     );
@@ -134,11 +137,23 @@ class SemanticIndexer {
   }
 
   Future<void> _embedAndStore(int id, String text) async {
-    final vector = await _embedder.embedDocument(text);
-    // A model switch or AppState teardown may have landed while the worker was
-    // encoding: a stale job must not write into the (now other model's) index.
-    if (_disposed) return;
-    _check(vector);
+    // One row per chunk, so a long transcript is never encoded as a single
+    // sequence: that costs ~3x more on the measured model (attention is
+    // quadratic) and the native tokenizer silently drops everything past the
+    // model's context length, which would make a transcript's tail unsearchable.
+    final chunks = chunkForEmbedding(text);
+    if (chunks.isEmpty) return; // nothing searchable: stays unvectorized
+
+    final vectors = <Float32List>[];
+    for (final chunk in chunks) {
+      final vector = await _embedder.embedDocument(chunk);
+      // A model switch or AppState teardown may have landed while the worker was
+      // encoding: a stale job must not write into the (now other model's) index.
+      if (_disposed) return;
+      _check(vector);
+      vectors.add(vector);
+    }
+
     _db.execute('BEGIN');
     try {
       // Re-check existence inside the transaction: the transcript may have
@@ -150,24 +165,22 @@ class SemanticIndexer {
         _db.execute('ROLLBACK');
         return;
       }
-      final blob = vector.buffer.asUint8List(
-        vector.offsetInBytes,
-        vector.lengthInBytes,
-      );
-      _db.execute(
-        'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
-        'VALUES(?,?,?,?,?) '
-        'ON CONFLICT(transcript_id) DO UPDATE SET dim = excluded.dim, '
-        'vec = excluded.vec, model = excluded.model, '
-        'created_at = excluded.created_at',
-        [
-          id,
-          _embedder.dim,
-          blob,
-          _embedder.id,
-          DateTime.now().millisecondsSinceEpoch,
-        ],
-      );
+      // Replace this transcript's rows wholesale: editing the text shorter
+      // would otherwise leave orphaned high ordinals searchable.
+      _db.execute('DELETE FROM embedding WHERE transcript_id = ?', [id]);
+      final created = DateTime.now().millisecondsSinceEpoch;
+      for (var chunk = 0; chunk < vectors.length; chunk++) {
+        final vector = vectors[chunk];
+        final blob = vector.buffer.asUint8List(
+          vector.offsetInBytes,
+          vector.lengthInBytes,
+        );
+        _db.execute(
+          'INSERT INTO embedding(transcript_id, chunk, dim, vec, model, '
+          'created_at) VALUES(?,?,?,?,?,?)',
+          [id, chunk, _embedder.dim, blob, _embedder.id, created],
+        );
+      }
       _db.execute('COMMIT');
     } catch (_) {
       _db.execute('ROLLBACK');

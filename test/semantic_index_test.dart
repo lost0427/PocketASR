@@ -217,10 +217,10 @@ void main() {
       );
     });
 
-    test('ceiling: one vector per transcript, the active model takes over live rows', () async {
-      // `embedding` is keyed by transcript_id alone (db.dart schema), so two
-      // models cannot coexist on one live row: fake-a's pending pass replaces
-      // the foreign vector. Fails loudly if the PK becomes composite.
+    test('ceiling: one model owns the index, replacing live rows on switch', () async {
+      // The index is single-model by choice, not by key: indexing a transcript
+      // deletes its rows outright (whatever model wrote them) before inserting.
+      // Fails loudly if that delete is dropped.
       final lunch = transcripts.insert(
         title: 'L',
         text: 'beef noodles for lunch',
@@ -235,6 +235,75 @@ void main() {
 
       expect(embeddingCount(model: 'other-model'), 0);
       expect(embeddingCount(model: 'fake-a'), 1);
+    });
+
+    test('a long transcript is one row per chunk, tail included', () async {
+      // Each paragraph is 400 estimated tokens, so at the 512 default the three
+      // paragraphs become three chunks — and a query matching only the last one
+      // still finds the transcript. Before chunking, one native encode saw the
+      // whole text and the model's context length cut the tail off silently.
+      final chunked = transcripts.insert(
+        title: 'Long',
+        text: '${'甲' * 400}\n${'乙' * 400}\n${'丙' * 400}',
+      );
+      final other = transcripts.insert(title: 'Other', text: '丁' * 400);
+      embedder.custom = (text) =>
+          text.contains('丙') || text == 'query' ? _v2(1, 0) : _v2(0, 1);
+
+      await indexer.indexPending();
+
+      expect(embedder.documentTexts, hasLength(4)); // 3 chunks + other
+      expect(embedder.documentTexts.where((t) => t.contains('丙')), hasLength(1));
+      expect(embeddingCount(), 4);
+      expect(
+        db.db.select(
+          'SELECT chunk FROM embedding WHERE transcript_id = ? ORDER BY chunk',
+          [chunked],
+        ).map((row) => row['chunk']),
+        [0, 1, 2],
+      );
+      final hits = await search.searchSemantic('query');
+      expect(hits.first.id, chunked); // its best chunk, not its average
+      expect(hits.map((t) => t.id), contains(other));
+      embedder.custom = null;
+    });
+
+    test('a transcript is scored by its best chunk, not an average', () async {
+      final split = transcripts.insert(title: 'S', text: 'three chunks');
+      final exact = transcripts.insert(title: 'E', text: 'one chunk');
+      void putChunk(int id, int chunk, Float32List vector) {
+        db.db.execute(
+          'INSERT INTO embedding(transcript_id, chunk, dim, vec, model, '
+          'created_at) VALUES(?,?,?,?,?,?)',
+          [
+            id,
+            chunk,
+            2,
+            vector.buffer.asUint8List(
+              vector.offsetInBytes,
+              vector.lengthInBytes,
+            ),
+            'fake-a',
+            0,
+          ],
+        );
+      }
+
+      // Hand-seeded dim-2 geometry: `split` holds one perfect chunk among three,
+      // `exact` a single 45-degree one. Max-folding scores them 1.0 vs 0.707;
+      // averaging `split` would score its mean (1/3, 2/3) at 0.447, below
+      // `exact`, so the expected order fails if the fold ever averages.
+      putChunk(split, 0, _v2(0, 1));
+      putChunk(split, 1, _v2(1, 0));
+      putChunk(split, 2, _v2(0, 1));
+      putChunk(exact, 0, _v2(1, 1));
+      embedder.custom = (text) => _v2(1, 0); // the query is (1,0)
+
+      expect(
+        (await search.searchSemantic('query')).map((t) => t.id),
+        [split, exact],
+      );
+      embedder.custom = null;
     });
 
     test(

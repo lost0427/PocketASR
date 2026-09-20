@@ -1,7 +1,7 @@
 import 'package:sqlite3/sqlite3.dart';
 
 /// On-disk schema version, tracked with `PRAGMA user_version`.
-const int schemaVersion = 1;
+const int schemaVersion = 2;
 
 /// Opens the app's SQLite database and brings it up to [schemaVersion].
 ///
@@ -57,6 +57,7 @@ void _migrate(Database db) {
   db.execute('BEGIN');
   try {
     if (version < 1) db.execute(_schemaV1);
+    if (version < 2) db.execute(_migrationV2);
     db.execute('PRAGMA user_version = $schemaVersion');
     db.execute('COMMIT');
   } catch (_) {
@@ -134,4 +135,27 @@ CREATE TRIGGER transcript_au AFTER UPDATE ON transcript BEGIN
   INSERT INTO transcript_fts(rowid, text, title)
     VALUES (new.id, new.text, new.title);
 END;
+''';
+
+// v2: one row per text chunk instead of one mean vector per transcript. A long
+// transcript holds many chunks, and search scores a transcript by its best
+// chunk, so the chunk ordinal has to join the primary key — and SQLite cannot
+// alter a primary key in place.
+//
+// The upgrade drops the old rows rather than rewriting them: a vector is
+// derived from `transcript.text` and nothing else references the table, so
+// losing it loses no information. `SemanticIndexer.indexPending` re-embeds
+// every row on the next launch, which is what "rebuild the index" means.
+const String _migrationV2 = '''
+DROP TABLE embedding;
+
+CREATE TABLE embedding(
+  transcript_id INTEGER NOT NULL REFERENCES transcript(id) ON DELETE CASCADE,
+  chunk INTEGER NOT NULL DEFAULT 0,
+  dim INTEGER NOT NULL,
+  vec BLOB NOT NULL,
+  model TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (transcript_id, chunk)
+);
 ''';

@@ -5,7 +5,8 @@ import 'dart:typed_data';
 class EmbeddingHit {
   const EmbeddingHit(this.id, this.score);
 
-  /// Caller-defined row id (the transcript id).
+  /// Caller-defined row id, exactly as passed to [put] (a transcript id for
+  /// per-transcript vectors, a chunk row key for chunked ones).
   final int id;
 
   /// Cosine similarity in [-1, 1]; higher is closer.
@@ -18,8 +19,13 @@ class EmbeddingHit {
 /// The database stays the source of truth: rebuild the index from stored rows
 /// per query (plan Phase 8).
 ///
-/// ponytail: O(n) scan, ~10 ms at n=10k. Add IVF/quantization only when the
-/// index exceeds ~20k rows or queries become visibly janky — no vector DB now.
+/// Callers choose the id space: [SearchRepo] keys one entry per *chunk* row and
+/// folds the scores into transcripts itself, so [length] counts chunks, not
+/// transcripts.
+///
+/// ponytail: O(n) scan, ~10 ms at n=10k. A chunked history multiplies n by the
+/// chunks per transcript, so revisit IVF/quantization (or a two-stage
+/// transcript-then-chunk scan) around ~50k rows — no vector DB now.
 class EmbeddingIndex {
   EmbeddingIndex(this.dim);
 

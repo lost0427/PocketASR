@@ -162,4 +162,54 @@ void main() {
 
     expect(() => AppDatabase.open(path: path), throwsA(isA<StateError>()));
   });
+
+  test('a v1 index migrates to per-chunk rows and drops the old vectors', () {
+    final dir = Directory.systemTemp.createTempSync('pocket_asr_db_v1');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/v1.db';
+
+    // A v1 database, carrying only the table the v2 step touches: the upgrade
+    // drops and recreates `embedding`, so nothing else has to be present.
+    final raw = sqlite3.open(path);
+    raw.execute('CREATE TABLE transcript(id INTEGER PRIMARY KEY)'); // FK target
+    raw.execute('INSERT INTO transcript(id) VALUES(1)');
+    raw.execute(
+      'CREATE TABLE embedding('
+      'transcript_id INTEGER PRIMARY KEY, dim INTEGER NOT NULL, '
+      'vec BLOB NOT NULL, model TEXT NOT NULL, created_at INTEGER NOT NULL)',
+    );
+    raw.execute(
+      'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
+      'VALUES(1, 2, ?, ?, 0)',
+      [Uint8List(8), 'old-model'],
+    );
+    raw.execute('PRAGMA user_version = 1');
+    raw.close();
+
+    final migrated = AppDatabase.open(path: path);
+    addTearDown(migrated.close);
+
+    expect(
+      migrated.db
+          .select('PRAGMA user_version')
+          .first
+          .values
+          .first,
+      schemaVersion,
+    );
+    // Derived data: the stale mean vector is gone, so the next indexPending
+    // pass re-embeds every transcript.
+    expect(migrated.db.select('SELECT * FROM embedding'), isEmpty);
+    // The ordinal now belongs to the key, and the old 5-column insert still
+    // works (ordinal defaults to 0) for a transcript that fits one chunk.
+    migrated.db.execute(
+      'INSERT INTO embedding(transcript_id, dim, vec, model, created_at) '
+      'VALUES(1, 2, ?, ?, 0)',
+      [Uint8List(8), 'new-model'],
+    );
+    expect(
+      migrated.db.select('SELECT chunk FROM embedding').single['chunk'],
+      0,
+    );
+  });
 }
