@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "pocketasr_chain.h"
+#include "pocketasr_wav.h"
 
 #define DR_MP3_IMPLEMENTATION
 #define DR_WAV_IMPLEMENTATION
@@ -218,4 +219,51 @@ Java_com_pocketasr_pocket_1asr_NativeDecode_chainAbort(JNIEnv *env,
   (void)env;
   (void)clazz;
   pocketasr_chain_abort((intptr_t)handle);
+}
+
+/*
+ * Splits the raw chain output into one chunk WAV. Spans are jlong, which is
+ * int64_t on every JNI platform, so the arrays pass straight through.
+ */
+JNIEXPORT jlong JNICALL
+Java_com_pocketasr_pocket_1asr_NativeDecode_writeWav(
+    JNIEnv *env, jclass clazz, jstring source, jstring destination,
+    jlongArray starts, jlongArray ends, jint sample_rate, jint fmt) {
+  (void)clazz;
+  if (!starts || !ends) return POCKETASR_ERR_ARG;
+  jsize count = (*env)->GetArrayLength(env, starts);
+  if ((*env)->GetArrayLength(env, ends) != count) return POCKETASR_ERR_ARG;
+
+  const char *src = (*env)->GetStringUTFChars(env, source, NULL);
+  if (!src) return POCKETASR_ERR;
+  const char *dst = (*env)->GetStringUTFChars(env, destination, NULL);
+  if (!dst) {
+    (*env)->ReleaseStringUTFChars(env, source, src);
+    return POCKETASR_ERR;
+  }
+
+  long rc = POCKETASR_ERR_ARG;
+  int64_t *spans = NULL;
+  if (count == 0) {
+    rc = pocketasr_write_wav(src, dst, NULL, NULL, 0, (int)fmt,
+                             (int)sample_rate);
+  } else {
+    /* Two arrays of count spans; freed below. */
+    spans = (int64_t *)malloc((size_t)count * 2 * sizeof(int64_t));
+    if (spans) {
+      (*env)->GetLongArrayRegion(env, starts, 0, count, (jlong *)spans);
+      (*env)->GetLongArrayRegion(env, ends, 0, count, (jlong *)(spans + count));
+      if (!(*env)->ExceptionCheck(env)) {
+        rc = pocketasr_write_wav(src, dst, spans, spans + count, (int)count,
+                                 (int)fmt, (int)sample_rate);
+      } else {
+        (*env)->ExceptionClear(env);
+      }
+      free(spans);
+    }
+  }
+
+  (*env)->ReleaseStringUTFChars(env, destination, dst);
+  (*env)->ReleaseStringUTFChars(env, source, src);
+  return (jlong)rc;
 }

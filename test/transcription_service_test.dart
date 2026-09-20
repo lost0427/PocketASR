@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_buffer.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
@@ -187,6 +188,8 @@ AudioBuffer _stereoLevels() {
 const _oneSecondFixed = ChunkSettings(chunkSeconds: 1, maxSpeechSeconds: 1);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('default windows bound ASR input and remove previous chunks', () async {
     final engine = _ChunkedEngine(List.generate(3, (_) => const [
       TranscribeProgress(elapsed: Duration(milliseconds: 1), ratio: 1, partialText: 'speech'),
@@ -395,6 +398,72 @@ void main() {
 
     // The whole temp directory (not just the chunk files) is gone.
     expect(File(engine.requests.first).parent.existsSync(), isFalse);
+  });
+
+  test('Android cuts each chunk WAV natively from the raw chain file', () async {
+    const channel = MethodChannel('pocket_asr/audio_decode_native_test');
+    final methods = <String>[];
+    // Mirrors the native side: decodeToPcm leaves the raw f32 in the job
+    // directory, writeWav copies the requested sample spans into a WAV.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      methods.add(call.method);
+      final args = call.arguments as Map;
+      if (call.method == 'decodeToPcm') {
+        final dir = Directory(args['outputDirectory'] as String);
+        final data = ByteData(4 * 32000);
+        for (var i = 0; i < 32000; i++) {
+          data.setFloat32(4 * i, i < 16000 ? 0.25 : 0.5, Endian.little);
+        }
+        final pcm = File('${dir.path}${Platform.pathSeparator}decoded.f32')
+          ..writeAsBytesSync(data.buffer.asUint8List());
+        return {'path': pcm.path, 'sampleRate': 16000, 'count': 32000};
+      }
+      final bytes = File(args['source'] as String).readAsBytesSync();
+      final source = Float32List.view(
+        bytes.buffer,
+        bytes.offsetInBytes,
+        bytes.lengthInBytes ~/ 4,
+      );
+      final starts = args['starts'] as List;
+      final ends = args['ends'] as List;
+      final samples = <double>[
+        for (var i = 0; i < starts.length; i++)
+          ...source.sublist(starts[i] as int, ends[i] as int),
+      ];
+      File(args['destination'] as String).writeAsBytesSync(
+        encodePcm16Wav(Float32List.fromList(samples), 16000),
+      );
+      return samples.length;
+    });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    final engine = _ChunkedEngine(List.generate(2, (_) => const [
+      TranscribeProgress(
+        elapsed: Duration(milliseconds: 1),
+        ratio: 1,
+        partialText: 'speech',
+      ),
+    ]));
+    final result = await TranscriptionService(
+      engine: engine,
+      source: FileAudioSource(channel: channel, usesNativeDecoder: () => true),
+    ).transcribe(
+      audioPath: 'content://media/external/audio/7',
+      model: const EngineModelSpec(path: 'model.gguf'),
+      chunkSettings: _oneSecondFixed,
+    );
+
+    // One decode, then one native cut per window — never Dart writeWave.
+    expect(methods, ['decodeToPcm', 'writeWav', 'writeWav']);
+    expect(engine.chunkSamples[0], hasLength(16000));
+    expect(engine.chunkSamples[0].first, 0.25);
+    expect(engine.chunkSamples[1], hasLength(16000));
+    expect(engine.chunkSamples[1].first, 0.5);
+    expect(result.text, 'speech speech');
   });
 
   test('empty chunks are skipped without losing text or elapsed time', () async {

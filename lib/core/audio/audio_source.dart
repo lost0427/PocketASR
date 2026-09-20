@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 
 import 'audio_buffer.dart';
+import 'chunk_planner.dart';
 import 'wav.dart';
 import 'pcm_file.dart';
 import 'ffmpeg_decoder.dart';
@@ -170,6 +171,34 @@ class FileAudioSource implements AudioSource {
   Future<AudioBuffer> read(String path) async {
     if (usesNativeDecoder()) return _readNative(path);
     return _decodeWavFile(path, decoder);
+  }
+
+  /// Cuts one chunk WAV from the raw chain float32 file at [source].
+  ///
+  /// [spans] are half-open ranges concatenated in order. Android does the
+  /// whole cut natively — the same file is read once per window, so a Dart
+  /// per-sample pass per window is what made chunking slow.
+  Future<void> writeChunkWav(
+    String source,
+    String destination,
+    List<AudioChunk> spans, {
+    int sampleRate = 16000,
+  }) async {
+    if (!usesNativeDecoder()) {
+      throw UnsupportedError('Chunk splitting needs the Android decoder');
+    }
+    final result = await channel.invokeMethod<Object?>('writeWav', {
+      'source': source,
+      'destination': destination,
+      'starts': [for (final span in spans) span.startSampleAt(sampleRate)],
+      'ends': [for (final span in spans) span.endSampleAt(sampleRate)],
+      'sampleRate': sampleRate,
+    });
+    if (result is! int ||
+        result <= 0 ||
+        await File(destination).length() != 44 + result * 2) {
+      throw const FormatException('Invalid native chunk write response');
+    }
   }
 
   Future<AudioBuffer> _readNative(String path) async {

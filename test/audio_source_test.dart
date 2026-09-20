@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
+import 'package:pocket_asr/core/audio/chunk_planner.dart';
 import 'package:pocket_asr/core/audio/wav.dart';
 
 const _channel = MethodChannel('pocket_asr/audio_decode_test');
@@ -346,5 +347,57 @@ void main() {
       throwsFormatException,
     );
     expect(foreign.existsSync(), isTrue, reason: 'not ours to delete');
+  });
+
+  test('writeChunkWav sends sample spans and checks the written size', () async {
+    final out = File('${dir.path}${Platform.pathSeparator}chunk.wav');
+    const spans = [
+      AudioChunk(
+        start: Duration(milliseconds: 100),
+        end: Duration(milliseconds: 250),
+      ),
+      AudioChunk(start: Duration(seconds: 2), end: Duration(milliseconds: 2050)),
+    ];
+    mock((call) async {
+      calls.add(call);
+      out.writeAsBytesSync(Uint8List(44 + 3200 * 2)); // 2400 + 800 samples
+      return 3200;
+    });
+
+    await nativeSource().writeChunkWav('src.f32', out.path, spans);
+
+    expect(calls.single.method, 'writeWav');
+    expect(calls.single.arguments, {
+      'source': 'src.f32',
+      'destination': out.path,
+      'starts': [1600, 32000],
+      'ends': [4000, 32800],
+      'sampleRate': 16000,
+    });
+  });
+
+  test('writeChunkWav rejects a size the native reply does not match', () async {
+    final out = File('${dir.path}${Platform.pathSeparator}short.wav')
+      ..writeAsBytesSync(Uint8List(44 + 4));
+    mock((call) async => 3200);
+
+    await expectLater(
+      nativeSource().writeChunkWav('src.f32', out.path, const [
+        AudioChunk(start: Duration.zero, end: Duration(milliseconds: 100)),
+      ]),
+      throwsFormatException,
+    );
+  });
+
+  test('writeChunkWav needs the native decoder', () async {
+    await expectLater(
+      FileAudioSource(
+        channel: _channel,
+        usesNativeDecoder: () => false,
+      ).writeChunkWav('src.f32', 'out.wav', const [
+        AudioChunk(start: Duration.zero, end: Duration(milliseconds: 10)),
+      ]),
+      throwsUnsupportedError,
+    );
   });
 }

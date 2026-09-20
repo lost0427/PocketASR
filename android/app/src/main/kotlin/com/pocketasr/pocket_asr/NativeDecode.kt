@@ -63,4 +63,18 @@ object NativeDecode {
     external fun chainEnd(handle: Long): Long
 
     external fun chainAbort(handle: Long)
+
+    /**
+     * Writes the concatenated [starts, ends) sample ranges of the raw chain
+     * output at [source] as a canonical mono 16-bit WAV at [destination].
+     * [format] is a FMT_* value. Returns the sample count, or a negative code.
+     */
+    external fun writeWav(
+        source: String,
+        destination: String,
+        starts: LongArray,
+        ends: LongArray,
+        sampleRate: Int,
+        format: Int,
+    ): Long
 }

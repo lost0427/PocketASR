@@ -34,8 +34,12 @@ import kotlin.math.max
  * AGC chain, which writes little-endian float32 into a temp file in the job
  * directory. Only metadata crosses the channel; bulk PCM never does. The reply
  * also carries `decodeMicros`, the native wall time of the decode, which the
- * benchmark page compares across `decoderBackend` values. On failure the temp
- * file is deleted and every native resource is released.
+ * benchmark page compares across `decoderBackend` values.
+ *
+ * Method `writeWav{source, destination, starts, ends, sampleRate}` cuts one
+ * chunk WAV out of that float32 output natively, per window.
+ *
+ * On failure the temp file is deleted and every native resource is released.
  */
 class AudioDecodeChannel(
     messenger: BinaryMessenger,
@@ -82,10 +86,64 @@ class AudioDecodeChannel(
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method != "decodeToPcm") {
-            result.notImplemented()
+        when (call.method) {
+            "decodeToPcm" -> handleDecode(call, result)
+            "writeWav" -> handleWriteWav(call, result)
+            else -> result.notImplemented()
+        }
+    }
+
+    /**
+     * Concatenates ranges of the raw chain output into one chunk WAV. Native
+     * because a long recording writes one WAV per window: a Dart per-sample
+     * pass per window is what made chunking slow.
+     */
+    private fun handleWriteWav(call: MethodCall, result: MethodChannel.Result) {
+        val source = call.argument<String>("source")
+        val destination = call.argument<String>("destination")
+        val sampleRate = call.argument<Int>("sampleRate")
+        val starts = call.argument<List<*>>("starts")
+        val ends = call.argument<List<*>>("ends")
+        if (source.isNullOrBlank() || destination.isNullOrBlank() ||
+            sampleRate == null || sampleRate <= 0 ||
+            starts == null || ends == null || starts.size != ends.size
+        ) {
+            result.error("bad_args", "source, destination, sampleRate and spans are required", null)
             return
         }
+        if (!NativeDecode.available) {
+            result.error("write_failed", "Native decoder library is unavailable", null)
+            return
+        }
+        executor.execute {
+            try {
+                requireAppFile(destination)
+                val from = LongArray(starts.size) { (starts[it] as Number).toLong() }
+                val to = LongArray(ends.size) { (ends[it] as Number).toLong() }
+                val count = NativeDecode.writeWav(
+                    source, destination, from, to, sampleRate, NativeDecode.FMT_F32,
+                )
+                if (count < 0) throw IOException("Chunk write failed (code=$count)")
+                mainHandler.post { result.success(count) }
+            } catch (t: Throwable) {
+                mainHandler.post {
+                    result.error("write_failed", t.message ?: t.javaClass.simpleName, null)
+                }
+            }
+        }
+    }
+
+    /** Rejects paths outside app storage before a native write can touch them. */
+    private fun requireAppFile(path: String): File {
+        val root = context.applicationInfo.dataDir.let { File(it).canonicalFile }
+        val file = File(path).canonicalFile
+        if (!file.path.startsWith(root.path + File.separator)) {
+            throw IOException("Chunk paths must be inside app storage")
+        }
+        return file
+    }
+
+    private fun handleDecode(call: MethodCall, result: MethodChannel.Result) {
         val path = call.argument<String>("path")
         val targetRate = call.argument<Int>("targetSampleRate")
         val decoderPreference = call.argument<String>("decoderPreference") ?: "automatic"
@@ -102,9 +160,8 @@ class AudioDecodeChannel(
             try {
                 val outputDirectory = call.argument<String>("outputDirectory")?.let { File(it) }
                     ?: context.cacheDir
-                val root = context.applicationInfo.dataDir.let { File(it).canonicalFile }
-                val directory = outputDirectory.canonicalFile
-                if (!directory.isDirectory || !directory.path.startsWith(root.path + File.separator)) {
+                val directory = requireAppFile(outputDirectory.absolutePath)
+                if (!directory.isDirectory) {
                     throw IOException("PCM output directory must be inside app storage")
                 }
                 val started = System.nanoTime()

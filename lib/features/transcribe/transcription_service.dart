@@ -99,6 +99,27 @@ class TranscriptionService {
     );
   }
 
+  /// Chunk cutting runs natively when the decoded PCM is the raw chain file
+  /// (Android); tests and desktop keep the Dart writer.
+  Future<void> _writeChunk(
+    PcmFile audio,
+    File file,
+    List<AudioChunk> spans,
+    bool Function()? isCancelled,
+  ) async {
+    final source = _source;
+    if (source is FileAudioSource && source.usesNativeDecoder()) {
+      await source.writeChunkWav(
+        audio.path,
+        file.path,
+        spans,
+        sampleRate: audio.sampleRate,
+      );
+      return;
+    }
+    await audio.writeWave(file, spans: spans, isCancelled: isCancelled);
+  }
+
   /// Runs one file through [engine].
   ///
   /// When [chunkSettings] is given, the normalized PCM is sliced per
@@ -226,11 +247,7 @@ class TranscriptionService {
         final window = windows[i];
         final chunkUs = math.max(1, _windowSpeechUs(window));
         final file = File('${dir.path}${Platform.pathSeparator}chunk$i.wav');
-        await audio.writeWave(
-          file,
-          spans: window,
-          isCancelled: isCancelled,
-        );
+        await _writeChunk(audio, file, window, isCancelled);
         TranscribeProgress? last;
         await for (final progress in engine.transcribe(
           TranscribeRequest(

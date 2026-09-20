@@ -23,6 +23,7 @@ set(SPEEXDSP_SOURCES
 add_library(pocketasr_decode SHARED
   src/pocketasr_chain.c
   src/pocketasr_decode.c
+  src/pocketasr_wav.c
   ${SPEEXDSP_SOURCES}
 )
 
@@ -63,4 +64,14 @@ if(POCKETASR_BUILD_TESTS)
   )
   target_compile_definitions(pocketasr_chain_test PRIVATE HAVE_CONFIG_H)
   target_link_libraries(pocketasr_chain_test PRIVATE m)
+
+  # WAV writer has no SpeexDSP dependency, so it builds on its own.
+  add_executable(pocketasr_wav_test
+    test/wav_test.c
+    src/pocketasr_wav.c
+  )
+  target_include_directories(pocketasr_wav_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(pocketasr_wav_test PRIVATE m)
 endif()
