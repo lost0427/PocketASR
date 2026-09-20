@@ -383,6 +383,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyIndexRebuild => 'Rebuild index';
 
   @override
+  String historyIndexChunks(int done, int total) {
+    return '$done/$total chunks';
+  }
+
+  @override
+  String historyIndexSpeed(int rate) {
+    return '$rate chars/s';
+  }
+
+  @override
+  String historyIndexEta(String clock) {
+    return '~$clock left';
+  }
+
+  @override
   String get modelsTitle => 'Models';
 
   @override

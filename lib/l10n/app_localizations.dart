@@ -758,6 +758,24 @@ abstract class AppLocalizations {
   /// **'Rebuild index'**
   String get historyIndexRebuild;
 
+  /// No description provided for @historyIndexChunks.
+  ///
+  /// In en, this message translates to:
+  /// **'{done}/{total} chunks'**
+  String historyIndexChunks(int done, int total);
+
+  /// No description provided for @historyIndexSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} chars/s'**
+  String historyIndexSpeed(int rate);
+
+  /// No description provided for @historyIndexEta.
+  ///
+  /// In en, this message translates to:
+  /// **'~{clock} left'**
+  String historyIndexEta(String clock);
+
   /// No description provided for @modelsTitle.
   ///
   /// In en, this message translates to:

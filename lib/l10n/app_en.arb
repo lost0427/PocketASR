@@ -127,6 +127,33 @@
   "historyIndexFailed": "Indexing failed",
   "historyIndexRetry": "Retry",
   "historyIndexRebuild": "Rebuild index",
+  "historyIndexChunks": "{done}/{total} chunks",
+  "@historyIndexChunks": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "historyIndexSpeed": "{rate} chars/s",
+  "@historyIndexSpeed": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "historyIndexEta": "~{clock} left",
+  "@historyIndexEta": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
   "modelsTitle": "Models",
   "modelsBody": "Manage the speech models kept on the device, with size and quantization shown before you download.",
   "modelsDownload": "Download",

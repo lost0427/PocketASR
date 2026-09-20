@@ -74,6 +74,43 @@ class _StaleQueryEmbedder implements Embedder {
 
 Float32List _v(double a, double b) => Float32List.fromList([a, b]);
 
+/// Document embeds that stay pending until [release], so a test can observe the
+/// running status row without depending on wall-clock timing.
+class _HeldEmbedder implements Embedder {
+  @override
+  final String id = 'held-embedder';
+  @override
+  final int dim = 2;
+
+  final List<Completer<void>> _gates = [];
+
+  /// Completes the oldest pending chunk embed.
+  void release() {
+    for (final gate in _gates) {
+      if (!gate.isCompleted) {
+        gate.complete();
+        return;
+      }
+    }
+  }
+
+  @override
+  FutureOr<Float32List> embedDocument(String text) {
+    final gate = Completer<void>();
+    _gates.add(gate);
+    return gate.future.then((_) => _v(1, 0));
+  }
+
+  @override
+  Float32List embed(String text) => _v(1, 0);
+
+  @override
+  FutureOr<Float32List> embedQuery(String text) => _v(1, 0);
+
+  @override
+  Future<void> dispose() async {}
+}
+
 void main() {
   bool alphaAboveBeta(WidgetTester tester) =>
       tester.getTopLeft(find.text('Alpha')).dy <
@@ -216,11 +253,7 @@ void main() {
 
     repo.insert(title: 'WiFi', text: 'connect to the wifi network');
     await tester.runAsync(() => indexer.indexPending());
-    await pumpHistory(
-      tester,
-      searchRepo: semanticSearch,
-      indexer: indexer,
-    );
+    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
 
     await tester.enterText(find.byType(TextField), 'wifi network');
     await tester.pumpAndSettle();
@@ -386,14 +419,11 @@ void main() {
     await tester.tap(find.byTooltip('Copy'));
     await tester.pumpAndSettle();
 
-    expect(
-      copied,
-      [
-        firstIsAboveSecond
-            ? 'first body\n\nsecond body'
-            : 'second body\n\nfirst body',
-      ],
-    );
+    expect(copied, [
+      firstIsAboveSecond
+          ? 'first body\n\nsecond body'
+          : 'second body\n\nfirst body',
+    ]);
     expect(find.text('Copied 2 transcripts to clipboard'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
   });
@@ -465,11 +495,7 @@ void main() {
     // Indexing yields on a real timer, which the widget-test clock does not
     // advance; run it outside the fake-async zone.
     await tester.runAsync(() => indexer.indexPending());
-    await pumpHistory(
-      tester,
-      searchRepo: semanticSearch,
-      indexer: indexer,
-    );
+    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
 
     // The indexing status row offers a rebuild seam.
     expect(find.text('Rebuild index'), findsOneWidget);
@@ -494,11 +520,7 @@ void main() {
     repo.insert(title: 'Alpha', text: 'alpha one');
     repo.insert(title: 'Beta', text: 'beta two');
     await tester.runAsync(() => indexer.indexPending());
-    await pumpHistory(
-      tester,
-      searchRepo: semanticSearch,
-      indexer: indexer,
-    );
+    await pumpHistory(tester, searchRepo: semanticSearch, indexer: indexer);
 
     await tester.tap(find.text('Semantic'));
     await tester.pumpAndSettle();
@@ -550,11 +572,49 @@ void main() {
     await pumpHistory(tester);
 
     expect(
-      find.text('Select a downloaded embedding model to enable semantic search.'),
+      find.text(
+        'Select a downloaded embedding model to enable semantic search.',
+      ),
       findsOneWidget,
     );
     // Literal-only still works; the semantic segment cannot be selected.
     expect(find.text('Literal'), findsOneWidget);
     expect(find.text('Rebuild index'), findsNothing);
+  });
+
+  testWidgets('a running index shows a real progress bar and chunk count', (
+    tester,
+  ) async {
+    final embedder = _HeldEmbedder();
+    final indexer = SemanticIndexer(db, embedder: embedder);
+    addTearDown(indexer.dispose);
+    // Two paragraphs at the 512-token default: two chunks, so the first chunk
+    // finishing leaves the job visibly half done.
+    repo.insert(title: 'Long', text: '${'甲' * 400}\n${'乙' * 400}');
+
+    await pumpHistory(tester, searchRepo: search, indexer: indexer);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    // The embed awaits a real async chain that the widget clock does not
+    // advance, so drive it outside the fake-async zone and pump between steps.
+    late Future<void> job;
+    await tester.runAsync(() async {
+      job = indexer.indexPending();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      embedder.release(); // first chunk lands
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    });
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.textContaining('1/2 chunks'), findsOneWidget);
+    expect(find.textContaining('Indexing transcripts'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      embedder.release(); // second chunk lands, job completes
+      await job;
+    });
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 }

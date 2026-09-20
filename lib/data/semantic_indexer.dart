@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../core/text/text_chunker.dart';
+import '../core/text/token_counter.dart';
 import '../engine/embedder.dart';
 import 'db.dart';
 
@@ -9,6 +10,72 @@ import 'db.dart';
 /// visible [SemanticIndexPhase.failed] with [SemanticIndexer.lastError], never
 /// a fake-empty success.
 enum SemanticIndexPhase { idle, running, failed }
+
+/// Live counters for the indexing job in flight, next to [SemanticIndexer.phase].
+///
+/// Progress is measured in characters, not chunks: the encoder's cost tracks
+/// text length (measured ~7.5 ms per character for the pinned 0.6B model up to
+/// ~1k characters, worse above it), so the bar moves in proportion to real work
+/// and the ETA means something. Every figure is measured — before the first
+/// chunk completes the rates and the ETA are null and the UI shows nothing
+/// rather than a placeholder.
+class SemanticIndexProgress {
+  const SemanticIndexProgress({
+    required this.chunksDone,
+    required this.chunksTotal,
+    required this.graphemesDone,
+    required this.graphemesTotal,
+    required this.elapsed,
+    required this.lastChunkGraphemesPerSecond,
+    required this.averageGraphemesPerSecond,
+  });
+
+  /// A job with nothing scheduled (and the state before one starts).
+  static const SemanticIndexProgress idle = SemanticIndexProgress(
+    chunksDone: 0,
+    chunksTotal: 0,
+    graphemesDone: 0,
+    graphemesTotal: 0,
+    elapsed: Duration.zero,
+    lastChunkGraphemesPerSecond: null,
+    averageGraphemesPerSecond: null,
+  );
+
+  final int chunksDone;
+
+  /// Chunks this job scheduled, counted before any encode so the figure does not
+  /// grow while the user watches it.
+  final int chunksTotal;
+
+  final int graphemesDone;
+  final int graphemesTotal;
+
+  /// Wall clock since this job started, including the encode in flight.
+  final Duration elapsed;
+
+  /// Speed of the chunk that finished last — the "live" number, and the only
+  /// one that moves while a long encode is still running.
+  final double? lastChunkGraphemesPerSecond;
+
+  /// Average over every chunk this job has finished: stable enough to derive
+  /// the ETA from, unlike the instantaneous reading.
+  final double? averageGraphemesPerSecond;
+
+  /// Fraction of the job's characters done, or null when nothing is scheduled.
+  double? get fraction =>
+      graphemesTotal == 0 ? null : graphemesDone / graphemesTotal;
+
+  /// Time left at the average rate so far, or null before the first chunk
+  /// (nothing has been measured yet, so any figure would be invented).
+  Duration? get remaining {
+    final rate = averageGraphemesPerSecond;
+    if (rate == null || rate <= 0) return null;
+    final seconds = (graphemesTotal - graphemesDone) / rate;
+    return seconds <= 0
+        ? Duration.zero
+        : Duration(milliseconds: (seconds * 1000).round());
+  }
+}
 
 /// Write-side semantic indexing: embeds stored transcripts into the
 /// `embedding` table with the injected [Embedder].
@@ -43,6 +110,21 @@ class SemanticIndexer {
   final ValueNotifier<SemanticIndexPhase> phase = ValueNotifier(
     SemanticIndexPhase.idle,
   );
+
+  /// Observable progress for the job in flight. A second notifier so [phase]
+  /// keeps its exact contract for existing listeners.
+  final ValueNotifier<SemanticIndexProgress> progress = ValueNotifier(
+    SemanticIndexProgress.idle,
+  );
+
+  /// Job-scoped counters, reset by [_enqueue] at the start of every run.
+  Stopwatch _clock = Stopwatch();
+  int _chunksDone = 0;
+  int _chunksTotal = 0;
+  int _graphemesDone = 0;
+  int _graphemesTotal = 0;
+  double? _lastChunkRate;
+  double? _averageRate;
 
   String? _lastError;
 
@@ -82,7 +164,9 @@ class SemanticIndexer {
       [id, _embedder.id],
     );
     if (existing.isNotEmpty) return;
-    await _embedAndStore(id, rows.single['text'] as String);
+    final text = rows.single['text'] as String;
+    _sizeJob([text]);
+    await _embedAndStore(id, text);
   });
 
   /// Releases the notifier; does not dispose the injected embedder, whose
@@ -93,6 +177,7 @@ class SemanticIndexer {
     if (_disposed) return;
     _disposed = true;
     phase.dispose();
+    progress.dispose();
   }
 
   bool _disposed = false;
@@ -105,6 +190,14 @@ class SemanticIndexer {
         return; // superseded model: the queue drains, writes nothing
       }
       _lastError = null;
+      _clock = Stopwatch()..start();
+      _chunksDone = 0;
+      _chunksTotal = 0;
+      _graphemesDone = 0;
+      _graphemesTotal = 0;
+      _lastChunkRate = null;
+      _averageRate = null;
+      progress.value = SemanticIndexProgress.idle;
       phase.value = SemanticIndexPhase.running;
       try {
         await job();
@@ -128,6 +221,7 @@ class SemanticIndexer {
       'ORDER BY t.id',
       [_embedder.id],
     );
+    _sizeJob([for (final row in pending) row['text'] as String]);
     for (final row in pending) {
       // The await on the worker embed already yields the UI thread its frame;
       // no extra delay is needed (and the native encode no longer blocks at
@@ -146,12 +240,15 @@ class SemanticIndexer {
 
     final vectors = <Float32List>[];
     for (final chunk in chunks) {
+      final clock = Stopwatch()..start();
       final vector = await _embedder.embedDocument(chunk);
+      clock.stop();
       // A model switch or AppState teardown may have landed while the worker was
       // encoding: a stale job must not write into the (now other model's) index.
       if (_disposed) return;
       _check(vector);
       vectors.add(vector);
+      _recordChunk(chunk, clock.elapsed);
     }
 
     _db.execute('BEGIN');
@@ -186,6 +283,49 @@ class SemanticIndexer {
       _db.execute('ROLLBACK');
       rethrow;
     }
+  }
+
+  /// Sets this job's denominators by chunking every text up front. Chunking is
+  /// pure Dart and O(n), so doing it once here (and again per transcript in
+  /// [_embedAndStore]) costs nothing next to a single native encode — and it
+  /// buys a bar and an ETA that do not move on their own.
+  void _sizeJob(Iterable<String> texts) {
+    var chunks = 0;
+    var graphemes = 0;
+    for (final text in texts) {
+      for (final chunk in chunkForEmbedding(text)) {
+        chunks++;
+        graphemes += graphemeCount(chunk);
+      }
+    }
+    _chunksTotal = chunks;
+    _graphemesTotal = graphemes;
+    _publish();
+  }
+
+  /// Folds one finished chunk into the live counters: the instantaneous rate
+  /// from this chunk's own wall clock, the average from the job's, and the ETA
+  /// that the UI derives from the average.
+  void _recordChunk(String chunk, Duration took) {
+    final graphemes = graphemeCount(chunk);
+    _chunksDone++;
+    _graphemesDone += graphemes;
+    _lastChunkRate = graphemesPerSecond(chunk, took);
+    final millis = _clock.elapsedMilliseconds;
+    _averageRate = millis <= 0 ? null : _graphemesDone * 1000 / millis;
+    _publish();
+  }
+
+  void _publish() {
+    progress.value = SemanticIndexProgress(
+      chunksDone: _chunksDone,
+      chunksTotal: _chunksTotal,
+      graphemesDone: _graphemesDone,
+      graphemesTotal: _graphemesTotal,
+      elapsed: _clock.elapsed,
+      lastChunkGraphemesPerSecond: _lastChunkRate,
+      averageGraphemesPerSecond: _averageRate,
+    );
   }
 
   /// A vector is only storable if it is the model's dimension and entirely

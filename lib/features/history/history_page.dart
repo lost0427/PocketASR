@@ -136,60 +136,110 @@ class _HistoryPageState extends State<HistoryPage> {
     }());
   }
 
-  /// Compact status row for the semantic indexer: a live phase, its error, and
-  /// the retry/rebuild actions. Nothing here invents progress.
+  /// Compact status row for the semantic indexer: a live phase, its error, the
+  /// retry/rebuild actions, and — while a job runs — measured progress with the
+  /// live encode speed and the ETA that speed implies. Nothing here invents a
+  /// figure: the bar, the rates and the ETA only appear once a chunk has really
+  /// finished.
   Widget _indexStatus(AppLocalizations l10n) {
     final indexer = widget.indexer!;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final detailStyle = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
     return ValueListenableBuilder<SemanticIndexPhase>(
       valueListenable: indexer.phase,
       builder: (context, phase, _) {
         return Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (phase == SemanticIndexPhase.running) ...[
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l10n.historyIndexing,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ] else if (phase == SemanticIndexPhase.failed) ...[
-                Icon(Icons.error_outline, size: 16, color: scheme.error),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${l10n.historyIndexFailed}: ${indexer.lastError ?? ''}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.error,
+              Row(
+                children: [
+                  if (phase == SemanticIndexPhase.running) ...[
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
+                    const SizedBox(width: 8),
+                    Text(l10n.historyIndexing, style: detailStyle),
+                  ] else if (phase == SemanticIndexPhase.failed) ...[
+                    Icon(Icons.error_outline, size: 16, color: scheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${l10n.historyIndexFailed}: ${indexer.lastError ?? ''}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.error,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: indexer.indexPending,
+                      child: Text(l10n.historyIndexRetry),
+                    ),
+                  ],
+                  const Spacer(),
+                  TextButton(
+                    onPressed: indexer.rebuild,
+                    child: Text(l10n.historyIndexRebuild),
                   ),
-                ),
-                TextButton(
-                  onPressed: indexer.indexPending,
-                  child: Text(l10n.historyIndexRetry),
-                ),
-              ],
-              const Spacer(),
-              TextButton(
-                onPressed: indexer.rebuild,
-                child: Text(l10n.historyIndexRebuild),
+                ],
               ),
+              if (phase == SemanticIndexPhase.running)
+                ValueListenableBuilder<SemanticIndexProgress>(
+                  valueListenable: indexer.progress,
+                  builder: (context, progress, _) {
+                    // An empty pending set has no denominator to show.
+                    if (progress.graphemesTotal == 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(value: progress.fraction),
+                        const SizedBox(height: 6),
+                        Text(
+                          _progressDetail(l10n, progress),
+                          style: detailStyle,
+                        ),
+                      ],
+                    );
+                  },
+                ),
             ],
           ),
         );
       },
     );
+  }
+
+  /// `3/12 chunks · 812 chars/s · ~2:10 left`, dropping each part that is not
+  /// measured yet instead of printing a placeholder for it.
+  static String _progressDetail(
+    AppLocalizations l10n,
+    SemanticIndexProgress progress,
+  ) {
+    final rate = progress.lastChunkGraphemesPerSecond;
+    final remaining = progress.remaining;
+    return [
+      l10n.historyIndexChunks(progress.chunksDone, progress.chunksTotal),
+      if (rate != null) l10n.historyIndexSpeed(rate.round()),
+      if (remaining != null) l10n.historyIndexEta(_clock(remaining)),
+    ].join(' · ');
+  }
+
+  /// `2:10`, `45:00` — minutes and seconds, no locale-specific units, so an
+  /// estimate that spans hours stays readable.
+  static String _clock(Duration remaining) {
+    final seconds = remaining.inSeconds % 60;
+    return '${remaining.inMinutes}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> _copy(Transcript row) async {
@@ -259,7 +309,6 @@ class _HistoryPageState extends State<HistoryPage> {
     _clearSelection();
     widget.repo.restoreMany(ids);
   }
-
 
   void _moveToTrash(Transcript row) {
     widget.repo.softDelete(row.id);
@@ -380,7 +429,6 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-
   Future<void> _openDetail(Transcript row) async {
     final l10n = AppLocalizations.of(context);
     await Navigator.of(context).push(
@@ -389,8 +437,7 @@ class _HistoryPageState extends State<HistoryPage> {
           row: row,
           highlightTerms: _hitTerms,
           onCopy: () => _copy(row),
-          actionLabel:
-              _trash ? l10n.historyRestore : l10n.historyMoveToTrash,
+          actionLabel: _trash ? l10n.historyRestore : l10n.historyMoveToTrash,
           onAction: () {
             if (_trash) {
               _restore(row);
@@ -416,105 +463,109 @@ class _HistoryPageState extends State<HistoryPage> {
     final body = Column(
       children: [
         if (_selecting) _selectionBar(l10n),
-        if (!_selecting) Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: TextField(
-            controller: _query,
-            onChanged: (_) => _reload(),
-            decoration: InputDecoration(
-              hintText: l10n.historySearchHint,
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _query.text.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () {
-                        _query.clear();
-                        _reload();
-                      },
-                      icon: const Icon(Icons.clear),
-                    ),
+        if (!_selecting)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: TextField(
+              controller: _query,
+              onChanged: (_) => _reload(),
+              decoration: InputDecoration(
+                hintText: l10n.historySearchHint,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _query.clear();
+                          _reload();
+                        },
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
             ),
           ),
-        ),
-        if (!_selecting) Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                        value: false,
-                        label: Text(l10n.historyScopeHistory),
-                      ),
-                      ButtonSegment(
-                        value: true,
-                        label: Text(l10n.historyScopeTrash),
-                      ),
-                    ],
-                    selected: {_trash},
-                    onSelectionChanged: (selection) {
-                      setState(() => _trash = selection.first);
-                      _reload();
-                    },
-                  ),
-                  const Spacer(),
-                  Text('${_rows.length}', style: theme.textTheme.labelMedium),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: SegmentedButton<SearchMode>(
-                      expandedInsets: EdgeInsets.zero,
+        if (!_selecting)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SegmentedButton<bool>(
                       showSelectedIcon: false,
                       segments: [
                         ButtonSegment(
-                          value: SearchMode.literal,
-                          label: Text(l10n.historySearchLiteral),
+                          value: false,
+                          label: Text(l10n.historyScopeHistory),
                         ),
                         ButtonSegment(
-                          value: SearchMode.semantic,
-                          enabled: _hasEmbedder,
-                          label: Text(l10n.historySearchSemantic),
-                        ),
-                        ButtonSegment(
-                          value: SearchMode.hybrid,
-                          enabled: _hasEmbedder,
-                          label: Text(l10n.historySearchHybrid),
+                          value: true,
+                          label: Text(l10n.historyScopeTrash),
                         ),
                       ],
-                      selected: {_mode},
+                      selected: {_trash},
                       onSelectionChanged: (selection) {
-                        setState(() => _mode = selection.first);
+                        setState(() => _trash = selection.first);
                         _reload();
                       },
                     ),
-                  ),
-                ],
-              ),
-              if (!_hasEmbedder)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    l10n.historySearchSemanticOff,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    const Spacer(),
+                    Text('${_rows.length}', style: theme.textTheme.labelMedium),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<SearchMode>(
+                        expandedInsets: EdgeInsets.zero,
+                        showSelectedIcon: false,
+                        segments: [
+                          ButtonSegment(
+                            value: SearchMode.literal,
+                            label: Text(l10n.historySearchLiteral),
+                          ),
+                          ButtonSegment(
+                            value: SearchMode.semantic,
+                            enabled: _hasEmbedder,
+                            label: Text(l10n.historySearchSemantic),
+                          ),
+                          ButtonSegment(
+                            value: SearchMode.hybrid,
+                            enabled: _hasEmbedder,
+                            label: Text(l10n.historySearchHybrid),
+                          ),
+                        ],
+                        selected: {_mode},
+                        onSelectionChanged: (selection) {
+                          setState(() => _mode = selection.first);
+                          _reload();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                if (!_hasEmbedder)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      l10n.historySearchSemanticOff,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-              if (widget.indexer != null) _indexStatus(l10n),
-            ],
+                if (widget.indexer != null) _indexStatus(l10n),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: _rows.isEmpty
               ? Center(
-                  child: Text(_trash ? l10n.historyTrashEmpty : l10n.historyEmpty),
+                  child: Text(
+                    _trash ? l10n.historyTrashEmpty : l10n.historyEmpty,
+                  ),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
@@ -535,7 +586,9 @@ class _HistoryPageState extends State<HistoryPage> {
                               )
                             : null,
                         title: Text.rich(
-                          TextSpan(children: _highlight(row.title, terms, mark)),
+                          TextSpan(
+                            children: _highlight(row.title, terms, mark),
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -548,40 +601,44 @@ class _HistoryPageState extends State<HistoryPage> {
                             ? _toggleSelection(row)
                             : _openDetail(row),
                         onLongPress: () => _startSelection(row),
-                        trailing: _selecting ? null : PopupMenuButton<String>(
-                          onSelected: (action) {
-                            switch (action) {
-                              case 'copy':
-                                _copy(row);
-                              case 'trash':
-                                _moveToTrash(row);
-                              case 'restore':
-                                _restore(row);
-                              case 'purge':
-                                _confirmPurge(row);
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: 'copy',
-                              child: Text(l10n.historyCopy),
-                            ),
-                            if (_trash) ...[
-                              PopupMenuItem(
-                                value: 'restore',
-                                child: Text(l10n.historyRestore),
+                        trailing: _selecting
+                            ? null
+                            : PopupMenuButton<String>(
+                                onSelected: (action) {
+                                  switch (action) {
+                                    case 'copy':
+                                      _copy(row);
+                                    case 'trash':
+                                      _moveToTrash(row);
+                                    case 'restore':
+                                      _restore(row);
+                                    case 'purge':
+                                      _confirmPurge(row);
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                    value: 'copy',
+                                    child: Text(l10n.historyCopy),
+                                  ),
+                                  if (_trash) ...[
+                                    PopupMenuItem(
+                                      value: 'restore',
+                                      child: Text(l10n.historyRestore),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'purge',
+                                      child: Text(
+                                        l10n.historyDeletePermanently,
+                                      ),
+                                    ),
+                                  ] else
+                                    PopupMenuItem(
+                                      value: 'trash',
+                                      child: Text(l10n.historyMoveToTrash),
+                                    ),
+                                ],
                               ),
-                              PopupMenuItem(
-                                value: 'purge',
-                                child: Text(l10n.historyDeletePermanently),
-                              ),
-                            ] else
-                              PopupMenuItem(
-                                value: 'trash',
-                                child: Text(l10n.historyMoveToTrash),
-                              ),
-                          ],
-                        ),
                       ),
                     );
                   },
@@ -626,15 +683,10 @@ class _TranscriptDetailPage extends StatelessWidget {
     final localizations = MaterialLocalizations.of(context);
     final created =
         '${localizations.formatFullDate(row.createdAt.toLocal())} '
-        '${localizations.formatTimeOfDay(
-          TimeOfDay.fromDateTime(row.createdAt.toLocal()),
-        )}';
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(row.createdAt.toLocal()))}';
     final charsPerSec = row.totalMs == null
         ? null
-        : graphemesPerSecond(
-            row.text,
-            Duration(milliseconds: row.totalMs!),
-          );
+        : graphemesPerSecond(row.text, Duration(milliseconds: row.totalMs!));
 
     final metrics = <(String, String)>[
       (l10n.historyDetailCreated, created),
@@ -645,10 +697,7 @@ class _TranscriptDetailPage extends StatelessWidget {
       if (row.engine != null) (l10n.transcribeEngineSection, row.engine!),
       if (row.backend != null) (l10n.transcribeBackend, row.backend!),
       if (row.modelPath != null)
-        (
-          l10n.transcribeModel,
-          row.modelPath!.split(RegExp(r'[\\/]')).last,
-        ),
+        (l10n.transcribeModel, row.modelPath!.split(RegExp(r'[\\/]')).last),
       if (row.rtf != null) (l10n.metricRtf, row.rtf!.toStringAsFixed(2)),
       if (charsPerSec != null)
         (l10n.metricCharsPerSec, charsPerSec.toStringAsFixed(1)),

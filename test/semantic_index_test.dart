@@ -253,19 +253,67 @@ void main() {
       await indexer.indexPending();
 
       expect(embedder.documentTexts, hasLength(4)); // 3 chunks + other
-      expect(embedder.documentTexts.where((t) => t.contains('丙')), hasLength(1));
+      expect(
+        embedder.documentTexts.where((t) => t.contains('丙')),
+        hasLength(1),
+      );
       expect(embeddingCount(), 4);
       expect(
-        db.db.select(
-          'SELECT chunk FROM embedding WHERE transcript_id = ? ORDER BY chunk',
-          [chunked],
-        ).map((row) => row['chunk']),
+        db.db
+            .select(
+              'SELECT chunk FROM embedding WHERE transcript_id = ? ORDER BY chunk',
+              [chunked],
+            )
+            .map((row) => row['chunk']),
         [0, 1, 2],
       );
       final hits = await search.searchSemantic('query');
       expect(hits.first.id, chunked); // its best chunk, not its average
       expect(hits.map((t) => t.id), contains(other));
       embedder.custom = null;
+    });
+
+    test(
+      'progress counts the chunks and characters it really embedded',
+      () async {
+        transcripts.insert(title: 'L', text: '${'甲' * 400}\n${'乙' * 400}');
+        // A real delay, so the measured rate is not rounded down to zero.
+        embedder.documentDelay = const Duration(milliseconds: 5);
+
+        await indexer.indexPending();
+
+        final progress = indexer.progress.value;
+        expect(progress.chunksTotal, 2);
+        expect(progress.chunksDone, 2);
+        expect(progress.graphemesTotal, 801); // 400 + newline + 400
+        expect(progress.graphemesDone, 801);
+        expect(progress.fraction, 1.0);
+        expect(progress.lastChunkGraphemesPerSecond, greaterThan(0));
+        expect(progress.averageGraphemesPerSecond, greaterThan(0));
+        expect(progress.remaining, Duration.zero);
+      },
+    );
+
+    test('progress invents nothing before a chunk has been measured', () {
+      const idle = SemanticIndexProgress.idle;
+      expect(idle.fraction, isNull);
+      expect(idle.remaining, isNull);
+      expect(idle.lastChunkGraphemesPerSecond, isNull);
+      expect(idle.averageGraphemesPerSecond, isNull);
+
+      const half = SemanticIndexProgress(
+        chunksDone: 1,
+        chunksTotal: 2,
+        graphemesDone: 500,
+        graphemesTotal: 1000,
+        elapsed: Duration(seconds: 1),
+        lastChunkGraphemesPerSecond: 400,
+        averageGraphemesPerSecond: 500,
+      );
+      expect(half.fraction, 0.5);
+      // 500 characters left at the measured 500/s average.
+      expect(half.remaining, const Duration(seconds: 1));
+      expect(half.lastChunkGraphemesPerSecond, 400);
     });
 
     test('a transcript is scored by its best chunk, not an average', () async {
@@ -299,10 +347,10 @@ void main() {
       putChunk(exact, 0, _v2(1, 1));
       embedder.custom = (text) => _v2(1, 0); // the query is (1,0)
 
-      expect(
-        (await search.searchSemantic('query')).map((t) => t.id),
-        [split, exact],
-      );
+      expect((await search.searchSemantic('query')).map((t) => t.id), [
+        split,
+        exact,
+      ]);
       embedder.custom = null;
     });
 

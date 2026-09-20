@@ -351,6 +351,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyIndexRebuild => '重建索引';
 
   @override
+  String historyIndexChunks(int done, int total) {
+    return '$done/$total 段';
+  }
+
+  @override
+  String historyIndexSpeed(int rate) {
+    return '$rate 字/秒';
+  }
+
+  @override
+  String historyIndexEta(String clock) {
+    return '约剩 $clock';
+  }
+
+  @override
   String get modelsTitle => '模型';
 
   @override
