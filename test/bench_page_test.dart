@@ -482,7 +482,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(inputs, hasLength(9)); // three tiers, three runs each
-    expect(inputs.toSet(), hasLength(3)); // one distinct sample per tier
+    // Every measurement must be its own text, and none may start with another:
+    // the engine caches the KV of a shared token prefix across calls, so a
+    // repeated or nested input measures a suffix encode and reports it as if it
+    // were the whole tier.
+    expect(inputs.toSet(), hasLength(9));
+    expect(inputs.map((text) => text[0]).toSet(), hasLength(9));
+    for (var i = 0; i < inputs.length; i++) {
+      for (var j = 0; j < inputs.length; j++) {
+        if (i == j) continue;
+        expect(
+          inputs[i].startsWith(inputs[j]),
+          isFalse,
+          reason: 'input $i is prefixed by input $j',
+        );
+      }
+    }
     expect(inputs.map((text) => text.length).toSet(), {200, 512, 1024});
     // Pure Chinese sample: one code unit is one estimated token, so the
     // measured size really is the tier size.

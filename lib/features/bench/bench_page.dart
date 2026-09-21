@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import '../../app/app_state.dart';
 import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_source.dart';
-import '../../core/text/text_chunker.dart';
 import '../../core/text/token_counter.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/model_catalog.dart';
@@ -446,9 +445,9 @@ class _BenchPageState extends State<BenchPage> {
     final rows = <_EmbedRow>[];
     var tokens = _embedTiers.first;
     try {
-      for (final tier in _embedTiers) {
-        tokens = tier;
-        rows.add(await _probeEmbed(probe, tier));
+      for (var tierIndex = 0; tierIndex < _embedTiers.length; tierIndex++) {
+        tokens = _embedTiers[tierIndex];
+        rows.add(await _probeEmbed(probe, tokens, tierIndex));
         if (!mounted) return;
         setState(() => _embedRows = List.of(rows));
       }
@@ -465,36 +464,65 @@ class _BenchPageState extends State<BenchPage> {
   }
 
   /// Median wall clock of [_repeats] encodes of a sample of [tokens] estimated
-  /// tokens. Failures propagate: one broken model fails every tier, so the
-  /// caller records a single error row rather than retrying each size.
-  Future<_EmbedRow> _probeEmbed(BenchmarkEmbedProbe probe, int tokens) async {
-    final text = _embedSample(tokens);
-    final samples = <Duration>[];
+  /// tokens, each [tierIndex] starting the sample somewhere else. Failures
+  /// propagate: one broken model fails every tier, so the caller records a
+  /// single error row rather than retrying each size.
+  Future<_EmbedRow> _probeEmbed(
+    BenchmarkEmbedProbe probe,
+    int tokens,
+    int tierIndex,
+  ) async {
+    final samples = <({Duration elapsed, String text})>[];
     for (var i = 0; i < _repeats; i++) {
+      final text = _embedSample(tierIndex * _repeats + i, tokens);
       final clock = Stopwatch()..start();
       await probe(text);
       clock.stop();
-      samples.add(clock.elapsed);
+      samples.add((elapsed: clock.elapsed, text: text));
     }
-    samples.sort();
-    final elapsed = samples[samples.length ~/ 2];
+    samples.sort((a, b) => a.elapsed.compareTo(b.elapsed));
+    final median = samples[samples.length ~/ 2];
     return _EmbedRow(
       tokens: tokens,
-      elapsed: elapsed,
-      charsPerSecond: graphemesPerSecond(text, elapsed),
+      elapsed: median.elapsed,
+      charsPerSecond: graphemesPerSecond(median.text, median.elapsed),
       runs: samples.length,
     );
   }
 
-  /// Deterministic sample for one tier: Chinese prose trimmed to [tokens]
-  /// estimated tokens. Generated rather than shipped (no licensed text is
+  /// Deterministic sample for one measurement: Chinese prose trimmed to
+  /// [tokens] estimated tokens, starting at sentence [start] of
+  /// [_embedSentences]. Generated rather than shipped (no licensed text is
   /// bundled) and identical on every device, so the rows stay comparable.
-  static String _embedSample(int tokens) {
-    const line = '我们先回顾上次的结论，然后讨论本季度的进展和下一步的人员安排。';
-    final lines = (tokens / estimatedTokens(line)).ceil();
-    final text = line * lines;
+  ///
+  /// [start] differs for every one of the 9 measurements, which is what makes
+  /// each a cold encode: no sample is a prefix of another. The engine caches
+  /// the KV of a shared token prefix between calls, so a repeated or nested
+  /// input would be served from that cache and report a suffix encode as if it
+  /// were the whole tier.
+  static String _embedSample(int start, int tokens) {
+    final buffer = StringBuffer();
+    for (var i = 0; buffer.length < tokens; i++) {
+      buffer.write(_embedSentences[(start + i) % _embedSentences.length]);
+    }
+    final text = buffer.toString();
     return text.length <= tokens ? text : text.substring(0, tokens);
   }
+
+  /// Sentence pool behind [_embedSample]. Every sentence opens with a different
+  /// character, so samples starting at different sentences share no first
+  /// token and no sample can be a prefix of another.
+  static const List<String> _embedSentences = <String>[
+    '我们先回顾上次的结论，然后讨论本季度的进展和下一步的人员安排。',
+    '另外需要确认时间表是否与客户那边的排期冲突，避免临时调整方案。',
+    '如果预算允许，我建议把培训提前到三季度，这样能赶在旺季前完成。',
+    '技术方案已经评审过两轮，剩下的分歧集中在存储成本和运维复杂度。',
+    '现场测试的反馈整体不错，只是夜间功耗偏高，还需要再压一压。',
+    '合同条款里关于违约责任的表述比较模糊，法务建议重新拟定一份。',
+    '人员的招聘进度落后于计划，主要是候选人对出差频率有所顾虑。',
+    '供应商那边承诺下周一给答复，届时再决定是否启动备选方案。',
+    '文档整理得差不多了，还需要补一份面向新同事的速查手册。',
+  ];
 
   void _cancel() {
     if (!_running || _cancelRequested) return;
