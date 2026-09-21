@@ -23,6 +23,7 @@ import '../data/transcript_repo.dart';
 typedef EmbedderFactory = FutureOr<Embedder> Function(
   String modelPath,
   EmbeddingModelProfile profile,
+  int threads,
 );
 
 /// The three-way chunking control in Settings: the two [ChunkMode] strategies
@@ -55,10 +56,12 @@ class AppState extends ChangeNotifier {
   static Future<Embedder> _crispEmbedder(
     String modelPath,
     EmbeddingModelProfile profile,
+    int threads,
   ) async {
     final embedder = WorkerEmbedder.crisp(
       modelPath: modelPath,
       profile: profile,
+      threads: threads,
     );
     try {
       await embedder.load(); // spawns the worker; the native load runs there
@@ -252,6 +255,12 @@ class AppState extends ChangeNotifier {
   /// Worker threads for the CPU path. Defaults to half the cores. Changing it
   /// rebuilds the worker-backed engine with the new count (through the existing
   /// [WorkerAsrEngine] factories) once no run owns the current instance.
+  ///
+  /// The embedding worker is not touched here — call [applyThreads] for that.
+  /// crispembed reads its thread count at load and runs **single-threaded**
+  /// when it is not given a positive one, so an embedding session built with
+  /// zero stays on one core; a reload therefore re-reads the whole model, which
+  /// the settings slider must not trigger on every step.
   int _threads = _defaultThreads();
   int get threads => _threads;
   set threads(int value) {
@@ -261,6 +270,10 @@ class AppState extends ChangeNotifier {
     _invalidateEngine();
     notifyListeners();
   }
+
+  /// Rebuilds the embedding worker so it picks up [threads]. Idempotent, and a
+  /// no-op when no embedding model is selected.
+  void applyThreads() => _rebuildEmbedding();
 
   /// Cores the device reports; the thread slider's upper bound.
   int get maxThreads => Platform.numberOfProcessors;
@@ -851,7 +864,7 @@ class AppState extends ChangeNotifier {
   ) async {
     Embedder embedder;
     try {
-      embedder = await _embedderFactory(path, profile);
+      embedder = await _embedderFactory(path, profile, _threads);
     } on Object catch (error) {
       if (!_disposed &&
           _embeddingPath == path &&

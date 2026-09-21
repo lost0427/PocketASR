@@ -23,8 +23,11 @@ import 'embedder.dart';
 /// Worker-isolate-only: do not construct on the root isolate (see class docs
 /// and [WorkerEmbedder.crisp] for the sanctioned construction site).
 class CrispEmbedder implements Embedder {
-  /// Loads [modelPath] now. [threads] is the native CPU thread count (0 lets
-  /// the library auto-detect); [libPath] overrides the platform default library
+  /// Loads [modelPath] now. [threads] is the native CPU thread count; a
+  /// non-positive value is **one** thread, not "auto": crispembed maps
+  /// `n_threads <= 0` to 1 (crispembed.cpp, `ctx->n_threads = n_threads > 0 ?
+  /// n_threads : 1;`), so every caller that wants more must say so.
+  /// [libPath] overrides the platform default library
   /// location, for callers that stage the `.so`/`.dll` themselves.
   CrispEmbedder({
     required String modelPath,

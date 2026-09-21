@@ -36,10 +36,14 @@ class WorkerEmbedder implements Embedder {
   /// the native session built inside the worker; [id] is computed on the root
   /// from the path + file size (a stat, not FFI) so it is stable even when
   /// the worker fails to load.
+  ///
+  /// [threads] is required on purpose: crispembed reads a non-positive count as
+  /// **one** thread (`n_threads > 0 ? n_threads : 1`), so defaulting it would
+  /// silently pin a batched prefill to a single core.
   factory WorkerEmbedder.crisp({
     required String modelPath,
+    required int threads,
     EmbeddingModelProfile profile = EmbeddingModelProfile.metadata,
-    int threads = 0,
     String? libPath,
   }) => WorkerEmbedder._(
     CrispEmbedder.identityFor(modelPath),

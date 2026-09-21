@@ -45,13 +45,15 @@ class _FakeEmbedder implements Embedder {
 class _Factory {
   final Map<String, _FakeEmbedder> created = {};
   final Map<String, EmbeddingModelProfile> profiles = {};
+  final List<int> threads = [];
   bool fail = false;
 
-  Embedder call(String path, EmbeddingModelProfile profile) {
+  Embedder call(String path, EmbeddingModelProfile profile, int count) {
     if (fail) {
       throw const EmbedderUnavailableException('native library missing');
     }
     profiles[path] = profile;
+    threads.add(count);
     return created.putIfAbsent(path, () => _FakeEmbedder('fake:$path'));
   }
 }
@@ -141,6 +143,32 @@ void main() {
     expect(second.embeddingPath, 'qwen.gguf');
     expect(second.embeddingProfile, EmbeddingModelProfile.qwen3);
     expect(second.embeddingReady, isTrue);
+  });
+
+  test('the thread count reaches the embedder, and a change reloads it', () async {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final factory = _Factory();
+    final state = AppState(database: db, embedderFactory: factory.call);
+    addTearDown(state.dispose);
+
+    state.selectEmbedding(path: 'e5.gguf');
+    await settle();
+
+    // crispembed maps a non-positive thread count to ONE thread, so a count of
+    // zero here would pin every encode to a single core.
+    expect(factory.threads, [state.threads]);
+    expect(factory.threads.single, greaterThan(0));
+
+    final target = state.maxThreads >= 2 ? 2 : 1;
+    if (target != state.threads) {
+      state.threads = target; // cheap: the slider drags through many values
+      expect(factory.threads, hasLength(1));
+      state.applyThreads(); // the slider's onChangeEnd does this once
+      await settle();
+      expect(factory.threads, hasLength(2)); // the worker was rebuilt
+      expect(factory.threads.last, target);
+    }
   });
 
   test(

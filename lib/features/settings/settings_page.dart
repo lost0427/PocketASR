@@ -287,6 +287,9 @@ class _ThreadsControl extends StatelessWidget {
           divisions: sliderMax - 1,
           label: '${state.threads}',
           onChanged: (value) => state.threads = value.round(),
+          // Only on release: the embedding worker re-reads the model per
+          // reload, so a drag must not rebuild it once per step.
+          onChangeEnd: (value) => state.applyThreads(),
         ),
         Text(
           l10n.settingsThreadsHint,
