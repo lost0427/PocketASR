@@ -1,0 +1,194 @@
+name: Publish sherpa-mnn SenseVoice model
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Model-only release tag (must start with model-sherpa-mnn-sensevoice-q8-v)
+        required: true
+        default: model-sherpa-mnn-sensevoice-q8-v1
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-sherpa-mnn-sensevoice-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY: csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
+  SOURCE_REVISION: 2365baeacb507f821a0c8120fcee3d484dba7a07
+  SOURCE_MODEL_SHA256: 977016bd9c79f9eb343430b5cc305e07ab64d5212dff41b0dcfa1694bee9a8cb
+  SOURCE_TOKENS_SHA256: f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc
+  SOURCE_TEST_WAV_SHA256: eb1eb008904465b74c304aad8342e8c7d3c6e61ffe9f66adcaca9cf0f76a93f4
+  MNN_VERSION: 3.6.1
+  MNN_COMMIT: d407447ed56c4121a11ccbd266dc184ca1ead0c2
+  FUNASR_LICENSE_COMMIT: 02f8b43fc9222e3d14d41565acbebbb23bf3b56c
+  FUNASR_LICENSE_SHA256: 7dba975a2069691db4992b0592d70828b330d2f8a30a71450f4e152a554e84f8
+
+jobs:
+  convert-test-publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Validate release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^model-sherpa-mnn-sensevoice-q8-v[0-9]+([.][0-9]+)*$ ]]; then
+            echo "Invalid model release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists and will not be overwritten: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache-sherpa-mnn-model
+          key: sherpa-mnn-model-ccache-${{ runner.os }}-${{ env.MNN_COMMIT }}-${{ hashFiles('scripts/models/convert_sensevoice_mnn.sh') }}
+          restore-keys: |
+            sherpa-mnn-model-ccache-${{ runner.os }}-${{ env.MNN_COMMIT }}-
+
+      - name: Download pinned model inputs and license
+        run: |
+          set -euo pipefail
+          mkdir -p .model-input
+          BASE="https://huggingface.co/$SOURCE_REPOSITORY/resolve/$SOURCE_REVISION"
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output .model-input/model.onnx "$BASE/model.onnx"
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output .model-input/tokens.txt "$BASE/tokens.txt"
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output .model-input/en.wav "$BASE/test_wavs/en.wav"
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output .model-input/FunASR-MODEL-LICENSE.txt \
+            "https://raw.githubusercontent.com/modelscope/FunASR/$FUNASR_LICENSE_COMMIT/MODEL_LICENSE"
+
+          echo "$SOURCE_MODEL_SHA256  .model-input/model.onnx" > .model-input/SHA256SUMS
+          echo "$SOURCE_TOKENS_SHA256  .model-input/tokens.txt" >> .model-input/SHA256SUMS
+          echo "$SOURCE_TEST_WAV_SHA256  .model-input/en.wav" >> .model-input/SHA256SUMS
+          echo "$FUNASR_LICENSE_SHA256  .model-input/FunASR-MODEL-LICENSE.txt" >> .model-input/SHA256SUMS
+          sha256sum --check .model-input/SHA256SUMS
+
+      - name: Convert and run sherpa-mnn recognition smoke test
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache-sherpa-mnn-model
+        run: |
+          bash scripts/models/convert_sensevoice_mnn.sh \
+            .model-input/model.onnx \
+            .model-input/tokens.txt \
+            .model-input/en.wav \
+            .model-output
+          ccache --show-stats
+
+      - name: Prepare provenance and release notes
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cp .model-input/FunASR-MODEL-LICENSE.txt .model-output/FunASR-MODEL-LICENSE.txt
+          (
+            cd .model-output
+            sha256sum FunASR-MODEL-LICENSE.txt >> SHA256SUMS
+          )
+
+          MODEL_SHA256="$(sha256sum .model-output/model.mnn | cut -d' ' -f1)"
+          MODEL_SIZE="$(stat -c '%s' .model-output/model.mnn)"
+          TOKENS_SIZE="$(stat -c '%s' .model-output/tokens.txt)"
+          jq -n \
+            --arg releaseTag "$RELEASE_TAG" \
+            --arg sourceRepository "$SOURCE_REPOSITORY" \
+            --arg sourceRevision "$SOURCE_REVISION" \
+            --arg sourceModelSha256 "$SOURCE_MODEL_SHA256" \
+            --arg mnnVersion "$MNN_VERSION" \
+            --arg mnnCommit "$MNN_COMMIT" \
+            --arg modelSha256 "$MODEL_SHA256" \
+            --argjson modelSizeBytes "$MODEL_SIZE" \
+            --arg tokensSha256 "$SOURCE_TOKENS_SHA256" \
+            --argjson tokensSizeBytes "$TOKENS_SIZE" \
+            '{
+              releaseTag: $releaseTag,
+              source: {
+                repository: $sourceRepository,
+                revision: $sourceRevision,
+                file: "model.onnx",
+                sha256: $sourceModelSha256
+              },
+              conversion: {
+                mnnVersion: $mnnVersion,
+                mnnCommit: $mnnCommit,
+                weightQuantBits: 8,
+                weightQuantBlock: 64
+              },
+              outputs: {
+                model: {fileName: "model.mnn", sizeBytes: $modelSizeBytes, sha256: $modelSha256},
+                tokens: {fileName: "tokens.txt", sizeBytes: $tokensSizeBytes, sha256: $tokensSha256}
+              },
+              verification: {senseVoiceRecognitionSmokeTest: "passed"}
+            }' > .model-output/provenance.json
+
+          cat > .model-output/RELEASE_NOTES.md <<EOF
+          # SenseVoice Small for sherpa-mnn
+
+          This is a model-only release. It is not an APK and is not bundled in any PocketASR application artifact.
+
+          - Source: https://huggingface.co/$SOURCE_REPOSITORY/tree/$SOURCE_REVISION
+          - Source FP32 ONNX SHA-256: \`$SOURCE_MODEL_SHA256\`
+          - MNN: $MNN_VERSION at \`$MNN_COMMIT\`
+          - Conversion: \`--weightQuantBits=8 --weightQuantBlock=64\`
+          - Output model SHA-256: \`$MODEL_SHA256\`
+          - Output model size: $MODEL_SIZE bytes
+          - Verification: pinned sherpa-mnn loaded the converted model and returned non-empty text for the pinned English test WAV.
+
+          The model is derived from FunAudioLLM SenseVoiceSmall and remains subject to the included FunASR Model Open Source License Agreement 1.1. Attribution and the SenseVoice model name must be retained.
+          EOF
+
+      - name: Publish separate model release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "SenseVoice Small sherpa-mnn q8 v${RELEASE_TAG##*-v}" \
+            --notes-file .model-output/RELEASE_NOTES.md \
+            .model-output/model.mnn \
+            .model-output/tokens.txt \
+            .model-output/SHA256SUMS \
+            .model-output/provenance.json \
+            .model-output/FunASR-MODEL-LICENSE.txt \
+            .model-output/smoke-test.log
+
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,assets)"
+          for asset in model.mnn tokens.txt SHA256SUMS provenance.json FunASR-MODEL-LICENSE.txt smoke-test.log; do
+            jq -e --arg asset "$asset" '.assets[] | select(.name == $asset)' <<<"$RELEASE_JSON" >/dev/null
+          done
+          RELEASE_URL="$(jq -r '.url' <<<"$RELEASE_JSON")"
+          MODEL_SHA256="$(sha256sum .model-output/model.mnn | cut -d' ' -f1)"
+          {
+            echo "## Published model release"
+            echo
+            echo "- Release: $RELEASE_URL"
+            echo "- model.mnn SHA-256: \`$MODEL_SHA256\`"
+            echo "- Model URL: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/model.mnn"
+          } >> "$GITHUB_STEP_SUMMARY"

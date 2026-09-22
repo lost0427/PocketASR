@@ -46,10 +46,16 @@
   release is published**. Do not describe the `crispembed` plugin as fetching
   anything: its `fetchCrispembedLibs` task uses the `Project.exec` API removed
   in Gradle 9 and is disabled in `android/app/build.gradle.kts`.
-- **Models are never built or downloaded by any workflow.** The APKs ship engine
-  libraries only; users must supply model files at runtime (see
-  `assets/model_allowlist.json`). Never present a build artifact as a model
-  bundle or fabricate a model download.
+- Application CI and release workflows never build, download, or package
+  models. The sole exception is the manually triggered, model-only
+  `.github/workflows/publish-sherpa-mnn-model.yml`: it downloads a pinned FP32
+  SenseVoice ONNX file, verifies its SHA-256, converts it with the pinned MNN
+  source, runs a real sherpa-mnn recognition smoke test, and publishes a
+  separate `model-*` GitHub Release. Its assets must never enter an APK,
+  desktop bundle, native cache, or application release. The APKs ship engine
+  libraries only; users obtain allowlisted models at runtime (see
+  `assets/model_allowlist.json`). Never present an application build artifact
+  as a model bundle or fabricate a model download.
 - CI (`ci.yml`) runs `flutter analyze` and `flutter test` on `windows-latest`.
   Release builds Windows and both Android variants in parallel, then publishes
   only after every job succeeds; CI does not build or upload debug artifacts.
