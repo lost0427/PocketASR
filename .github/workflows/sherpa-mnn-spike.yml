@@ -1,0 +1,61 @@
+# TEMPORARY spike workflow for the sherpa-mnn integration experiment.
+# Lives only on feat/sherpa-mnn-native; delete before merging.
+#
+# Answers the Phase 0 questions on a real runner: can MNN + sherpa-mnn C API be
+# built for Android arm64 from pinned source, staged into jniLibs, survive APK
+# packaging (16KB alignment / DT_NEEDED closure / symbol export), and does the
+# build drag in onnxruntime or unexpected DT_NEEDED siblings?
+#
+# It never publishes a release and never touches model files.
+name: sherpa-mnn spike
+
+on:
+  push:
+    branches: [feat/sherpa-mnn-native]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: gradle/actions/setup-gradle@v4
+      - run: flutter pub get
+
+      - name: Restore sherpa-mnn compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache-sherpa-mnn
+          key: sherpa-mnn-spike-ccache-${{ hashFiles('scripts/ci/build_native_sherpa_mnn.sh') }}
+          restore-keys: |
+            sherpa-mnn-spike-ccache-
+
+      - name: Build sherpa-mnn native (pinned MNN)
+        run: bash scripts/ci/build_native_sherpa_mnn.sh
+
+      - name: Build APK with the staged native libs
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Verify APK native payload (sherpa-mnn)
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          python3 scripts/ci/verify_apk_native.py "$APK" \
+            --require libsherpa-mnn-c-api.so \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineRecognizer \
+            --report
+          ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
+          "$ZIPALIGN" -c -P 16 4 "$APK"
+
+      - name: Upload spike APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-mnn-spike-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
