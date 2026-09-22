@@ -27,13 +27,12 @@
 # Models are NEVER downloaded or bundled here.
 #
 # Usage: bash scripts/ci/build_native_sherpa_mnn.sh [output-dir]
-# Env overrides: MNN_REF, NDK_VERSION, ANDROID_HOME.
+# Env overrides: NDK_VERSION, ANDROID_HOME.
 set -euo pipefail
 
 MNN_URL="https://github.com/alibaba/MNN"
-# Tag, not a SHA: the log prints the resolved commit, so the real pin is
-# recorded on every run. Bump deliberately.
-MNN_REF="${MNN_REF:-3.6.1}"
+MNN_VERSION="3.6.1"
+MNN_COMMIT="d407447ed56c4121a11ccbd266dc184ca1ead0c2"
 
 NDK_VERSION="${NDK_VERSION:-30.0.16248370}" # r30 LTS
 ANDROID_ABI="arm64-v8a"
@@ -96,19 +95,21 @@ if [ "$USE_CCACHE" = "1" ]; then
   )
 fi
 
-clone_at() { # url ref dest
+clone_at() { # url commit dest
   git init -q "$3" && git -C "$3" remote add origin "$1"
-  git -C "$3" fetch -q --depth 1 origin "refs/tags/$2"
+  git -C "$3" fetch -q --depth 1 origin "$2"
   git -C "$3" checkout -q FETCH_HEAD
   git -C "$3" submodule update --init --recursive
 }
 
 # --- clone MNN (sherpa-mnn is inside it) ---
-clone_at "$MNN_URL" "$MNN_REF" "$WORK/mnn"
-MNN_COMMIT="$(git -C "$WORK/mnn" rev-parse HEAD)"
-log "MNN $MNN_REF resolved to $MNN_COMMIT"
+clone_at "$MNN_URL" "$MNN_COMMIT" "$WORK/mnn"
+MNN_RESOLVED="$(git -C "$WORK/mnn" rev-parse HEAD)"
+[ "$MNN_RESOLVED" = "$MNN_COMMIT" ] || {
+  log "FATAL: MNN checkout $MNN_RESOLVED != pinned $MNN_COMMIT"; exit 1; }
+log "MNN $MNN_VERSION pinned at $MNN_COMMIT"
 [ -d "$WORK/mnn/apps/frameworks/sherpa-mnn/sherpa-mnn" ] || {
-  log "FATAL: apps/frameworks/sherpa-mnn missing at $MNN_REF"; exit 1; }
+  log "FATAL: apps/frameworks/sherpa-mnn missing at $MNN_COMMIT"; exit 1; }
 
 # --- stage 1: MNN runtime ---
 log "configuring MNN runtime"
@@ -131,10 +132,15 @@ cmake -S "$WORK/mnn" -B "$WORK/mnn-build" "${common_cmake[@]}" \
   -DMNN_JNI=OFF \
   -DMNN_VULKAN=OFF -DMNN_OPENCL=OFF -DMNN_OPENGL=OFF \
   -DMNN_METAL=OFF -DMNN_NNAPI=OFF -DMNN_CUDA=OFF \
+  -DMNN_BUILD_FOR_ANDROID_COMMAND=ON \
   -DCMAKE_INSTALL_PREFIX="$WORK/mnn-install"
 cmake --build "$WORK/mnn-build" --target MNN
 cmake --install "$WORK/mnn-build"
 
+[ -f "$WORK/mnn-install/lib/libMNN.so" ] || {
+  log "FATAL: MNN install did not produce lib/libMNN.so"; exit 1; }
+[ -d "$WORK/mnn-install/include/MNN" ] || {
+  log "FATAL: MNN install did not produce include/MNN"; exit 1; }
 log "MNN install tree:"
 find "$WORK/mnn-install" -maxdepth 3 -type f | sort
 
