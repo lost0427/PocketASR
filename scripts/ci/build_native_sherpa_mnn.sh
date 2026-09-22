@@ -12,17 +12,17 @@
 #
 # sherpa-mnn lives inside the MNN repo at apps/frameworks/sherpa-mnn, so a
 # single pinned clone feeds two cmake configure/build passes:
-#   1. MNN runtime  -> $WORK/mnn-install (include/MNN/*.h + lib/libMNN.so)
+#   1. MNN runtime  -> $WORK/mnn-install (include/MNN/*.h + lib/libMNN.a)
 #   2. sherpa-mnn   -> libsherpa-mnn-c-api.so (BUILD_SHARED_LIBS=ON)
 #
 # Decisions for the spike:
-#   - MNN shipped SHARED (libMNN.so) exactly like the upstream README, to avoid
-#     static-link unknown-symbol surprises; revisit if the APK gate complains.
-#   - MNN_SEP_BUILD=OFF -> one libMNN.so instead of a pile of backend .so files.
+#   - MNN is static + PIC and embedded into libsherpa-mnn-c-api.so, so Android
+#     has one new runtime library and no separate libMNN.so dependency.
+#   - MNN_SEP_BUILD=OFF -> one libMNN.a instead of separate backend archives.
 #   - TTS/diarization/websocket/portaudio/GPU all OFF (only ASR is wanted; TTS
 #     would drag in espeak-ng, GPL).
-#   - MNN_BUILD_PROTOBUFFER=OFF: protobuf is a converter/tools concern; a shared
-#     libMNN.so must not gain a libprotobuf.so DT_NEEDED we would have to stage.
+#   - MNN_BUILD_PROTOBUFFER=OFF: protobuf is a converter/tools concern and must
+#     not be pulled into the final C API library.
 #
 # Models are NEVER downloaded or bundled here.
 #
@@ -114,7 +114,7 @@ log "MNN $MNN_VERSION pinned at $MNN_COMMIT"
 # --- stage 1: MNN runtime ---
 log "configuring MNN runtime"
 cmake -S "$WORK/mnn" -B "$WORK/mnn-build" "${common_cmake[@]}" \
-  -DMNN_BUILD_SHARED_LIBS=ON \
+  -DMNN_BUILD_SHARED_LIBS=OFF \
   -DMNN_SEP_BUILD=OFF \
   -DMNN_LOW_MEMORY=ON \
   -DMNN_BUILD_CONVERTER=OFF \
@@ -137,8 +137,8 @@ cmake -S "$WORK/mnn" -B "$WORK/mnn-build" "${common_cmake[@]}" \
 cmake --build "$WORK/mnn-build" --target MNN
 cmake --install "$WORK/mnn-build"
 
-[ -f "$WORK/mnn-install/lib/libMNN.so" ] || {
-  log "FATAL: MNN install did not produce lib/libMNN.so"; exit 1; }
+[ -f "$WORK/mnn-install/lib/libMNN.a" ] || {
+  log "FATAL: MNN install did not produce lib/libMNN.a"; exit 1; }
 [ -d "$WORK/mnn-install/include/MNN" ] || {
   log "FATAL: MNN install did not produce include/MNN"; exit 1; }
 log "MNN install tree:"
@@ -167,7 +167,8 @@ cmake --build "$WORK/sherpa-mnn-build" --target sherpa-mnn-c-api
 
 # --- stage ---
 mkdir -p "$OUT"
-cp -Lf "$WORK/mnn-install/lib/libMNN.so" "$OUT/libMNN.so"
+# Do not let a previous shared-MNN spike leave a stale runtime sibling behind.
+rm -f "$OUT/libMNN.so"
 SHERPA_SO="$(find "$WORK/sherpa-mnn-build" -name 'libsherpa-mnn-c-api.so*' -type f | sort | tail -1)"
 [ -n "$SHERPA_SO" ] || { log "FATAL: libsherpa-mnn-c-api.so not built"; exit 1; }
 cp -Lf "$SHERPA_SO" "$OUT/libsherpa-mnn-c-api.so"
