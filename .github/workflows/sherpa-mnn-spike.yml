@@ -29,6 +29,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: flutter pub get
 
+      - name: Install ccache
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
       - name: Restore sherpa-mnn compiler cache
         uses: actions/cache@v4
         with:

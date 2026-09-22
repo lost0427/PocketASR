@@ -37,7 +37,7 @@ MNN_COMMIT="d407447ed56c4121a11ccbd266dc184ca1ead0c2"
 NDK_VERSION="${NDK_VERSION:-30.0.16248370}" # r30 LTS
 ANDROID_ABI="arm64-v8a"
 ANDROID_API="24"
-PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
+PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -Wl,--exclude-libs,ALL"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/android/app/src/main/jniLibs/$ANDROID_ABI}"
