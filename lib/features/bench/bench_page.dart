@@ -12,6 +12,7 @@ import '../../engine/asr_engine.dart';
 import '../../engine/model_catalog.dart';
 import '../../features/transcribe/transcription_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/model_selection_localizations.dart';
 import 'benchmark_runner.dart';
 import 'seven_tap.dart';
 
@@ -205,6 +206,7 @@ class _BenchPageState extends State<BenchPage> {
       return;
     }
     final state = widget.state;
+    final l10n = AppLocalizations.of(context);
     state?.resetVadEngine(); // a previous cancel must not poison this run
     AsrEngine? ownedEngine;
     String? ownedEngineId;
@@ -272,6 +274,15 @@ class _BenchPageState extends State<BenchPage> {
         setState(() => _cells[entry.id] = const _Cell(_CellStatus.running));
         late BenchmarkResult result;
         try {
+          final selectionProblem = AppState.selectionProblemFor(
+            engineId: engineId,
+            spec: model,
+          );
+          if (selectionProblem != null) {
+            throw EngineUnavailableException(
+              l10n.messageForModelSelectionProblem(selectionProblem),
+            );
+          }
           final BenchmarkRunner runner;
           if (singleRunner != null) {
             runner = singleRunner;

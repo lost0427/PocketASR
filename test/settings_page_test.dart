@@ -163,6 +163,14 @@ void main() {
     expect(find.byType(BenchPage), findsOneWidget);
   });
 
+  testWidgets('About does not expose an in-app license viewer', (tester) async {
+    final state = AppState();
+    addTearDown(state.dispose);
+    await pumpSettings(tester, state);
+    expect(find.byType(LicensePage), findsNothing);
+    expect(find.text('Open-source licenses'), findsNothing);
+  });
+
   testWidgets('chunking controls write to AppState and reset to defaults', (
     tester,
   ) async {

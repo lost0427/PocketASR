@@ -48,7 +48,7 @@ class ModelFile {
   /// (enforced by [_checkPlainName]) so it cannot escape the bundle dir.
   final String fileName;
 
-  /// Engine-relevant role: `model` (primary), `tokens`, `encoder`, `decoder`.
+  /// Bundle role: `model` (primary), `tokens`, `encoder`, `decoder`, `license`.
   /// A null or `model` role marks the primary file.
   final String? role;
 
@@ -75,6 +75,7 @@ class ModelEntry {
     this.type = 'asr',
     this.license,
     this.languages = const [],
+    this.platforms = const [],
     this.parameters,
     this.sizeBytes,
     this.url,
@@ -125,6 +126,16 @@ class ModelEntry {
       languages.addAll(rawLanguages.cast<String>());
     }
 
+    final rawPlatforms = json['platforms'];
+    final platforms = <String>[];
+    if (rawPlatforms != null) {
+      if (rawPlatforms is! List ||
+          rawPlatforms.any((p) => p is! String || p.isEmpty)) {
+        throw FormatException('model "$id" has a malformed "platforms" list');
+      }
+      platforms.addAll(rawPlatforms.cast<String>());
+    }
+
     // Bundle total: only when every file size is verified; the top-level
     // "sizeBytes" on legacy flat entries stays a display estimate.
     final total = files.isNotEmpty && files.every((f) => f.sizeBytes != null)
@@ -142,6 +153,7 @@ class ModelEntry {
       type: _stringOrNull(json['type']) ?? 'asr',
       license: _stringOrNull(json['license']),
       languages: languages,
+      platforms: platforms,
       parameters: _sizeOrNull(json['parameters'], id, 'parameters'),
       sizeBytes: total ?? _sizeOrNull(json['sizeBytes'], id, fileName),
       url: _stringOrNull(json['url']) ?? primary?.url,
@@ -183,6 +195,9 @@ class ModelEntry {
   /// Language tags the model claims; empty when unverified.
   final List<String> languages;
 
+  /// Supported app platforms; empty means all platforms.
+  final List<String> platforms;
+
   /// Verified parameter count, independent of quantized file size.
   final int? parameters;
 
@@ -201,6 +216,13 @@ class ModelEntry {
   List<ModelFile> get bundleFiles => files.isNotEmpty
       ? files
       : [ModelFile(fileName: fileName, url: url, sha256: sha256)];
+
+  ModelFile? get licenseFile {
+    for (final file in bundleFiles) {
+      if (file.role == 'license') return file;
+    }
+    return null;
+  }
 
   ModelFile get primaryFile => bundleFiles.firstWhere(
     (f) => f.isPrimary,
@@ -237,9 +259,15 @@ List<ModelEntry> parseModelAllowlist(String source) {
 Future<List<ModelEntry>> loadModelAllowlist({
   AssetBundle? bundle,
   String asset = modelAllowlistAsset,
+  String? platform,
 }) async {
   final source = await (bundle ?? rootBundle).loadString(asset);
-  return parseModelAllowlist(source);
+  final currentPlatform = platform ?? Platform.operatingSystem;
+  return [
+    for (final entry in parseModelAllowlist(source))
+      if (entry.platforms.isEmpty || entry.platforms.contains(currentPlatform))
+        entry,
+  ];
 }
 
 /// Local file facts for catalog models.
@@ -335,22 +363,60 @@ class LocalModelStore implements ModelStore {
 
   @override
   EngineModelSpec specFor(ModelEntry entry) {
-    String? pathForRole(String role) {
+    ModelFile? fileForRole(String role) {
       for (final file in entry.bundleFiles) {
-        if (file.role == role) return pathToFile(entry, file);
+        if (file.role == role) return file;
       }
       return null;
     }
 
-    return EngineModelSpec(
+    String? pathForRole(String role) {
+      final file = fileForRole(role);
+      return file == null ? null : pathToFile(entry, file);
+    }
+
+    final primary = entry.primaryFile;
+    final tokens = fileForRole('tokens');
+    final tokensPath = tokens == null ? null : pathToFile(entry, tokens);
+    final untrusted = EngineModelSpec(
       path: pathFor(entry),
       family: entry.family,
       quant: entry.quant,
-      tokensPath: pathForRole('tokens'),
+      tokensPath: tokensPath,
       encoderPath: pathForRole('encoder'),
       decoderPath: pathForRole('decoder'),
     );
+
+    // A catalog id alone is not trust. Promote the spec only when every file
+    // identity the native engine consumes is exact; incomplete/legacy entries
+    // retain the same paths but stay explicitly untrusted.
+    if (!_hasExactIdentity(primary) ||
+        (tokens != null && !_hasExactIdentity(tokens))) {
+      return untrusted;
+    }
+    return EngineModelSpec.trustedCatalog(
+      path: untrusted.path,
+      family: untrusted.family,
+      quant: untrusted.quant,
+      tokensPath: untrusted.tokensPath,
+      encoderPath: untrusted.encoderPath,
+      decoderPath: untrusted.decoderPath,
+      trustedBundleId: entry.id,
+      modelSizeBytes: primary.sizeBytes!,
+      modelSha256: primary.sha256!,
+      tokensSizeBytes: tokens?.sizeBytes,
+      tokensSha256: tokens?.sha256,
+    );
   }
+}
+
+bool _hasExactIdentity(ModelFile file) {
+  final sha256 = file.sha256;
+  return file.sizeBytes != null &&
+      file.sizeBytes! > 0 &&
+      sha256 != null &&
+      sha256.length == 64 &&
+      RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(sha256);
 }
 
 /// Rejects names that could escape a bundle directory once joined to a path.

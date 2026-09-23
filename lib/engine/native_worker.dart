@@ -1,8 +1,9 @@
 /// Dedicated worker isolate for one native [AsrEngine] (plan §2 execution).
 ///
 /// [WorkerAsrEngine] is the production adapter the registry hands out for
-/// `crispasr`/`sherpa`: the real engine — and every native handle it opens —
-/// is constructed *inside* a private isolate and never in the root isolate.
+/// `crispasr`/`sherpa`/`sherpa-mnn`: the real engine — and every native handle
+/// it opens — is constructed *inside* a private isolate and never in the root
+/// isolate.
 /// Commands are processed strictly one at a time by the worker's own event
 /// loop, so a synchronous native `load`/`transcribe`/`dispose` can never race
 /// another. Progress events travel back over a [SendPort] as the engine emits
@@ -24,6 +25,7 @@ import 'dart:isolate';
 import 'asr_engine.dart';
 import 'crispasr_engine.dart';
 import 'sherpa_engine.dart';
+import 'sherpa_mnn_engine.dart';
 
 /// Builds the engine instance *inside* the worker isolate.
 ///
@@ -43,7 +45,11 @@ class WorkerAsrEngine implements CancellableAsrEngine {
       WorkerAsrEngine._(
         'crispasr',
         _buildNative,
-        _NativeSetup(engineKind: 'crispasr', threads: threads, libPath: libPath),
+        _NativeSetup(
+          engineKind: 'crispasr',
+          threads: threads,
+          libPath: libPath,
+        ),
       );
 
   /// sherpa-onnx on a private worker isolate.
@@ -53,6 +59,18 @@ class WorkerAsrEngine implements CancellableAsrEngine {
         _buildNative,
         _NativeSetup(
           engineKind: 'sherpa',
+          threads: threads,
+          libPath: libraryPath,
+        ),
+      );
+
+  /// sherpa-mnn on a private worker isolate.
+  factory WorkerAsrEngine.sherpaMnn({int threads = 4, String? libraryPath}) =>
+      WorkerAsrEngine._(
+        'sherpa-mnn',
+        _buildNative,
+        _NativeSetup(
+          engineKind: 'sherpa-mnn',
           threads: threads,
           libPath: libraryPath,
         ),
@@ -181,7 +199,9 @@ class WorkerAsrEngine implements CancellableAsrEngine {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    if (_started == null) return; // never spawned anything; nothing to tear down
+    if (_started == null) {
+      return; // never spawned anything; nothing to tear down
+    }
     try {
       await _call('dispose', null);
     } on Object {
@@ -202,7 +222,9 @@ class WorkerAsrEngine implements CancellableAsrEngine {
     await _start();
     final port = _commands;
     if (port == null || _dead) {
-      throw EngineUnavailableException('ASR worker isolate is no longer running.');
+      throw EngineUnavailableException(
+        'ASR worker isolate is no longer running.',
+      );
     }
     final completer = Completer<Object?>();
     _pending[id] = completer;
@@ -271,7 +293,9 @@ class WorkerAsrEngine implements CancellableAsrEngine {
     _dead = true;
     if (!_handshake.isCompleted) {
       _handshake.completeError(
-        EngineUnavailableException('ASR worker isolate exited before starting.'),
+        EngineUnavailableException(
+          'ASR worker isolate exited before starting.',
+        ),
       );
     }
     _failAll('ASR worker isolate exited.');
@@ -358,8 +382,15 @@ const _eventFatal = 'fatal';
 AsrEngine _buildNative(Object? config) {
   final setup = config as _NativeSetup;
   return switch (setup.engineKind) {
-    'crispasr' => CrispAsrEngine(libPath: setup.libPath, threads: setup.threads),
+    'crispasr' => CrispAsrEngine(
+      libPath: setup.libPath,
+      threads: setup.threads,
+    ),
     'sherpa' => SherpaEngine(
+      threads: setup.threads,
+      libraryPath: setup.libPath,
+    ),
+    'sherpa-mnn' => SherpaMnnEngine(
       threads: setup.threads,
       libraryPath: setup.libPath,
     ),
@@ -378,7 +409,12 @@ bool _sameModel(EngineModelSpec a, EngineModelSpec b) =>
     a.quant == b.quant &&
     a.tokensPath == b.tokensPath &&
     a.encoderPath == b.encoderPath &&
-    a.decoderPath == b.decoderPath;
+    a.decoderPath == b.decoderPath &&
+    a.trustedBundleId == b.trustedBundleId &&
+    a.modelSizeBytes == b.modelSizeBytes &&
+    a.modelSha256 == b.modelSha256 &&
+    a.tokensSizeBytes == b.tokensSizeBytes &&
+    a.tokensSha256 == b.tokensSha256;
 
 Future<void> _entry(_Boot boot) async {
   late final ReceivePort commands;
@@ -397,14 +433,15 @@ Future<void> _entry(_Boot boot) async {
       try {
         switch (cmd.op) {
           case 'capabilities':
-            main.send(_AsrEvent(_eventReply, cmd.id, await engine.capabilities()));
+            main.send(
+              _AsrEvent(_eventReply, cmd.id, await engine.capabilities()),
+            );
           case 'backends':
             main.send(
               _AsrEvent(_eventReply, cmd.id, await engine.availableBackends()),
             );
           case 'load':
-            final (spec, backend) = cmd.payload! as
-                (EngineModelSpec, Backend);
+            final (spec, backend) = cmd.payload! as (EngineModelSpec, Backend);
             if (loadedSpec != null &&
                 loadedBackend == backend &&
                 _sameModel(loadedSpec, spec)) {
@@ -421,14 +458,15 @@ Future<void> _entry(_Boot boot) async {
             loadedBackend = backend;
             main.send(_AsrEvent(_eventReply, cmd.id, null));
           case 'transcribe':
-            await for (final progress
-                in engine.transcribe(cmd.payload! as TranscribeRequest)) {
+            await for (final progress in engine.transcribe(
+              cmd.payload! as TranscribeRequest,
+            )) {
               main.send(_AsrEvent(_eventProgress, cmd.id, progress));
             }
             main.send(_AsrEvent(_eventReply, cmd.id, null));
           case 'planVad':
-            final (vadRequest, vadSettings) = cmd.payload!
-                as (TranscribeRequest, NeuralVadSettings);
+            final (vadRequest, vadSettings) =
+                cmd.payload! as (TranscribeRequest, NeuralVadSettings);
             main.send(
               _AsrEvent(
                 _eventReply,

@@ -380,6 +380,18 @@ abstract class AppLocalizations {
   /// **'The selected model bundle is incomplete. Download it again from Models.'**
   String get modelNeedsDecoder;
 
+  /// No description provided for @modelNeedsVerifiedMnnBundle.
+  ///
+  /// In en, this message translates to:
+  /// **'MNN models can only run from a verified download in Models. Select or download the complete MNN bundle there.'**
+  String get modelNeedsVerifiedMnnBundle;
+
+  /// No description provided for @modelNeedsMnnTokens.
+  ///
+  /// In en, this message translates to:
+  /// **'The verified MNN model bundle is missing its tokens file. Download it again from Models.'**
+  String get modelNeedsMnnTokens;
+
   /// No description provided for @modelSelectionMissing.
   ///
   /// In en, this message translates to:
@@ -895,6 +907,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'In use'**
   String get modelsInUse;
+
+  /// No description provided for @modelsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get modelsClose;
 
   /// No description provided for @modelsBusyNote.
   ///

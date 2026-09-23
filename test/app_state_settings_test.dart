@@ -110,9 +110,19 @@ void main() {
       quant: 'int8',
       engine: 'sherpa',
       files: [
-        ModelFile(fileName: 'enc.onnx', role: 'encoder', sizeBytes: 2),
+        ModelFile(
+          fileName: 'enc.onnx',
+          role: 'encoder',
+          sizeBytes: 2,
+          sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ),
         ModelFile(fileName: 'dec.onnx', role: 'decoder', sizeBytes: 2),
-        ModelFile(fileName: 'tok.txt', role: 'tokens', sizeBytes: 2),
+        ModelFile(
+          fileName: 'tok.txt',
+          role: 'tokens',
+          sizeBytes: 2,
+          sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        ),
       ],
     );
     final store = LocalModelStore(dir);
@@ -143,6 +153,46 @@ void main() {
     expect(restored.modelSpec!.tokensPath, isNotNull);
     expect(restored.modelSpec!.encoderPath, isNotNull);
     expect(restored.modelSpec!.decoderPath, isNotNull);
+    expect(restored.modelSpec!.trustedBundleId, 'w');
+    expect(restored.modelSpec!.modelSizeBytes, 2);
+    expect(restored.modelSpec!.modelSha256, entry.files.first.sha256);
+    expect(restored.modelSpec!.tokensSizeBytes, 2);
+    expect(restored.modelSpec!.tokensSha256, entry.files.last.sha256);
+  });
+
+  test('old catalog selection without trust metadata fails closed', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final path = write('old-catalog.onnx', [1]);
+    db.setSetting('model_path', path);
+    db.setSetting('model_manual', 'false');
+
+    final restored = AppState(database: db);
+
+    expect(restored.modelSpec, isNull);
+    expect(restored.modelSelectionMissing, isTrue);
+  });
+
+  test('partial persisted token identity fails closed', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final model = write('model.mnn', [1]);
+    final tokens = write('tokens.txt', [2]);
+    db.setSetting('model_path', model);
+    db.setSetting('model_tokens', tokens);
+    db.setSetting('model_manual', 'false');
+    db.setSetting('model_trusted_bundle', 'bundle');
+    db.setSetting('model_size_bytes', '1');
+    db.setSetting(
+      'model_sha256',
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    db.setSetting('model_tokens_size_bytes', '1');
+
+    final restored = AppState(database: db);
+
+    expect(restored.modelSpec, isNull);
+    expect(restored.modelSelectionMissing, isTrue);
   });
 
   test('a hand-picked file maps to its format engine and restores', () {
@@ -167,6 +217,89 @@ void main() {
     expect(restored.modelPath, path);
     expect(restored.modelSelectionIsManual, isTrue);
     expect(restored.modelSpec!.quant, 'q8_0');
+  });
+
+  test('a hand-picked MNN file routes correctly but cannot start', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+
+    final path = write('sensevoice.MNN', [1, 2, 3]);
+    final state = AppState(database: db)..modelPath = path;
+
+    expect(state.engineId, 'sherpa-mnn');
+    expect(state.modelSpec!.tokensPath, isNull);
+    expect(
+      state.modelSelectionProblem,
+      ModelSelectionProblem.sherpaMnnCatalogBundleRequired,
+    );
+    expect(state.selectionNeedsMissingCompanion, isTrue);
+
+    final restored = AppState(database: db);
+    expect(restored.engineId, 'sherpa-mnn');
+    expect(restored.modelPath, path);
+    expect(
+      restored.modelSelectionProblem,
+      ModelSelectionProblem.sherpaMnnCatalogBundleRequired,
+    );
+  });
+
+  test('an old untrusted MNN bundle migrates and fails closed', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final model = write('old-model.mnn', [1]);
+    final tokens = write('tokens.txt', [2]);
+    db.setSetting('model_path', model);
+    db.setSetting('model_tokens', tokens);
+    db.setSetting('model_manual', 'false');
+    db.setSetting('engine_id', 'sherpa');
+
+    final restored = AppState(database: db);
+
+    expect(restored.engineId, 'sherpa-mnn');
+    expect(db.getSetting('engine_id'), 'sherpa-mnn');
+    expect(restored.modelSpec, isNull);
+    expect(restored.modelSelectionMissing, isTrue);
+    expect(
+      restored.modelSelectionProblem,
+      ModelSelectionProblem.sherpaMnnCatalogBundleRequired,
+    );
+  });
+
+  test('a trusted MNN catalog bundle with tokens may start and restore', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final model = write('model.mnn', [1]);
+    final tokens = write('tokens.txt', [2]);
+    final spec = EngineModelSpec.trustedCatalog(
+      path: model,
+      family: 'sensevoice',
+      quant: 'int8-weight-block64',
+      tokensPath: tokens,
+      trustedBundleId: 'sensevoice-mnn-q8',
+      modelSizeBytes: 1,
+      modelSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      tokensSizeBytes: 1,
+      tokensSha256:
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
+
+    final state = AppState(database: db)
+      ..selectModel(
+        spec: spec,
+        engineId: 'sherpa-mnn',
+        family: 'sensevoice',
+        quant: 'int8-weight-block64',
+      );
+
+    expect(state.modelSelectionProblem, isNull);
+    expect(state.selectionNeedsMissingCompanion, isFalse);
+
+    final restored = AppState(database: db);
+    expect(restored.engineId, 'sherpa-mnn');
+    expect(restored.modelSpec!.tokensPath, tokens);
+    expect(restored.modelSpec!.trustedBundleId, 'sensevoice-mnn-q8');
+    expect(restored.modelSelectionProblem, isNull);
   });
 
   test('a vanished selection is cleared and flagged on restart', () {

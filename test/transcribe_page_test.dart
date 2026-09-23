@@ -472,6 +472,27 @@ void main() {
     expect(start.onPressed, isNull);
   });
 
+  testWidgets('explains that a hand-picked MNN file is not verified', (
+    tester,
+  ) async {
+    final state = AppState()..modelPath = 'hand-picked.mnn';
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      _app(engine: const _FakeEngine(_availableCaps), state: state),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('MNN models can only run from a verified download'),
+      findsOneWidget,
+    );
+    final start = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Start transcription'),
+    );
+    expect(start.onPressed, isNull);
+  });
+
   testWidgets('a whisper bundle with its decoder starts and keeps the spec', (
     tester,
   ) async {

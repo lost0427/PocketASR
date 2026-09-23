@@ -161,6 +161,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The selected model bundle is incomplete. Download it again from Models.';
 
   @override
+  String get modelNeedsVerifiedMnnBundle =>
+      'MNN models can only run from a verified download in Models. Select or download the complete MNN bundle there.';
+
+  @override
+  String get modelNeedsMnnTokens =>
+      'The verified MNN model bundle is missing its tokens file. Download it again from Models.';
+
+  @override
   String get modelSelectionMissing =>
       'The downloaded model selected last time is no longer on this device. Choose another one.';
 
@@ -460,6 +468,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modelsInUse => 'In use';
+
+  @override
+  String get modelsClose => 'Close';
 
   @override
   String get modelsBusyNote =>

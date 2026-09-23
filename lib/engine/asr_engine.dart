@@ -27,6 +27,102 @@ class EngineModelSpec {
     this.tokensPath,
     this.encoderPath,
     this.decoderPath,
+  }) : trustedBundleId = null,
+       modelSizeBytes = null,
+       modelSha256 = null,
+       tokensSizeBytes = null,
+       tokensSha256 = null;
+
+  /// Creates a spec whose file identity came from the shipped model catalog.
+  ///
+  /// This is deliberately separate from the general-purpose constructor:
+  /// hand-picked paths and test/client-created specs must stay untrusted. Only
+  /// `LocalModelStore.specFor` maps catalog facts through this constructor.
+  /// Native engines must still compare these facts with their own pinned
+  /// allowlist expectations and verify the files before crossing FFI.
+  factory EngineModelSpec.trustedCatalog({
+    required String path,
+    required String trustedBundleId,
+    required int modelSizeBytes,
+    required String modelSha256,
+    String? family,
+    String? quant,
+    String? tokensPath,
+    int? tokensSizeBytes,
+    String? tokensSha256,
+    String? encoderPath,
+    String? decoderPath,
+  }) {
+    if (trustedBundleId.isEmpty) {
+      throw ArgumentError.value(
+        trustedBundleId,
+        'trustedBundleId',
+        'must not be empty',
+      );
+    }
+    if (modelSizeBytes <= 0) {
+      throw ArgumentError.value(
+        modelSizeBytes,
+        'modelSizeBytes',
+        'must be positive',
+      );
+    }
+    if (!_isSha256(modelSha256)) {
+      throw ArgumentError.value(
+        modelSha256,
+        'modelSha256',
+        'must be 64 hexadecimal characters',
+      );
+    }
+    final hasTokensPath = tokensPath != null && tokensPath.isNotEmpty;
+    if (hasTokensPath != (tokensSizeBytes != null) ||
+        hasTokensPath != (tokensSha256 != null)) {
+      throw ArgumentError(
+        'tokensPath, tokensSizeBytes and tokensSha256 must be provided '
+        'together',
+      );
+    }
+    if (tokensSizeBytes != null && tokensSizeBytes <= 0) {
+      throw ArgumentError.value(
+        tokensSizeBytes,
+        'tokensSizeBytes',
+        'must be positive',
+      );
+    }
+    if (tokensSha256 != null && !_isSha256(tokensSha256)) {
+      throw ArgumentError.value(
+        tokensSha256,
+        'tokensSha256',
+        'must be 64 hexadecimal characters',
+      );
+    }
+    return EngineModelSpec._trustedCatalog(
+      path: path,
+      family: family,
+      quant: quant,
+      tokensPath: tokensPath,
+      encoderPath: encoderPath,
+      decoderPath: decoderPath,
+      trustedBundleId: trustedBundleId,
+      modelSizeBytes: modelSizeBytes,
+      modelSha256: modelSha256.toLowerCase(),
+      tokensSizeBytes: tokensSizeBytes,
+      tokensSha256: tokensSha256?.toLowerCase(),
+    );
+  }
+
+  const EngineModelSpec._trustedCatalog({
+    required this.path,
+    required this.trustedBundleId,
+    required this.modelSizeBytes,
+    required this.modelSha256,
+    required this.family,
+    required this.quant,
+    required this.tokensPath,
+    required this.tokensSizeBytes,
+    required this.tokensSha256,
+    required this.encoderPath,
+    required this.decoderPath,
   });
 
   /// Filesystem path to the (primary) model weights.
@@ -46,7 +142,21 @@ class EngineModelSpec {
 
   /// Decoder weights, for encoder/decoder models like whisper.
   final String? decoderPath;
+
+  /// Stable allowlist bundle id, or null for a hand-picked/caller-built spec.
+  final String? trustedBundleId;
+
+  /// Exact catalog identity of the primary model file.
+  final int? modelSizeBytes;
+  final String? modelSha256;
+
+  /// Exact catalog identity of the tokens companion, when the bundle has one.
+  final int? tokensSizeBytes;
+  final String? tokensSha256;
 }
+
+bool _isSha256(String value) =>
+    value.length == 64 && RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(value);
 
 /// What an engine can actually do right now.
 ///

@@ -156,6 +156,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelNeedsDecoder => '所选模型包不完整，请前往“模型”页重新下载。';
 
   @override
+  String get modelNeedsVerifiedMnnBundle =>
+      'MNN 模型只能从“模型”页下载并校验后使用，请在那里选择或下载完整模型包。';
+
+  @override
+  String get modelNeedsMnnTokens => '已校验的 MNN 模型包缺少词表文件，请前往“模型”页重新下载。';
+
+  @override
   String get modelSelectionMissing => '上次选择的已下载模型已不在本机，请选择其他模型。';
 
   @override
@@ -426,6 +433,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modelsInUse => '使用中';
+
+  @override
+  String get modelsClose => '关闭';
 
   @override
   String get modelsBusyNote => '正在转录，停止后才能切换模型。';

@@ -16,6 +16,7 @@ import '../models/model_picker.dart';
 import 'transcription_service.dart';
 import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/model_selection_localizations.dart';
 
 /// Transcribe tab.
 ///
@@ -207,8 +208,9 @@ class _TranscribePageState extends State<TranscribePage> {
       _notify(l10n.transcribeModelRequired);
       return;
     }
-    if (state?.selectionNeedsMissingCompanion ?? false) {
-      _notify(l10n.modelNeedsDecoder);
+    final selectionProblem = state?.modelSelectionProblem;
+    if (selectionProblem != null) {
+      _notify(l10n.messageForModelSelectionProblem(selectionProblem));
       return;
     }
     // Neural mode is only real when its own model is on disk: without it the
@@ -455,8 +457,7 @@ class _TranscribePageState extends State<TranscribePage> {
         final engineAvailable = capabilities?.available ?? false;
         final running = _running;
         final modelPath = _modelPath;
-        final needsDecoder =
-            widget.state?.selectionNeedsMissingCompanion ?? false;
+        final selectionProblem = widget.state?.modelSelectionProblem;
         final state = widget.state;
         final neuralSelected =
             (state?.chunkStrategy ?? ChunkStrategy.fixed) ==
@@ -474,7 +475,7 @@ class _TranscribePageState extends State<TranscribePage> {
             modelPath != null &&
             !running &&
             !busyElsewhere &&
-            !needsDecoder &&
+            selectionProblem == null &&
             !needsVadModel &&
             !_previewing &&
             !_recordingBusy;
@@ -628,11 +629,13 @@ class _TranscribePageState extends State<TranscribePage> {
                       minimumSize: const Size.fromHeight(44),
                     ),
                   ),
-                  if (needsDecoder) ...[
+                  if (selectionProblem != null) ...[
                     const SizedBox(height: 12),
                     _Hint(
                       icon: Icons.warning_amber_rounded,
-                      text: l10n.modelNeedsDecoder,
+                      text: l10n.messageForModelSelectionProblem(
+                        selectionProblem,
+                      ),
                       color: scheme.error,
                     ),
                   ] else if (widget.state?.modelSelectionMissing ?? false) ...[
@@ -1206,7 +1209,12 @@ class _MetricsGrid extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final unknown = l10n.metricUnavailable;
     final metrics = <(String, IconData, String, String?)>[
-      (l10n.metricCharsPerSec, Icons.speed, _rate(charsPerSec) ?? unknown, null),
+      (
+        l10n.metricCharsPerSec,
+        Icons.speed,
+        _rate(charsPerSec) ?? unknown,
+        null,
+      ),
       (
         l10n.metricRtf,
         Icons.timer_outlined,
@@ -1238,12 +1246,7 @@ class _MetricsGrid extends StatelessWidget {
       childAspectRatio: 1.9,
       children: [
         for (final (label, icon, value, tooltip) in metrics)
-          _MetricTile(
-            label: label,
-            icon: icon,
-            value: value,
-            tooltip: tooltip,
-          ),
+          _MetricTile(label: label, icon: icon, value: value, tooltip: tooltip),
       ],
     );
   }

@@ -62,6 +62,17 @@ void main() {
     ],
   );
 
+  const licensedModel = ModelEntry(
+    id: 'licensed',
+    displayName: 'Licensed model',
+    fileName: 'unused',
+    license: 'FunASR Model Open Source License Agreement 1.1',
+    files: [
+      ModelFile(fileName: 'model.mnn', role: 'model'),
+      ModelFile(fileName: 'license.txt', role: 'license'),
+    ],
+  );
+
   testWidgets('offers download only when the entry carries a URL', (
     tester,
   ) async {
@@ -126,6 +137,20 @@ void main() {
     expect(find.text('Downloaded'), findsNothing);
     expect(find.text('Not available for download'), findsOneWidget);
     expect(find.text('0 B'), findsOneWidget);
+  });
+
+  testWidgets('shows model license metadata without a license viewer', (
+    tester,
+  ) async {
+    download(licensedModel);
+    await tester.pumpWidget(host(entries: const [licensedModel]));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('FunASR Model Open Source License Agreement 1.1'),
+      findsOneWidget,
+    );
+    expect(find.text('View license'), findsNothing);
+    expect(find.text('Model license'), findsNothing);
   });
 
   testWidgets('download reports progress and can be cancelled', (tester) async {

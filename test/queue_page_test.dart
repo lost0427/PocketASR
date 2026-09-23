@@ -59,7 +59,9 @@ void main() {
       if (call.method == 'openFile') return ['a.wav', 'b.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final database = AppDatabase.open();
     addTearDown(database.close);
@@ -127,7 +129,9 @@ void main() {
       }
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);
@@ -151,7 +155,9 @@ void main() {
       if (call.method == 'openFile') return ['a.wav', 'b.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final state = AppState();
     addTearDown(state.dispose);
@@ -165,10 +171,12 @@ void main() {
     await tester.tap(find.byTooltip('Move up').at(1));
     await tester.pumpAndSettle();
     final titles = tester
-        .widgetList<Text>(find.descendant(
-          of: find.byType(ListTile),
-          matching: find.byType(Text),
-        ))
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(ListTile),
+            matching: find.byType(Text),
+          ),
+        )
         .map((t) => t.data)
         .toList();
     expect(titles.indexOf('a.wav'), greaterThan(titles.indexOf('b.wav')));
@@ -177,7 +185,8 @@ void main() {
     await tester.tap(find.byTooltip('Remove').first);
     await tester.pumpAndSettle();
     expect(
-      find.text('a.wav').evaluate().length + find.text('b.wav').evaluate().length,
+      find.text('a.wav').evaluate().length +
+          find.text('b.wav').evaluate().length,
       1,
     );
   });
@@ -191,7 +200,9 @@ void main() {
       if (call.method == 'openFile') return ['a.wav'];
       return null;
     });
-    addTearDown(() => messenger.setMockMethodCallHandler(_selectorChannel, null));
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_selectorChannel, null),
+    );
 
     final engine = _CancellableFakeEngine();
     final service = _BlockingService();
@@ -226,7 +237,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Another transcription is running. Wait for it to finish first.'),
+      find.text(
+        'Another transcription is running. Wait for it to finish first.',
+      ),
+      findsOneWidget,
+    );
+    final run = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Run queue'),
+    );
+    expect(run.onPressed, isNull);
+  });
+
+  testWidgets('explains that a hand-picked MNN file is not verified', (
+    tester,
+  ) async {
+    final state = AppState()..modelPath = 'hand-picked.mnn';
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(_host(state: state));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('MNN models can only run from a verified download'),
       findsOneWidget,
     );
     final run = tester.widget<FilledButton>(

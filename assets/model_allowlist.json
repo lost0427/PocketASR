@@ -30,6 +30,40 @@
       ]
     },
     {
+      "id": "model-sherpa-mnn-sensevoice-q8-v1",
+      "displayName": "SenseVoice Small (FunASR / Sherpa-MNN INT8)",
+      "engine": "sherpa-mnn",
+      "type": "asr",
+      "family": "sensevoice",
+      "quant": "int8-weight-block64",
+      "platforms": ["android"],
+      "languages": ["zh", "en", "yue", "ja", "ko"],
+      "license": "FunASR Model Open Source License Agreement 1.1",
+      "files": [
+        {
+          "fileName": "model.mnn",
+          "role": "model",
+          "url": "https://github.com/lost0427/PocketASR/releases/download/model-sherpa-mnn-sensevoice-q8-v1/model.mnn",
+          "sizeBytes": 266565508,
+          "sha256": "28b954a62c9f8f8a9ccbe1079b1bb3b1d283fee0c84b311dadc7762cfcbe82bd"
+        },
+        {
+          "fileName": "tokens.txt",
+          "role": "tokens",
+          "url": "https://github.com/lost0427/PocketASR/releases/download/model-sherpa-mnn-sensevoice-q8-v1/tokens.txt",
+          "sizeBytes": 315894,
+          "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+        },
+        {
+          "fileName": "FunASR-MODEL-LICENSE.txt",
+          "role": "license",
+          "url": "https://github.com/lost0427/PocketASR/releases/download/model-sherpa-mnn-sensevoice-q8-v1/FunASR-MODEL-LICENSE.txt",
+          "sizeBytes": 5306,
+          "sha256": "7dba975a2069691db4992b0592d70828b330d2f8a30a71450f4e152a554e84f8"
+        }
+      ]
+    },
+    {
       "id": "sherpa-whisper-base-int8",
       "parameters": 74000000,
       "displayName": "Whisper Base (sherpa-onnx int8)",

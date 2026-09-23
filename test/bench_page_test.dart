@@ -376,6 +376,48 @@ void main() {
     expect(find.text('0/3'), findsOneWidget); // no successful run
   });
 
+  testWidgets('rejects an unverified MNN row before building its engine', (
+    tester,
+  ) async {
+    const mnn = ModelEntry(
+      id: 'untrusted-mnn',
+      displayName: 'Untrusted MNN',
+      fileName: 'model.mnn',
+      family: 'sensevoice',
+      quant: 'int8-weight-block64',
+      engine: 'sherpa-mnn',
+      files: [
+        ModelFile(fileName: 'model.mnn', role: 'model'),
+        ModelFile(fileName: 'tokens.txt', role: 'tokens'),
+      ],
+    );
+    download(mnn);
+    final engines = <_NamedEngine>[];
+    await pumpBench(
+      tester,
+      entries: const [mnn],
+      audio: 'picked.wav',
+      engineFactory: (id) {
+        final engine = _NamedEngine(id);
+        engines.add(engine);
+        return engine;
+      },
+      serviceFactory: (engine) => _RoutingService(engine, []),
+    );
+
+    await tester.tap(find.text('Choose audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run benchmark'));
+    await tester.pumpAndSettle();
+
+    expect(engines, isEmpty);
+    expect(
+      find.textContaining('MNN models can only run from a verified download'),
+      findsWidgets,
+    );
+    expect(find.text('0/3'), findsOneWidget);
+  });
+
   testWidgets('cancelling asks a cancellable engine to stop', (tester) async {
     download(_sense);
     final engine = _CancellableEngine();

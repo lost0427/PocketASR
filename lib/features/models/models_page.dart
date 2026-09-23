@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -692,8 +691,10 @@ class _ModelTile extends StatelessWidget {
           ],
           if (!active && (selectable || downloaded || downloadable)) ...[
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 if (selectable) ...[
                   FilledButton.tonalIcon(
@@ -708,7 +709,6 @@ class _ModelTile extends StatelessWidget {
                     ),
                     label: Text(selected ? l10n.modelsInUse : l10n.modelsUse),
                   ),
-                  const SizedBox(width: 8),
                 ],
                 // Downloaded entries can be deleted; entries the allowlist
                 // gives no URL never get a download button.

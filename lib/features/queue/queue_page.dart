@@ -6,6 +6,7 @@ import '../../core/audio/audio_source.dart';
 import '../../engine/asr_engine.dart';
 import '../../data/transcript_repo.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/model_selection_localizations.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
 import '../transcribe/transcription_service.dart';
@@ -66,8 +67,8 @@ class _QueuePageState extends State<QueuePage> {
   bool get _engineBusyElsewhere =>
       (widget.state?.engineBusy ?? false) && !_running;
 
-  bool get _needsDecoder =>
-      widget.state?.selectionNeedsMissingCompanion ?? false;
+  ModelSelectionProblem? get _selectionProblem =>
+      widget.state?.modelSelectionProblem;
 
   /// Neural mode needs a real VAD model on disk; without one the queue must not
   /// start (and must not silently fall back to the energy gate).
@@ -107,7 +108,7 @@ class _QueuePageState extends State<QueuePage> {
     if (_running) return; // one worker at a time
     if (widget.state?.engineBusy ?? false) return; // another page is running
     final model = _modelSpec;
-    if (model == null || _needsDecoder || _needsVadModel) return;
+    if (model == null || _selectionProblem != null || _needsVadModel) return;
     final state = widget.state;
     // A cancel replaces the VAD worker; make sure the run starts on a fresh one.
     state?.resetVadEngine();
@@ -214,7 +215,7 @@ class _QueuePageState extends State<QueuePage> {
     final jobs = _queue.jobs;
     final running = _running;
     final modelPath = _modelPath;
-    final needsDecoder = _needsDecoder;
+    final selectionProblem = _selectionProblem;
     final needsVad = _needsVadModel;
     final busyElsewhere = _engineBusyElsewhere;
 
@@ -254,12 +255,12 @@ class _QueuePageState extends State<QueuePage> {
             ],
           ),
         ),
-        if (needsDecoder)
+        if (selectionProblem != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
               icon: Icons.warning_amber_rounded,
-              text: l10n.modelNeedsDecoder,
+              text: l10n.messageForModelSelectionProblem(selectionProblem),
               color: scheme.error,
             ),
           )
@@ -304,7 +305,7 @@ class _QueuePageState extends State<QueuePage> {
           child: FilledButton.icon(
             onPressed:
                 modelPath != null &&
-                    !needsDecoder &&
+                    selectionProblem == null &&
                     !needsVad &&
                     _queue.hasPending &&
                     !running &&

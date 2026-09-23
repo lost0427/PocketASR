@@ -1,6 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show CachingAssetBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 
 void main() {
@@ -109,6 +113,41 @@ void main() {
       );
     });
 
+    test('platform filtering belongs to the loader, not the parser', () async {
+      const source = '''
+      {"models": [
+        {"id": "shared", "fileName": "shared.onnx"},
+        {"id": "android-only", "fileName": "model.mnn", "platforms": ["android"]}
+      ]}
+      ''';
+      final bundle = _TextAssetBundle(source);
+
+      expect(parseModelAllowlist(source).map((entry) => entry.id), [
+        'shared',
+        'android-only',
+      ]);
+      expect(
+        (await loadModelAllowlist(
+          bundle: bundle,
+          platform: 'android',
+        )).map((entry) => entry.id),
+        ['shared', 'android-only'],
+      );
+      expect(
+        (await loadModelAllowlist(
+          bundle: bundle,
+          platform: 'windows',
+        )).map((entry) => entry.id),
+        ['shared'],
+      );
+      expect(
+        () => parseModelAllowlist(
+          '{"models":[{"id":"bad","fileName":"bad","platforms":[""]}]}',
+        ),
+        throwsFormatException,
+      );
+    });
+
     test('rejects file names and ids that could escape the bundle dir', () {
       expect(
         () => parseModelAllowlist(
@@ -148,7 +187,24 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(9));
+      expect(entries, hasLength(10));
+      final mnn = entries.singleWhere(
+        (entry) => entry.id == 'model-sherpa-mnn-sensevoice-q8-v1',
+      );
+      expect(mnn.engine, 'sherpa-mnn');
+      expect(mnn.platforms, ['android']);
+      expect(mnn.quant, 'int8-weight-block64');
+      expect(mnn.primaryFile.sizeBytes, 266565508);
+      expect(
+        mnn.primaryFile.sha256,
+        '28b954a62c9f8f8a9ccbe1079b1bb3b1d283fee0c84b311dadc7762cfcbe82bd',
+      );
+      expect(mnn.files.map((file) => file.role), [
+        'model',
+        'tokens',
+        'license',
+      ]);
+      expect(mnn.licenseFile?.fileName, 'FunASR-MODEL-LICENSE.txt');
       final qwenAsr = entries.singleWhere(
         (entry) => entry.id == 'crispasr-qwen3-asr-0.6b-q8',
       );
@@ -254,8 +310,18 @@ void main() {
       fileName: 'unused',
       family: 'whisper',
       files: [
-        ModelFile(fileName: 'model.onnx', role: 'model', sizeBytes: 4),
-        ModelFile(fileName: 'tokens.txt', role: 'tokens', sizeBytes: 2),
+        ModelFile(
+          fileName: 'model.onnx',
+          role: 'model',
+          sizeBytes: 4,
+          sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ),
+        ModelFile(
+          fileName: 'tokens.txt',
+          role: 'tokens',
+          sizeBytes: 2,
+          sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        ),
       ],
     );
 
@@ -342,10 +408,43 @@ void main() {
       expect(spec.path, store.pathToFile(bundle, bundle.files.first));
       expect(spec.family, 'whisper');
       expect(spec.tokensPath, store.pathToFile(bundle, bundle.files.last));
+      expect(spec.trustedBundleId, 'w');
+      expect(spec.modelSizeBytes, 4);
+      expect(spec.modelSha256, bundle.files.first.sha256);
+      expect(spec.tokensSizeBytes, 2);
+      expect(spec.tokensSha256, bundle.files.last.sha256);
       expect(
         store.specFor(entry).path,
         store.pathToFile(entry, entry.bundleFiles.single),
       );
+      expect(store.specFor(entry).trustedBundleId, isNull);
+    });
+
+    test('caller-built and incomplete catalog specs remain untrusted', () {
+      const callerBuilt = EngineModelSpec(path: 'model.mnn');
+      expect(callerBuilt.trustedBundleId, isNull);
+      expect(callerBuilt.modelSizeBytes, isNull);
+      expect(callerBuilt.modelSha256, isNull);
+
+      const incomplete = ModelEntry(
+        id: 'incomplete',
+        displayName: 'Incomplete',
+        fileName: 'model.mnn',
+        files: [ModelFile(fileName: 'model.mnn', role: 'model', sizeBytes: 12)],
+      );
+      final spec = store.specFor(incomplete);
+      expect(spec.path, store.pathFor(incomplete));
+      expect(spec.trustedBundleId, isNull);
     });
   });
+}
+
+class _TextAssetBundle extends CachingAssetBundle {
+  _TextAssetBundle(this.source);
+
+  final String source;
+
+  @override
+  Future<ByteData> load(String key) async =>
+      ByteData.sublistView(Uint8List.fromList(utf8.encode(source)));
 }

@@ -1,0 +1,24 @@
+PocketASR Android native Sherpa-MNN third-party notices
+
+This is a conservative source-level inventory for the pinned native build. It
+does not assert that every listed static archive member is present in the final
+APK; Phase 4 must retain a linker map to establish that closure.
+
+MNN 3.6.1 is pinned at d407447ed56c4121a11ccbd266dc184ca1ead0c2. Its upstream
+license is included from native/sherpa_mnn/UPSTREAM_LICENSE.txt.
+
+The same pinned MNN source contains apps/frameworks/sherpa-mnn/LICENSE and
+apps/frameworks/sherpa-mnn/NOTICE. The notice identifies sherpa-mnn as Apache
+2.0 and retains Xiaomi Corporation (2022-2023) and MNN Team (2025) attribution.
+
+Pinned sherpa-mnn CMake dependency licenses included here:
+- kaldi-native-fbank v1.21.1
+- kaldi-decoder v0.2.6
+- kaldifst v1.7.11; its LICENSE begins with the upstream Legal Notices section
+- OpenFST sherpa-onnx-2024-06-19
+- simple-sentencepiece v0.7
+- Eigen 3.4.0 COPYING.README, MPL2, BSD, LGPL and MINPACK license texts
+
+These notices and licenses are app assets and are exposed through Flutter's
+LicenseRegistry from Settings > About. Model weights and model-specific terms
+remain a separate runtime download and are not bundled in the APK.

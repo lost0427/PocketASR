@@ -19,7 +19,7 @@ void main() {
 
       expect(
         registry.asrEngineIds,
-        containsAll(['unavailable', 'crispasr', 'sherpa']),
+        containsAll(['unavailable', 'crispasr', 'sherpa', 'sherpa-mnn']),
       );
       expect(registry.createAsr('unavailable'), isA<UnavailableAsrEngine>());
       // Native engines are worker facades: the real adapter (and its native
@@ -32,20 +32,29 @@ void main() {
         registry.createAsr('sherpa'),
         isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa'),
       );
+      expect(
+        registry.createAsr('sherpa-mnn'),
+        isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa-mnn'),
+      );
     });
 
     test('builds the deterministic embedder and rejects unknown ids', () {
       final registry = EngineRegistry();
 
       expect(registry.embedderIds, contains('deterministic'));
-      expect(registry.createEmbedder('deterministic'), isA<DeterministicEmbedder>());
+      expect(
+        registry.createEmbedder('deterministic'),
+        isA<DeterministicEmbedder>(),
+      );
       expect(() => registry.createAsr('nope'), throwsArgumentError);
       expect(() => registry.createEmbedder('crispembed'), throwsArgumentError);
     });
 
     test('accepts caller overrides over the built-ins', () {
       final registry = EngineRegistry(
-        asrBuilders: {'unavailable': () => const UnavailableAsrEngine(reason: 'override')},
+        asrBuilders: {
+          'unavailable': () => const UnavailableAsrEngine(reason: 'override'),
+        },
       );
 
       final engine = registry.createAsr('unavailable');
@@ -59,7 +68,14 @@ void main() {
       // is still a WorkerAsrEngine and a caller override is not bypassed.
       final registry = EngineRegistry();
       expect(registry.createAsr('sherpa', threads: 2), isA<WorkerAsrEngine>());
-      expect(registry.createAsr('crispasr', threads: 1), isA<WorkerAsrEngine>());
+      expect(
+        registry.createAsr('crispasr', threads: 1),
+        isA<WorkerAsrEngine>(),
+      );
+      expect(
+        registry.createAsr('sherpa-mnn', threads: 3),
+        isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa-mnn'),
+      );
 
       final overridden = EngineRegistry(
         asrBuilders: {'sherpa': () => const UnavailableAsrEngine()},
@@ -181,40 +197,45 @@ void main() {
       await engine.dispose();
     });
 
-    test('planVad fails loudly when the Silero model cannot be opened', () async {
-      final engine = SherpaEngine();
-      addTearDown(engine.dispose);
+    test(
+      'planVad fails loudly when the Silero model cannot be opened',
+      () async {
+        final engine = SherpaEngine();
+        addTearDown(engine.dispose);
 
-      // No model is loaded and none is needed; the missing VAD ONNX (or the
-      // missing native library) must surface as an error, not silence.
-      await expectLater(
-        engine.planVad(
-          const TranscribeRequest(audioPath: 'missing-input.wav'),
-          const NeuralVadSettings(modelPath: 'definitely-missing-silero.onnx'),
-        ),
-        throwsA(isA<EngineUnavailableException>()),
-      );
-    });
-
-    test('planVad rejects invalid settings before touching native code', () async {
-      final engine = SherpaEngine();
-      addTearDown(engine.dispose);
-
-      // validate() runs before any native call — but after the library probe,
-      // so on a library-less host this is still an availability error.
-      await expectLater(
-        engine.planVad(
-          const TranscribeRequest(audioPath: 'x.wav'),
-          const NeuralVadSettings(modelPath: 'v.onnx', threshold: 2),
-        ),
-        throwsA(
-          anyOf(
-            isA<ArgumentError>(),
-            isA<EngineUnavailableException>(),
+        // No model is loaded and none is needed; the missing VAD ONNX (or the
+        // missing native library) must surface as an error, not silence.
+        await expectLater(
+          engine.planVad(
+            const TranscribeRequest(audioPath: 'missing-input.wav'),
+            const NeuralVadSettings(
+              modelPath: 'definitely-missing-silero.onnx',
+            ),
           ),
-        ),
-      );
-    });
+          throwsA(isA<EngineUnavailableException>()),
+        );
+      },
+    );
+
+    test(
+      'planVad rejects invalid settings before touching native code',
+      () async {
+        final engine = SherpaEngine();
+        addTearDown(engine.dispose);
+
+        // validate() runs before any native call — but after the library probe,
+        // so on a library-less host this is still an availability error.
+        await expectLater(
+          engine.planVad(
+            const TranscribeRequest(audioPath: 'x.wav'),
+            const NeuralVadSettings(modelPath: 'v.onnx', threshold: 2),
+          ),
+          throwsA(
+            anyOf(isA<ArgumentError>(), isA<EngineUnavailableException>()),
+          ),
+        );
+      },
+    );
 
     test('fails load loudly when the model files are absent', () async {
       final engine = SherpaEngine();
@@ -228,14 +249,17 @@ void main() {
       );
     });
 
-    test('transcribe before load errors instead of returning empty text', () async {
-      final engine = SherpaEngine();
+    test(
+      'transcribe before load errors instead of returning empty text',
+      () async {
+        final engine = SherpaEngine();
 
-      await expectLater(
-        engine.transcribe(const TranscribeRequest(audioPath: 'sample.wav')),
-        emitsError(isA<EngineUnavailableException>()),
-      );
-    });
+        await expectLater(
+          engine.transcribe(const TranscribeRequest(audioPath: 'sample.wav')),
+          emitsError(isA<EngineUnavailableException>()),
+        );
+      },
+    );
   });
 
   group('CrispEmbedder without the native library', () {

@@ -10,6 +10,7 @@ dependencies:
   characters: ^1.4.1
   crypto: ^3.0.6
   file_selector: ^1.0.3
+  ffi: 2.2.0
   crispasr: 0.8.32
   crispembed: 0.16.1
   flutter:
@@ -24,6 +25,7 @@ dependencies:
   record: ^7.1.1
 
 dev_dependencies:
+  ffigen: 22.0.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
@@ -33,3 +35,15 @@ flutter:
   generate: true
   assets:
     - assets/model_allowlist.json
+    - assets/sherpa_mnn_licenses/NOTICE.txt
+    - assets/sherpa_mnn_licenses/apache-2.0-sherpa-kaldi.txt
+    - assets/sherpa_mnn_licenses/sherpa_mnn_NOTICE.txt
+    - assets/sherpa_mnn_licenses/kaldifst_LICENSE.txt
+    - assets/sherpa_mnn_licenses/openfst_COPYING.txt
+    - assets/sherpa_mnn_licenses/simple-sentencepiece_LICENSE.txt
+    - assets/sherpa_mnn_licenses/eigen_COPYING_README.txt
+    - assets/sherpa_mnn_licenses/eigen_COPYING_MPL2.txt
+    - assets/sherpa_mnn_licenses/eigen_COPYING_BSD.txt
+    - assets/sherpa_mnn_licenses/eigen_COPYING_LGPL.txt
+    - assets/sherpa_mnn_licenses/eigen_COPYING_MINPACK.txt
+    - native/sherpa_mnn/UPSTREAM_LICENSE.txt

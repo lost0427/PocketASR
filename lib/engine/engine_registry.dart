@@ -31,11 +31,12 @@ class EngineRegistry {
   static final Map<String, AsrEngineBuilder> _builtinAsr = {
     'unavailable': () => const UnavailableAsrEngine(),
     // The native adapters run on a dedicated worker isolate: the real
-    // CrispAsrEngine/SherpaEngine (and their native sessions) are constructed
-    // inside the worker, never here. Callers needing custom thread counts pass
+    // CrispAsrEngine/SherpaEngine/SherpaMnnEngine and their native sessions are
+    // constructed inside the worker, never here. Custom thread counts use
     // an `asrBuilders` override with `WorkerAsrEngine.sherpa(threads: n)`.
     'crispasr': () => WorkerAsrEngine.crispAsr(),
     'sherpa': () => WorkerAsrEngine.sherpa(),
+    'sherpa-mnn': () => WorkerAsrEngine.sherpaMnn(),
   };
 
   /// Worker-backed native engines, rebuilt with a caller's thread count through
@@ -43,6 +44,7 @@ class EngineRegistry {
   static final Map<String, AsrEngine Function(int threads)> _threadedAsr = {
     'crispasr': (threads) => WorkerAsrEngine.crispAsr(threads: threads),
     'sherpa': (threads) => WorkerAsrEngine.sherpa(threads: threads),
+    'sherpa-mnn': (threads) => WorkerAsrEngine.sherpaMnn(threads: threads),
   };
 
   static final Map<String, EmbedderBuilder> _builtinEmbedders = {
@@ -62,13 +64,14 @@ class EngineRegistry {
   List<String> get asrEngineIds => _asrBuilders.keys.toList(growable: false);
 
   /// Ids that [createEmbedder] accepts.
-  List<String> get embedderIds => _embedderBuilders.keys.toList(growable: false);
+  List<String> get embedderIds =>
+      _embedderBuilders.keys.toList(growable: false);
 
   /// Builds the ASR engine registered as [id]; throws [ArgumentError] on a miss.
   ///
   /// [threads] configures the built-in worker-backed native engines
-  /// (`crispasr`/`sherpa`) through their [WorkerAsrEngine] factories. A
-  /// caller-supplied override for the same id still wins, so tests can keep
+  /// (`crispasr`/`sherpa`/`sherpa-mnn`) through their [WorkerAsrEngine]
+  /// factories. A caller-supplied override for the same id still wins, so tests can keep
   /// injecting their own engine.
   AsrEngine createAsr(String id, {int? threads}) {
     if (threads != null && !_asrOverrides.containsKey(id)) {
