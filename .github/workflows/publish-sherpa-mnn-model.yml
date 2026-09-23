@@ -6,7 +6,6 @@ on:
       release_tag:
         description: Model-only release tag (must start with model-sherpa-mnn-sensevoice-q8-v)
         required: true
-        default: model-sherpa-mnn-sensevoice-q8-v1
         type: string
 
 permissions:
