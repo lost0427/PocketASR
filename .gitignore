@@ -56,13 +56,17 @@ native/*
 !native/README.md
 !native/FFMPEG-NOTICE.txt
 !native/decode/
+!native/sherpa_mnn/
+!native/sherpa_mnn/**
 native/decode/third_party/
 *.so
 
 # ccache for the native Android build (CI caches it via actions/cache).
 /.ccache/
+/.ccache-sherpa-mnn/
 # Stable build work dir for scripts/ci/build_native_android.sh (keeps ccache hits).
 /.native-work/
+/.native-work-sherpa-mnn/
 # Stable source/build directory for the pinned Windows CrispEmbed build.
 /.native-work-windows/
 android/key.properties

@@ -1,11 +1,13 @@
 name: Release
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Candidate build {0}', github.run_number) || format('Release {0}', github.ref_name) }}
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -41,24 +43,26 @@ jobs:
           $env:POCKETASR_TEST_FFMPEG = "$PWD/build/windows/x64/runner/Release/ffmpeg/bin/ffmpeg.exe"
           flutter test test/ffmpeg_decoder_test.dart
       - name: Package Windows release
+        env:
+          BUILD_LABEL: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath pocket-asr-windows-${{ github.ref_name }}.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "pocket-asr-windows-$env:BUILD_LABEL.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: pocket-asr-windows-${{ github.ref_name }}
-          path: pocket-asr-windows-${{ github.ref_name }}.zip
+          name: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}-windows', github.run_number) || format('pocket-asr-windows-{0}', github.ref_name) }}
+          path: pocket-asr-windows-${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}.zip
           if-no-files-found: error
 
   # Android: two arm64 variants, built in parallel from the same source — the
   # i8mm APK (dotprod/fp16/i8mm kernels) and a -legacy APK for pre-i8mm devices.
   # Each restores its own pinned native libraries from cache when possible;
-  # otherwise it rebuilds them from source with NDK r28+ and 16KB LOAD
+  # otherwise it builds all four engines from pinned source with NDK r30 and 16KB LOAD
   # alignment. Both APKs are checked for ELF alignment, DT_NEEDED closure and
   # zipalign before upload, and the native build gates each variant's ISA
   # instructions in both directions (i8mm must have sdot/smmla, legacy must
   # not). If any check fails, that job fails and `publish` never runs.
   #
-  # The APK bundles native ENGINE libraries only. Model files (see
+  # The APK bundles native ENGINE libraries and license notices only. Model files (see
   # assets/model_allowlist.json) are NOT downloaded or bundled by this workflow:
   # users must provide models at runtime. Do not present this artifact as a model
   # bundle or fabricate a model download.
@@ -92,30 +96,44 @@ jobs:
       - name: Restore native compiler cache
         uses: actions/cache@v4
         with:
-          path: .ccache
-          key: native-ccache-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+          path: |
+            .ccache
+            .ccache-sherpa-mnn
+          key: native-ccache-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh') }}
           restore-keys: |
             native-ccache-${{ matrix.variant }}-
       - name: Restore cached native build
         id: native-cache
         uses: actions/cache@v4
         with:
-          path: android/app/src/main/jniLibs/arm64-v8a
-          key: native-android-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh') }}
+          path: |
+            android/app/src/main/jniLibs/arm64-v8a
+            build/native-maps
+          key: native-android-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh', 'scripts/ci/verify_apk_native.py', 'scripts/ci/verify_apk_contents.py', 'native/sherpa_mnn/**/*', 'native/decode/**/*') }}
       - name: Check native libs
         id: native-check
         run: |
-          if [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispasr.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libcrispembed.so ] && [ -f android/app/src/main/jniLibs/arm64-v8a/libpocketasr_decode.so ]; then
+          LIBDIR=android/app/src/main/jniLibs/arm64-v8a
+          LINK_MAP="build/native-maps/sherpa-mnn-${{ matrix.variant }}.map"
+          if [ -f "$LIBDIR/libcrispasr.so" ] && \
+             [ -f "$LIBDIR/libcrispembed.so" ] && \
+             [ -f "$LIBDIR/libpocketasr_decode.so" ] && \
+             [ -f "$LIBDIR/libsherpa-mnn-c-api.so" ] && \
+             [ ! -f "$LIBDIR/libMNN.so" ] && \
+             [ -f "$LINK_MAP" ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build 16KB-aligned native libraries from pinned sources
+      - name: Build all 16KB-aligned native libraries from pinned sources
         if: steps.native-check.outputs.found != 'true'
         env:
           # Empty selects the armv8-a baseline (see build_native_android.sh).
           GGML_CPU_ARM_ARCH_ANDROID: ${{ matrix.arch }}
-        run: bash scripts/ci/build_native_android.sh
+          SHERPA_MNN_LINK_MAP: ${{ github.workspace }}/build/native-maps/sherpa-mnn-${{ matrix.variant }}.map
+        run: |
+          bash scripts/ci/build_native_android.sh
+          bash scripts/ci/build_native_sherpa_mnn.sh
       - run: flutter build apk --release --target-platform android-arm64
       - name: Verify APK native payload
         run: |
@@ -125,22 +143,45 @@ jobs:
             --require libpocketasr_decode.so \
             --require-symbol libcrispasr.so:whisper_full \
             --require-symbol libcrispembed.so:crispembed_init \
-            --require-symbol libpocketasr_decode.so:pocketasr_chain_begin
+            --require-symbol libpocketasr_decode.so:pocketasr_chain_begin \
+            --require libsherpa-mnn-c-api.so \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineRecognizer \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineRecognizer \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineStream \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineStream \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnAcceptWaveformOffline \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDecodeOfflineStream \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnGetOfflineStreamResult \
+            --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineRecognizerResult
+          python3 scripts/ci/verify_apk_contents.py "$APK"
           ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
           "$ZIPALIGN" -c -P 16 4 "$APK"
-      - name: Name the APK for this variant
+      - name: Name the APK for this build
+        env:
+          BUILD_LABEL: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}
         run: |
           mv build/app/outputs/flutter-apk/app-release.apk \
-            "build/app/outputs/flutter-apk/pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}.apk"
+            "build/app/outputs/flutter-apk/pocket-asr-android-${BUILD_LABEL}${{ matrix.suffix }}.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}
-          path: build/app/outputs/flutter-apk/pocket-asr-android-${{ github.ref_name }}${{ matrix.suffix }}.apk
+          name: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}-android-{1}', github.run_number, matrix.variant) || format('pocket-asr-android-{0}{1}', github.ref_name, matrix.suffix) }}
+          path: build/app/outputs/flutter-apk/pocket-asr-android-${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}${{ matrix.suffix }}.apk
           if-no-files-found: error
+      - name: Retain Sherpa-MNN linker map
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}-linkmap-android-{1}', github.run_number, matrix.variant) || format('native-link-map-{0}-android-{1}', github.ref_name, matrix.variant) }}
+          path: build/native-maps/sherpa-mnn-${{ matrix.variant }}.map
+          if-no-files-found: error
+          retention-days: 90
 
   publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [windows, android]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -166,4 +207,8 @@ jobs:
               embedding runs on the slow NEON path.
 
             Not sure which SoC you have? Install the legacy APK.
+
+            Both APKs include the Sherpa-MNN native engine and its license
+            notices. The SenseVoice MNN model weights are not bundled; download
+            the verified model from the in-app Model Library.
           files: release-assets/*

@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
 #
-# SPIKE / EXPERIMENT (branch feat/sherpa-mnn-native) — not wired into release.
-#
-# Build the sherpa-mnn C API for Android arm64-v8a from pinned MNN source, so
-# the Phase 0 questions get answered from CI logs instead of guesswork:
-#   - does MNN/sherpa-mnn still reference onnxruntime at configure time?
-#   - which FetchContent deps get pulled (kaldi-native-fbank v1.21.1, ...)?
-#   - what does libsherpa-mnn-c-api.so actually DT_NEEDED?
-#   - is it 16KB LOAD-aligned?
-#   - does it export SherpaMnnCreateOfflineRecognizer?
+# Build the production sherpa-mnn C API for Android arm64-v8a from pinned MNN
+# source. This produces a self-contained MNN runtime with a retained linker map.
 #
 # sherpa-mnn lives inside the MNN repo at apps/frameworks/sherpa-mnn, so a
 # single pinned clone feeds two cmake configure/build passes:
 #   1. MNN runtime  -> $WORK/mnn-install (include/MNN/*.h + lib/libMNN.a)
 #   2. sherpa-mnn   -> libsherpa-mnn-c-api.so (BUILD_SHARED_LIBS=ON)
 #
-# Decisions for the spike:
+# Build decisions:
 #   - MNN is static + PIC and embedded into libsherpa-mnn-c-api.so, so Android
 #     has one new runtime library and no separate libMNN.so dependency.
 #   - MNN_SEP_BUILD=OFF -> one libMNN.a instead of separate backend archives.
@@ -41,6 +34,8 @@ PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -Wl,--exc
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/android/app/src/main/jniLibs/$ANDROID_ABI}"
+LINK_MAP="${SHERPA_MNN_LINK_MAP:-$ROOT/build/native-maps/sherpa-mnn.map}"
+mkdir -p "$(dirname "$LINK_MAP")"
 WORK="$ROOT/.native-work-sherpa-mnn"
 rm -rf "$WORK"
 mkdir -p "$WORK"
@@ -86,7 +81,7 @@ common_cmake=(
   -DANDROID_PLATFORM="android-$ANDROID_API"
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-  -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS"
+  -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS -Wl,-Map,$LINK_MAP"
 )
 if [ "$USE_CCACHE" = "1" ]; then
   common_cmake+=(
@@ -110,6 +105,24 @@ MNN_RESOLVED="$(git -C "$WORK/mnn" rev-parse HEAD)"
 log "MNN $MNN_VERSION pinned at $MNN_COMMIT"
 [ -d "$WORK/mnn/apps/frameworks/sherpa-mnn/sherpa-mnn" ] || {
   log "FATAL: apps/frameworks/sherpa-mnn missing at $MNN_COMMIT"; exit 1; }
+
+# The checked-in header is the sole input to ffigen. First prove that it is
+# byte-for-byte the header from the pinned checkout, then compile the arm64 ABI
+# assertions against that checkout with the same NDK toolchain used below.
+SNAPSHOT_HEADER="$ROOT/native/sherpa_mnn/include/sherpa-mnn/c-api/c-api.h"
+UPSTREAM_HEADER="$WORK/mnn/apps/frameworks/sherpa-mnn/sherpa-mnn/c-api/c-api.h"
+[ -f "$SNAPSHOT_HEADER" ] || {
+  log "FATAL: checked-in sherpa-mnn C API snapshot is missing"; exit 1; }
+cmp -s "$SNAPSHOT_HEADER" "$UPSTREAM_HEADER" || {
+  log "FATAL: checked-in c-api.h differs from pinned MNN $MNN_COMMIT"; exit 1; }
+log "verifying pinned sherpa-mnn arm64 C ABI"
+"$BIN/clang++" \
+  --target="aarch64-linux-android$ANDROID_API" \
+  --sysroot="$SYSROOT" \
+  -std=c++17 \
+  -I"$WORK/mnn/apps/frameworks/sherpa-mnn" \
+  -c "$ROOT/native/sherpa_mnn/abi_probe.cc" \
+  -o "$WORK/sherpa-mnn-abi-probe.o"
 
 # --- stage 1: MNN runtime ---
 log "configuring MNN runtime"
@@ -192,8 +205,20 @@ done
 log "staged:"
 ls -l "$OUT"
 
-log "pre-check (authoritative run happens against the built APK):"
+log "fail-closed native payload pre-check:"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \
+  --require libcrispasr.so --require libcrispembed.so \
+  --require libpocketasr_decode.so \
   --require libsherpa-mnn-c-api.so \
+  --require-symbol libcrispasr.so:whisper_full \
+  --require-symbol libcrispembed.so:crispembed_init \
+  --require-symbol libpocketasr_decode.so:pocketasr_chain_begin \
   --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineRecognizer \
-  --report || log "NOTE: pre-check failed — inspect DT_NEEDED dump above"
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineRecognizer \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineStream \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineStream \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnAcceptWaveformOffline \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDecodeOfflineStream \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnGetOfflineStreamResult \
+  --require-symbol libsherpa-mnn-c-api.so:SherpaMnnDestroyOfflineRecognizerResult \
+  --report
