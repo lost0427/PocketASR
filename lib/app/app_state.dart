@@ -35,6 +35,16 @@ typedef EmbedderFactory = FutureOr<Embedder> Function(
 /// pages hand one or the other — never both — to the service.
 enum ChunkStrategy { fixed, energy, neural }
 
+/// Why the selected ASR model must not be started.
+///
+/// Keeping the reason typed lets callers distinguish a genuinely incomplete
+/// sherpa-onnx bundle from an MNN file that bypassed the verified model library.
+enum ModelSelectionProblem {
+  missingWhisperDecoder,
+  sherpaMnnCatalogBundleRequired,
+  sherpaMnnTokensRequired,
+}
+
 /// App-wide settings.
 ///
 /// Theme and language are tri-state: [ThemeMode.system] and a `null` [locale]
@@ -313,6 +323,7 @@ class AppState extends ChangeNotifier {
     _selectedSpec = EngineModelSpec(path: path);
     _manualSelection = true;
     _modelSelectionMissing = false;
+    _restoredSelectionProblem = null;
     _persistSelection();
     engineId = engineIdForModelFile(path); // releases the previous instance
     notifyListeners();
@@ -321,6 +332,7 @@ class AppState extends ChangeNotifier {
   EngineModelSpec? _selectedSpec;
   bool _manualSelection = false;
   bool _modelSelectionMissing = false;
+  ModelSelectionProblem? _restoredSelectionProblem;
 
   /// The spec the transcribe and queue flows load, or null when nothing is
   /// selected. A catalog bundle keeps its tokens/encoder/decoder here; a
@@ -356,6 +368,7 @@ class AppState extends ChangeNotifier {
     _selectedSpec = spec;
     _manualSelection = false;
     _modelSelectionMissing = false;
+    _restoredSelectionProblem = null;
     if (family != null && family.isNotEmpty && family != _modelFamily) {
       _modelFamily = family;
       _save('model_family', family);
@@ -376,10 +389,16 @@ class AppState extends ChangeNotifier {
     _selectedSpec = null;
     _manualSelection = false;
     _modelSelectionMissing = false;
+    _restoredSelectionProblem = null;
     _save('model_path', '');
     _save('model_tokens', '');
     _save('model_encoder', '');
     _save('model_decoder', '');
+    _save('model_trusted_bundle', '');
+    _save('model_size_bytes', '');
+    _save('model_sha256', '');
+    _save('model_tokens_size_bytes', '');
+    _save('model_tokens_sha256', '');
     _save('model_manual', '');
     notifyListeners();
   }
@@ -390,21 +409,76 @@ class AppState extends ChangeNotifier {
     _save('model_tokens', spec.tokensPath ?? '');
     _save('model_encoder', spec.encoderPath ?? '');
     _save('model_decoder', spec.decoderPath ?? '');
+    _save('model_trusted_bundle', spec.trustedBundleId ?? '');
+    _save('model_size_bytes', spec.modelSizeBytes?.toString() ?? '');
+    _save('model_sha256', spec.modelSha256 ?? '');
+    _save('model_tokens_size_bytes', spec.tokensSizeBytes?.toString() ?? '');
+    _save('model_tokens_sha256', spec.tokensSha256 ?? '');
     _save('model_manual', _manualSelection.toString());
   }
 
   void _restoreSelection() {
     final primary = _nonEmpty(database.getSetting('model_path'));
     if (primary == null) return;
+    // Migrate records written before the MNN adapter existed. A `.mnn` file
+    // must never be offered to sherpa-onnx merely because its stored engine id
+    // predates this routing rule.
+    final inferredEngineId = engineIdForModelFile(primary);
+    if (inferredEngineId == 'sherpa-mnn' && _engineId != inferredEngineId) {
+      _engineId = inferredEngineId;
+      _save('engine_id', inferredEngineId);
+    }
     final manual = database.getSetting('model_manual') == 'true';
-    final spec = EngineModelSpec(
-      path: primary,
-      family: manual ? null : _modelFamily,
-      quant: manual ? null : _modelQuant,
-      tokensPath: _nonEmpty(database.getSetting('model_tokens')),
-      encoderPath: _nonEmpty(database.getSetting('model_encoder')),
-      decoderPath: _nonEmpty(database.getSetting('model_decoder')),
-    );
+    final tokensPath = _nonEmpty(database.getSetting('model_tokens'));
+    final encoderPath = _nonEmpty(database.getSetting('model_encoder'));
+    final decoderPath = _nonEmpty(database.getSetting('model_decoder'));
+    late final EngineModelSpec spec;
+    if (manual) {
+      spec = EngineModelSpec(path: primary);
+    } else {
+      final bundleId = _nonEmpty(database.getSetting('model_trusted_bundle'));
+      final modelSizeBytes = _positiveInt(
+        database.getSetting('model_size_bytes'),
+      );
+      final modelSha256 = _storedSha256(database.getSetting('model_sha256'));
+      final storedTokensSize = _nonEmpty(
+        database.getSetting('model_tokens_size_bytes'),
+      );
+      final storedTokensSha256 = _nonEmpty(
+        database.getSetting('model_tokens_sha256'),
+      );
+      final tokensSizeBytes = _positiveInt(storedTokensSize);
+      final tokensSha256 = _storedSha256(storedTokensSha256);
+      final hasCompleteTokensIdentity = tokensPath == null
+          ? storedTokensSize == null && storedTokensSha256 == null
+          : tokensSizeBytes != null && tokensSha256 != null;
+      if (bundleId == null ||
+          modelSizeBytes == null ||
+          modelSha256 == null ||
+          !hasCompleteTokensIdentity) {
+        // Pre-trust catalog records and partial/tampered metadata must not be
+        // silently upgraded into a native-loadable selection.
+        _modelSelectionMissing = true;
+        if (primary.toLowerCase().endsWith('.mnn')) {
+          _restoredSelectionProblem =
+              ModelSelectionProblem.sherpaMnnCatalogBundleRequired;
+        }
+        return;
+      }
+      spec = EngineModelSpec.trustedCatalog(
+        path: primary,
+        family: _modelFamily,
+        quant: _modelQuant,
+        tokensPath: tokensPath,
+        encoderPath: encoderPath,
+        decoderPath: decoderPath,
+        trustedBundleId: bundleId,
+        modelSizeBytes: modelSizeBytes,
+        modelSha256: modelSha256,
+        tokensSizeBytes: tokensSizeBytes,
+        tokensSha256: tokensSha256,
+      );
+    }
     if (_specFilesExist(spec)) {
       _selectedSpec = spec;
       _manualSelection = manual;
@@ -413,6 +487,21 @@ class AppState extends ChangeNotifier {
       // say so instead of handing an engine a path that no longer exists.
       _modelSelectionMissing = true;
     }
+  }
+
+  static int? _positiveInt(String? value) {
+    final parsed = int.tryParse(value ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
+  static String? _storedSha256(String? value) {
+    final sha256 = _nonEmpty(value);
+    if (sha256 == null ||
+        sha256.length != 64 ||
+        !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(sha256)) {
+      return null;
+    }
+    return sha256.toLowerCase();
   }
 
   /// True when every file the spec names is still on disk.
@@ -430,11 +519,15 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  /// Best-effort engine for a hand-picked file: `.gguf` is CrispASR's format,
-  /// `.onnx`/`.bin` is sherpa-onnx's. Naming the engine here keeps a hand-picked
-  /// file out of the adapter that cannot read its format.
-  static String engineIdForModelFile(String path) =>
-      path.toLowerCase().endsWith('.gguf') ? 'crispasr' : 'sherpa';
+  /// Best-effort engine for a hand-picked file. The mapping does not make the
+  /// file trusted: in particular, a `.mnn` selection is blocked until it came
+  /// from a verified catalog bundle with its exact tokens companion.
+  static String engineIdForModelFile(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.gguf')) return 'crispasr';
+    if (lower.endsWith('.mnn')) return 'sherpa-mnn';
+    return 'sherpa';
+  }
 
   /// True while a transcription owns the loaded engine. The Models page reads
   /// this to refuse swapping the in-use model mid-run.
@@ -745,18 +838,49 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// True when the selected engine cannot load the selected family, because it
-  /// needs a companion file the selection does not carry: a hand-picked whisper
-  /// encoder with no decoder. A downloaded whisper *bundle* has its decoder, so
-  /// it is not blocked. The pages show "not supported" and refuse to start
-  /// instead of failing deep in the engine.
-  bool get selectionNeedsMissingCompanion {
+  /// The exact fail-closed reason for a selection that may not be started.
+  ///
+  /// sherpa-mnn deliberately accepts only a catalog-trusted model plus tokens;
+  /// a hand-picked `.mnn` never searches its directory for a guessed companion.
+  ModelSelectionProblem? get modelSelectionProblem {
+    final restoredProblem = _restoredSelectionProblem;
+    if (restoredProblem != null) return restoredProblem;
     final spec = modelSpec;
-    return engineId == 'sherpa' &&
-        spec != null &&
-        (spec.family ?? '') == 'whisper' &&
-        (spec.decoderPath == null || spec.decoderPath!.isEmpty);
+    return spec == null
+        ? null
+        : selectionProblemFor(engineId: engineId, spec: spec);
   }
+
+  /// Applies the same preflight rules to an arbitrary model/engine pair.
+  /// Benchmark rows use this before invoking a per-entry native engine.
+  static ModelSelectionProblem? selectionProblemFor({
+    required String engineId,
+    required EngineModelSpec spec,
+  }) {
+    if (engineId == 'sherpa-mnn') {
+      if (spec.trustedBundleId == null ||
+          spec.modelSizeBytes == null ||
+          spec.modelSha256 == null) {
+        return ModelSelectionProblem.sherpaMnnCatalogBundleRequired;
+      }
+      if (spec.tokensPath == null ||
+          spec.tokensPath!.isEmpty ||
+          spec.tokensSizeBytes == null ||
+          spec.tokensSha256 == null) {
+        return ModelSelectionProblem.sherpaMnnTokensRequired;
+      }
+    }
+    if (engineId == 'sherpa' &&
+        (spec.family ?? '') == 'whisper' &&
+        (spec.decoderPath == null || spec.decoderPath!.isEmpty)) {
+      return ModelSelectionProblem.missingWhisperDecoder;
+    }
+    return null;
+  }
+
+  /// Compatibility gate used by the existing pages. Despite the historical
+  /// name, every typed [modelSelectionProblem] blocks startup.
+  bool get selectionNeedsMissingCompanion => modelSelectionProblem != null;
 
   static String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;
