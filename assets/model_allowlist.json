@@ -31,7 +31,7 @@
     },
     {
       "id": "model-sherpa-mnn-sensevoice-q8-v1",
-      "displayName": "SenseVoice Small (FunASR / Sherpa-MNN INT8)",
+      "displayName": "SenseVoice Small (Sherpa-MNN int8)",
       "engine": "sherpa-mnn",
       "type": "asr",
       "family": "sensevoice",

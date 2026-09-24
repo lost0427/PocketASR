@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -330,6 +331,31 @@ class _ModelsPageState extends State<ModelsPage> {
       );
     }
 
+    Iterable<Widget> frameworkTiles(
+      List<ModelEntry> models,
+      _ModelKind kind,
+    ) sync* {
+      final groups = <String?, List<ModelEntry>>{};
+      for (final model in models) {
+        groups.putIfAbsent(model.engine, () => []).add(model);
+      }
+
+      var firstGroup = true;
+      for (final group in groups.values) {
+        if (!firstGroup) {
+          yield Divider(
+            height: 24,
+            thickness: 0.6,
+            color: scheme.outlineVariant,
+          );
+        }
+        firstGroup = false;
+        for (final entry in group) {
+          yield tile(entry, kind: kind, selectable: true);
+        }
+      }
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
@@ -376,8 +402,7 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 24),
           _SectionLabel(l10n.modelsAsrSection),
           const SizedBox(height: 12),
-          for (final entry in asr)
-            tile(entry, kind: _ModelKind.asr, selectable: true),
+          ...frameworkTiles(asr, _ModelKind.asr),
         ],
         if (vad.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -389,8 +414,7 @@ class _ModelsPageState extends State<ModelsPage> {
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
-          for (final entry in vad)
-            tile(entry, kind: _ModelKind.vad, selectable: true),
+          ...frameworkTiles(vad, _ModelKind.vad),
         ],
         if (embedding.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -402,8 +426,7 @@ class _ModelsPageState extends State<ModelsPage> {
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
-          for (final entry in embedding)
-            tile(entry, kind: _ModelKind.embedding, selectable: true),
+          ...frameworkTiles(embedding, _ModelKind.embedding),
         ],
       ],
     );
