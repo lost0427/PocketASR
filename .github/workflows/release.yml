@@ -1,9 +1,24 @@
 name: Release
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Candidate build {0}', github.run_number) || format('Release {0}', github.ref_name) }}
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && format('Candidate build {0}', github.run_number) ||
+      github.event_name == 'schedule' && 'Warm Android native cache' ||
+      github.ref == 'refs/heads/main' && 'Warm Android native cache' ||
+      format('Release {0}', github.ref_name) }}
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/ci/build_native_android.sh'
+      - 'scripts/ci/build_native_sherpa_mnn.sh'
+      - 'scripts/ci/verify_apk_native.py'
+      - 'scripts/ci/verify_apk_contents.py'
+      - 'native/sherpa_mnn/**'
+      - 'native/decode/**'
+  schedule:
+    - cron: '17 4 * * 1,4'
   workflow_dispatch:
 
 permissions:
@@ -12,6 +27,7 @@ permissions:
 
 jobs:
   windows:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +71,9 @@ jobs:
 
   # Android: two arm64 variants, built in parallel from the same source — the
   # i8mm APK (dotprod/fp16/i8mm kernels) and a -legacy APK for pre-i8mm devices.
-  # Each restores its own pinned native libraries from cache when possible;
+  # Main-branch pushes touching native inputs and the weekly schedule warm the
+  # per-variant native caches without packaging APKs. Tags and manual dispatches
+  # build APKs. Each variant restores its own pinned libraries when possible;
   # otherwise it builds all four engines from pinned source with NDK r30 and 16KB LOAD
   # alignment. Both APKs are checked for ELF alignment, DT_NEEDED closure and
   # zipalign before upload, and the native build gates each variant's ISA
@@ -69,6 +87,8 @@ jobs:
   android:
     name: android (${{ matrix.variant }})
     runs-on: ubuntu-latest
+    env:
+      BUILD_APK: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     strategy:
       # Keep both variants running: when the ARM ISA gate fires, the useful
       # signal is whether one payload is wrong or both are.
@@ -88,20 +108,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
+        if: env.BUILD_APK == 'true'
         with:
           channel: stable
           cache: true
       - uses: gradle/actions/setup-gradle@v4
+        if: env.BUILD_APK == 'true'
       - run: flutter pub get
-      - name: Restore native compiler cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            .ccache
-            .ccache-sherpa-mnn
-          key: native-ccache-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh') }}
-          restore-keys: |
-            native-ccache-${{ matrix.variant }}-
+        if: env.BUILD_APK == 'true'
       - name: Restore cached native build
         id: native-cache
         uses: actions/cache@v4
@@ -109,7 +123,7 @@ jobs:
           path: |
             android/app/src/main/jniLibs/arm64-v8a
             build/native-maps
-          key: native-android-${{ matrix.variant }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh', 'scripts/ci/verify_apk_native.py', 'scripts/ci/verify_apk_contents.py', 'native/sherpa_mnn/**/*', 'native/decode/**/*') }}
+          key: native-android-${{ matrix.variant }}-${{ matrix.arch }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh', 'scripts/ci/verify_apk_native.py', 'scripts/ci/verify_apk_contents.py', 'native/sherpa_mnn/**/*', 'native/decode/**/*') }}
       - name: Check native libs
         id: native-check
         run: |
@@ -125,17 +139,35 @@ jobs:
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Restore native compiler cache
+        if: steps.native-check.outputs.found != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .ccache
+            .ccache-sherpa-mnn
+          key: native-ccache-${{ matrix.variant }}-${{ matrix.arch }}-${{ hashFiles('scripts/ci/build_native_android.sh', 'scripts/ci/build_native_sherpa_mnn.sh') }}
+          restore-keys: |
+            native-ccache-${{ matrix.variant }}-${{ matrix.arch }}-
+      - name: Install ccache
+        if: steps.native-check.outputs.found != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
       - name: Build all 16KB-aligned native libraries from pinned sources
         if: steps.native-check.outputs.found != 'true'
         env:
           # Empty selects the armv8-a baseline (see build_native_android.sh).
           GGML_CPU_ARM_ARCH_ANDROID: ${{ matrix.arch }}
           SHERPA_MNN_LINK_MAP: ${{ github.workspace }}/build/native-maps/sherpa-mnn-${{ matrix.variant }}.map
+          CCACHE_MAXSIZE: 1G
         run: |
           bash scripts/ci/build_native_android.sh
           bash scripts/ci/build_native_sherpa_mnn.sh
       - run: flutter build apk --release --target-platform android-arm64
+        if: env.BUILD_APK == 'true'
       - name: Verify APK native payload
+        if: env.BUILD_APK == 'true'
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
           python3 scripts/ci/verify_apk_native.py "$APK" \
@@ -157,17 +189,20 @@ jobs:
           ZIPALIGN="$(ls -d "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -1)"
           "$ZIPALIGN" -c -P 16 4 "$APK"
       - name: Name the APK for this build
+        if: env.BUILD_APK == 'true'
         env:
           BUILD_LABEL: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}
         run: |
           mv build/app/outputs/flutter-apk/app-release.apk \
             "build/app/outputs/flutter-apk/pocket-asr-android-${BUILD_LABEL}${{ matrix.suffix }}.apk"
       - uses: actions/upload-artifact@v4
+        if: env.BUILD_APK == 'true'
         with:
           name: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}-android-{1}', github.run_number, matrix.variant) || format('pocket-asr-android-{0}{1}', github.ref_name, matrix.suffix) }}
           path: build/app/outputs/flutter-apk/pocket-asr-android-${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_number) || github.ref_name }}${{ matrix.suffix }}.apk
           if-no-files-found: error
       - name: Retain Sherpa-MNN linker map
+        if: env.BUILD_APK == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}-linkmap-android-{1}', github.run_number, matrix.variant) || format('native-link-map-{0}-android-{1}', github.ref_name, matrix.variant) }}
