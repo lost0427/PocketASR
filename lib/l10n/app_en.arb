@@ -239,7 +239,7 @@
     }
   },
   "settingsAboutHint": "Runs entirely on the device. Nothing is uploaded.",
-  "settingsNotPersisted": "Saved on this device; the thread count resets on restart.",
+  "settingsPersistenceHint": "Settings are saved on this device and restored on restart.",
   "benchTitle": "Benchmark",
   "benchIntro": "Runs every downloaded speech model three times on one audio file you pick, so the numbers stay comparable. Each row uses the same engine path and metrics as the transcribe page.",
   "benchUnavailableTitle": "Nothing can run in this build",

@@ -18,10 +18,10 @@ const String _systemLanguage = 'system';
 /// Settings tab: appearance, language, the active downloaded model, CPU thread
 /// count and — on Android only — the decoder preference.
 ///
-/// Every control writes to the in-memory [AppState] — nothing is persisted yet
-/// (plan Phase 5 adds the settings table). Backend has no picker on purpose:
-/// the first release is CPU-only, and [AppState.backend] already carries the
-/// value so one can be added later without touching callers (plan D17).
+/// Controls write to [AppState], which persists user settings on this device.
+/// Backend has no picker on purpose: the first release is CPU-only, and
+/// [AppState.backend] already carries the value so one can be added later
+/// without touching callers (plan D17).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
@@ -148,7 +148,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                l10n.settingsNotPersisted,
+                l10n.settingsPersistenceHint,
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
               ),

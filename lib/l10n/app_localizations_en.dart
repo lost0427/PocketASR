@@ -593,8 +593,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Runs entirely on the device. Nothing is uploaded.';
 
   @override
-  String get settingsNotPersisted =>
-      'Saved on this device; the thread count resets on restart.';
+  String get settingsPersistenceHint =>
+      'Settings are saved on this device and restored on restart.';
 
   @override
   String get benchTitle => 'Benchmark';

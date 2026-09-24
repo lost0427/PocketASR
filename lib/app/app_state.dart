@@ -49,9 +49,9 @@ enum ModelSelectionProblem {
 ///
 /// Theme and language are tri-state: [ThemeMode.system] and a `null` [locale]
 /// mean "follow the device". The model/quant, selected model path, thread
-/// count, loudness and chunking values round out the Settings tab. Everything
-/// except [threads] is stored in the sqlite `settings` table and restored on
-/// start; anything unparseable or out of range falls back to the default.
+/// count, loudness and chunking values round out the Settings tab. These
+/// settings are stored in the sqlite `settings` table and restored on start;
+/// anything unparseable or out of range falls back to the default.
 class AppState extends ChangeNotifier {
   AppState({
     AppDatabase? database,
@@ -103,6 +103,12 @@ class AppState extends ChangeNotifier {
     _modelFamily = database.getSetting('model_family') ?? _modelFamily;
     _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
     _engineId = database.getSetting('engine_id') ?? _engineId;
+    _threads = _boundedInt(
+      database.getSetting('threads'),
+      1,
+      maxThreads,
+      _defaultThreads(),
+    );
     _restoreSelection();
     _audioDecoderPreference = AudioDecoderPreference.values.firstWhere(
       (value) => value.name == database.getSetting('audio_decoder_preference'),
@@ -278,6 +284,7 @@ class AppState extends ChangeNotifier {
     if (capped == _threads) return;
     _threads = capped;
     _invalidateEngine();
+    _save('threads', '$capped');
     notifyListeners();
   }
 

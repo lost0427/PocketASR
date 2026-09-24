@@ -556,7 +556,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutHint => '完全在本机运行，不会上传任何内容。';
 
   @override
-  String get settingsNotPersisted => '已保存在本机；线程数重启后恢复默认。';
+  String get settingsPersistenceHint => '设置已保存在本机，重启后会恢复。';
 
   @override
   String get benchTitle => '性能基准';

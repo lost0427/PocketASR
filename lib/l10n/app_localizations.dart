@@ -1130,11 +1130,11 @@ abstract class AppLocalizations {
   /// **'Runs entirely on the device. Nothing is uploaded.'**
   String get settingsAboutHint;
 
-  /// No description provided for @settingsNotPersisted.
+  /// No description provided for @settingsPersistenceHint.
   ///
   /// In en, this message translates to:
-  /// **'Saved on this device; the thread count resets on restart.'**
-  String get settingsNotPersisted;
+  /// **'Settings are saved on this device and restored on restart.'**
+  String get settingsPersistenceHint;
 
   /// No description provided for @benchTitle.
   ///

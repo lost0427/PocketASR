@@ -172,7 +172,7 @@
   "settingsAbout": "关于",
   "settingsVersion": "版本 {version}",
   "settingsAboutHint": "完全在本机运行，不会上传任何内容。",
-  "settingsNotPersisted": "已保存在本机；线程数重启后恢复默认。",
+  "settingsPersistenceHint": "设置已保存在本机，重启后会恢复。",
   "benchTitle": "性能基准",
   "benchIntro": "对每个已下载的语音模型，在你选定的一段音频上各跑三次，数字才可比较。每行都复用转录页的同一套引擎路径与指标口径。",
   "benchUnavailableTitle": "当前构建无法运行",
