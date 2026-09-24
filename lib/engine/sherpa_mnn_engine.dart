@@ -20,7 +20,7 @@ const String sherpaMnnAndroidOnlyReason =
     'Sherpa-MNN is available only on Android in this release.';
 
 const String sherpaMnnLibraryName = 'libsherpa-mnn-c-api.so';
-const String sherpaMnnBundleId = 'sherpa-mnn-sensevoice-q8';
+const String sherpaMnnBundleId = 'model-sherpa-mnn-sensevoice-q8-v1';
 const String sherpaMnnFamily = 'sensevoice';
 const String sherpaMnnQuant = 'int8-weight-block64';
 const int sherpaMnnModelSizeBytes = 266565508;
