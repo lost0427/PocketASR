@@ -52,6 +52,8 @@ jobs:
         run: ./scripts/ci/verify_windows_native.ps1 -BundleDirectory build/windows/x64/runner/Release
       - name: Bundle FFmpeg
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./scripts/ci/stage_ffmpeg_windows.ps1 -Destination build/windows/x64/runner/Release
       - name: Test bundled audio decoder
         shell: pwsh
