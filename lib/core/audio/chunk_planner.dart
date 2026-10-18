@@ -106,13 +106,17 @@ class AudioChunk {
   int startSampleAt(int sampleRate) => _sampleIndex(start, sampleRate);
   int endSampleAt(int sampleRate) => _sampleIndex(end, sampleRate);
 }
+
 class ChunkPlanner {
   const ChunkPlanner({this.settings = const ChunkSettings()});
 
   final ChunkSettings settings;
 
-  Future<List<AudioChunk>> planFile(PcmFile file, {double gain = 1,
-    bool Function()? isCancelled}) async {
+  Future<List<AudioChunk>> planFile(
+    PcmFile file, {
+    double gain = 1,
+    bool Function()? isCancelled,
+  }) async {
     settings.validate();
     final rate = file.sampleRate;
     final chunks = <AudioChunk>[];
@@ -126,21 +130,43 @@ class ChunkPlanner {
       var at = 0;
       int? start;
       final pad = settings.speechPadMs * rate ~/ 1000;
-      await for (final samples in file.blocks(blockSize: frame, gain: gain, isCancelled: isCancelled)) {
-        final end = at + samples.length;
-        final active = samples.fold(0.0, (sum, s) => sum + s.abs()) / samples.length >= settings.energyThreshold;
-        if (active && start == null) start = at;
-        if ((!active || end == file.count) && start != null) {
-          final stop = active ? end : at;
-          if (stop - start >= settings.minSpeechMs * rate / 1000) {
-            chunks.add(_at(math.max(0, start - pad), math.min(file.count, stop + pad), rate));
+      var frameFill = 0;
+      var energy = 0.0;
+      await for (final block in file.blocks(
+        gain: gain,
+        isCancelled: isCancelled,
+      )) {
+        for (final sample in block) {
+          energy += sample.abs();
+          frameFill++;
+          at++;
+          if (frameFill != frame && at != file.count) continue;
+          final frameStart = at - frameFill;
+          final active = energy / frameFill >= settings.energyThreshold;
+          if (active && start == null) start = frameStart;
+          if ((!active || at == file.count) && start != null) {
+            final stop = active ? at : frameStart;
+            if (stop - start >= settings.minSpeechMs * rate / 1000) {
+              chunks.add(
+                _at(
+                  math.max(0, start - pad),
+                  math.min(file.count, stop + pad),
+                  rate,
+                ),
+              );
+            }
+            start = null;
           }
-          start = null;
+          energy = 0;
+          frameFill = 0;
         }
-        at = end;
       }
     }
-    return _limitBounds(settings.mode == ChunkMode.energy ? _mergeAdjacent(chunks) : chunks, rate, file.count);
+    return _limitBounds(
+      settings.mode == ChunkMode.energy ? _mergeAdjacent(chunks) : chunks,
+      rate,
+      file.count,
+    );
   }
 
   /// Plans ascending, non-overlapping-by-default blocks for [audio].
@@ -164,7 +190,10 @@ class ChunkPlanner {
   }
 
   List<AudioChunk> _fixed(AudioBuffer audio) {
-    final size = math.max(1, (settings.chunkSeconds * audio.sampleRate).round());
+    final size = math.max(
+      1,
+      (settings.chunkSeconds * audio.sampleRate).round(),
+    );
     final result = <AudioChunk>[];
     for (var start = 0; start < audio.samples.length; start += size) {
       final end = math.min(audio.samples.length, start + size);
@@ -296,10 +325,7 @@ class ChunkPlanner {
     // Pad, clamp, then join spans whose padded edges overlap.
     final spans = <List<int>>[];
     for (final segment in segments) {
-      final start = math.max(
-        0,
-        segment.startSampleAt(rate) - pad,
-      );
+      final start = math.max(0, segment.startSampleAt(rate) - pad);
       final end = math.min(total, segment.endSampleAt(rate) + pad);
       if (end <= start) continue;
       if (spans.isNotEmpty && start <= spans.last[1]) {

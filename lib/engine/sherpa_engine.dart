@@ -316,7 +316,7 @@ class SherpaEngine implements AsrEngine {
 
   /// Samples read per disk call; [fixedWindows] re-slices to the detector's
   /// window, so this only bounds read overhead.
-  static const int _vadReadBlock = 16384;
+  static const int _vadReadBlock = 65536;
 
   static sherpa.VadModelConfig _vadConfig(
     NeuralVadSettings vad,

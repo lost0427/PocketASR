@@ -2,21 +2,28 @@ import 'dart:typed_data';
 import 'dart:io';
 
 import 'audio_buffer.dart';
+import 'buffered_audio_writer.dart';
 import 'pcm.dart';
 
 /// Streams the canonical PCM16 WAV produced by our pipeline, not arbitrary WAV.
-Stream<Float32List> readCanonicalWave(String path, {int blockSize = 512}) async* {
+Stream<Float32List> readCanonicalWave(
+  String path, {
+  int blockSize = 65536,
+}) async* {
   final file = await File(path).open();
   try {
     final header = await file.read(44);
-    if (header.length != 44 || String.fromCharCodes(header.sublist(0, 4)) != 'RIFF' ||
+    if (header.length != 44 ||
+        String.fromCharCodes(header.sublist(0, 4)) != 'RIFF' ||
         String.fromCharCodes(header.sublist(8, 16)) != 'WAVEfmt ' ||
         String.fromCharCodes(header.sublist(36, 40)) != 'data') {
       throw const FormatException('Expected canonical PCM16 WAV');
     }
     final fields = ByteData.sublistView(header);
-    if (fields.getUint32(16, Endian.little) != 16 || fields.getUint16(20, Endian.little) != 1 ||
-        fields.getUint16(22, Endian.little) != 1 || fields.getUint32(24, Endian.little) != 16000 ||
+    if (fields.getUint32(16, Endian.little) != 16 ||
+        fields.getUint16(20, Endian.little) != 1 ||
+        fields.getUint16(22, Endian.little) != 1 ||
+        fields.getUint32(24, Endian.little) != 16000 ||
         fields.getUint16(34, Endian.little) != 16) {
       throw const FormatException('Expected mono 16000 Hz PCM16 WAV');
     }
@@ -29,7 +36,11 @@ Stream<Float32List> readCanonicalWave(String path, {int blockSize = 512}) async*
       final block = await file.read(length);
       if (block.length != length) throw const FormatException('Truncated WAV');
       final data = ByteData.sublistView(block);
-      yield Float32List.fromList(List.generate(length ~/ 2, (i) => data.getInt16(i * 2, Endian.little) / 32768));
+      final samples = Float32List(length ~/ 2);
+      for (var i = 0; i < samples.length; i++) {
+        samples[i] = data.getInt16(i * 2, Endian.little) / 32768;
+      }
+      yield samples;
     }
   } finally {
     await file.close();
@@ -37,7 +48,11 @@ Stream<Float32List> readCanonicalWave(String path, {int blockSize = 512}) async*
 }
 
 /// Writes bounded PCM blocks, including for a full-length VAD input.
-Future<void> writePcm16Wav(File file, Float32List samples, int sampleRate) async {
+Future<void> writePcm16Wav(
+  File file,
+  Float32List samples,
+  int sampleRate,
+) async {
   if (samples.length > (0xffffffff - 36) ~/ 2) {
     throw ArgumentError('Audio exceeds the RIFF WAV size limit');
   }
@@ -45,13 +60,15 @@ Future<void> writePcm16Wav(File file, Float32List samples, int sampleRate) async
   final fields = ByteData.sublistView(header);
   fields.setUint32(4, 36 + samples.length * 2, Endian.little);
   fields.setUint32(40, samples.length * 2, Endian.little);
-  final output = await file.open(mode: FileMode.write);
+  final output = BufferedAudioWriter(await file.open(mode: FileMode.write));
   try {
-    await output.writeFrom(header);
-    const blockSamples = 16384;
+    await output.write(header);
+    const blockSamples = 65536;
     for (var start = 0; start < samples.length; start += blockSamples) {
       final end = (start + blockSamples).clamp(0, samples.length);
-      await output.writeFrom(float32ToPcm16(Float32List.sublistView(samples, start, end)));
+      await output.write(
+        float32ToPcm16(Float32List.sublistView(samples, start, end)),
+      );
     }
   } finally {
     await output.close();
@@ -113,7 +130,9 @@ class WavDecoder {
       final size = view.getUint32(offset + 4, Endian.little);
       final start = offset + 8;
       final end = start + size;
-      if (end > bytes.length) throw const FormatException('Truncated WAV chunk');
+      if (end > bytes.length) {
+        throw const FormatException('Truncated WAV chunk');
+      }
       if (id == 'fmt ' && size >= 16) {
         format = view.getUint16(start, Endian.little);
         channels = view.getUint16(start + 2, Endian.little);
@@ -124,16 +143,24 @@ class WavDecoder {
       }
       offset = end + (size.isOdd ? 1 : 0);
     }
-    if (format == null || channels == null || rate == null || bits == null || payload == null) {
+    if (format == null ||
+        channels == null ||
+        rate == null ||
+        bits == null ||
+        payload == null) {
       throw const FormatException('WAV is missing fmt or data chunk');
     }
-    if (channels <= 0 || rate <= 0 || ![8, 16, 24, 32].contains(bits) ||
+    if (channels <= 0 ||
+        rate <= 0 ||
+        ![8, 16, 24, 32].contains(bits) ||
         (format != 1 && !(format == 3 && bits == 32))) {
       throw FormatException('Unsupported WAV format $format/$bits-bit');
     }
     final bytesPerSample = (bits + 7) ~/ 8;
     final frameBytes = bytesPerSample * channels;
-    if (payload.length % frameBytes != 0) throw const FormatException('WAV data is not frame aligned');
+    if (payload.length % frameBytes != 0) {
+      throw const FormatException('WAV data is not frame aligned');
+    }
     final frames = payload.length ~/ frameBytes;
     final mono = Float32List(frames);
     final data = ByteData.sublistView(payload);
@@ -146,7 +173,9 @@ class WavDecoder {
       mono[frame] = (sum / channels).clamp(-1.0, 1.0);
     }
     return AudioBuffer(
-      samples: rate == targetSampleRate ? mono : _resample(mono, rate, targetSampleRate),
+      samples: rate == targetSampleRate
+          ? mono
+          : _resample(mono, rate, targetSampleRate),
       sampleRate: targetSampleRate,
     );
   }
@@ -156,7 +185,10 @@ class WavDecoder {
     if (bits == 8) return (data.getUint8(at) - 128) / 128.0;
     if (bits == 16) return data.getInt16(at, Endian.little) / 32768.0;
     if (bits == 24) {
-      final u = data.getUint8(at) | data.getUint8(at + 1) << 8 | data.getUint8(at + 2) << 16;
+      final u =
+          data.getUint8(at) |
+          data.getUint8(at + 1) << 8 |
+          data.getUint8(at + 2) << 16;
       return (u & 0x800000 != 0 ? u - 0x1000000 : u) / 8388608.0;
     }
     return data.getInt32(at, Endian.little) / 2147483648.0;
@@ -170,7 +202,8 @@ class WavDecoder {
       final position = i * from / to;
       final left = position.floor().clamp(0, input.length - 1);
       final right = (left + 1).clamp(0, input.length - 1);
-      output[i] = input[left] + (input[right] - input[left]) * (position - left);
+      output[i] =
+          input[left] + (input[right] - input[left]) * (position - left);
     }
     return output;
   }

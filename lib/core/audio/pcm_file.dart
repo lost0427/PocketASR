@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../../engine/asr_engine.dart';
 import 'audio_buffer.dart';
+import 'buffered_audio_writer.dart';
 import 'chunk_planner.dart';
 import 'pcm.dart';
 import 'wav.dart';
@@ -45,7 +46,11 @@ class AudioDecoderInfo {
       name: name,
       codecName: codec is String && codec.isNotEmpty ? codec : null,
       builtin: value['decoderKind'] == 'builtin',
-      isHardware: hardware == true ? true : software == true ? false : null,
+      isHardware: hardware == true
+          ? true
+          : software == true
+          ? false
+          : null,
     );
   }
 }
@@ -53,7 +58,10 @@ class AudioDecoderInfo {
 /// Reads the canonical little-endian float32 file as zero-copy views, without
 /// a per-sample pass. Callers that only need the samples (the neural VAD) skip
 /// the gain/clamp loop [PcmFile.blocks] runs for engine input.
-Stream<Float32List> readRawFloat32(String path, {int blockSize = 16384}) async* {
+Stream<Float32List> readRawFloat32(
+  String path, {
+  int blockSize = 65536,
+}) async* {
   if (blockSize <= 0) {
     throw ArgumentError.value(blockSize, 'blockSize', 'must be > 0');
   }
@@ -114,8 +122,8 @@ class PcmFile {
   static Future<PcmFile> fromBuffer(AudioBuffer audio, String path) async {
     final output = await File(path).open(mode: FileMode.write);
     try {
-      for (var start = 0; start < audio.samples.length; start += 16384) {
-        final end = math.min(start + 16384, audio.samples.length);
+      for (var start = 0; start < audio.samples.length; start += 65536) {
+        final end = math.min(start + 65536, audio.samples.length);
         final bytes = ByteData((end - start) * 4);
         for (var i = start; i < end; i++) {
           bytes.setFloat32((i - start) * 4, audio.samples[i], Endian.little);
@@ -132,37 +140,53 @@ class PcmFile {
   Stream<Float32List> blocks({
     int start = 0,
     int? end,
-    int blockSize = 16384,
+    int blockSize = 65536,
     double gain = 1,
     bool Function()? isCancelled,
   }) async* {
-    final stop = end ?? count;
-    if (start < 0 || stop < start || stop > count || blockSize <= 0) {
-      throw ArgumentError('Invalid PCM range or block size');
-    }
     final input = await File(path).open();
     try {
-      await input.setPosition(start * 4);
-      for (var at = start; at < stop; at += blockSize) {
-        checkAudioCancellation(isCancelled);
-        final length = math.min(blockSize, stop - at);
-        final bytes = await input.read(length * 4);
-        if (bytes.length != length * 4) {
-          throw const FormatException('Truncated PCM file');
-        }
-        final view = ByteData.sublistView(bytes);
-        final samples = Float32List(length);
-        for (var i = 0; i < length; i++) {
-          final value = view.getFloat32(i * 4, Endian.little);
-          // A damaged compressed frame may survive a platform decoder as a
-          // non-finite sample. Preserve the timeline with silence so one bad
-          // frame does not discard the rest of a long recording.
-          samples[i] = value.isFinite ? (value * gain).clamp(-1.0, 1.0) : 0;
-        }
-        yield samples;
-      }
+      yield* _readRange(
+        input,
+        start: start,
+        end: end ?? count,
+        blockSize: blockSize,
+        gain: gain,
+        isCancelled: isCancelled,
+      );
     } finally {
       await input.close();
+    }
+  }
+
+  Stream<Float32List> _readRange(
+    RandomAccessFile input, {
+    required int start,
+    required int end,
+    int blockSize = 65536,
+    double gain = 1,
+    bool Function()? isCancelled,
+  }) async* {
+    if (start < 0 || end < start || end > count || blockSize <= 0) {
+      throw ArgumentError('Invalid PCM range or block size');
+    }
+    checkAudioCancellation(isCancelled);
+    await input.setPosition(start * 4);
+    for (var at = start; at < end; at += blockSize) {
+      checkAudioCancellation(isCancelled);
+      final length = math.min(blockSize, end - at);
+      final bytes = await input.read(length * 4);
+      if (bytes.length != length * 4) {
+        throw const FormatException('Truncated PCM file');
+      }
+      final view = ByteData.sublistView(bytes);
+      final samples = Float32List(length);
+      for (var i = 0; i < length; i++) {
+        final value = view.getFloat32(i * 4, Endian.little);
+        // Preserve the timeline of damaged decoder frames with silence.
+        samples[i] = value.isFinite ? (value * gain).clamp(-1.0, 1.0) : 0;
+      }
+      yield samples;
     }
   }
 
@@ -184,21 +208,29 @@ class PcmFile {
     final fields = ByteData.sublistView(header);
     fields.setUint32(4, 36 + samples * 2, Endian.little);
     fields.setUint32(40, samples * 2, Endian.little);
-    final output = await file.open(mode: FileMode.write);
+    checkAudioCancellation(isCancelled);
+    final input = await File(path).open();
     try {
-      await output.writeFrom(header);
-      for (final span in ranges) {
-        await for (final block in blocks(
-          start: span.startSampleAt(sampleRate),
-          end: span.endSampleAt(sampleRate),
-          gain: gain,
-          isCancelled: isCancelled,
-        )) {
-          await output.writeFrom(float32ToPcm16(block));
+      final output = BufferedAudioWriter(await file.open(mode: FileMode.write));
+      try {
+        await output.write(header);
+        for (final span in ranges) {
+          await for (final block in _readRange(
+            input,
+            start: span.startSampleAt(sampleRate),
+            end: span.endSampleAt(sampleRate),
+            gain: gain,
+            isCancelled: isCancelled,
+          )) {
+            await output.write(float32ToPcm16(block));
+          }
         }
+        checkAudioCancellation(isCancelled);
+      } finally {
+        await output.close();
       }
     } finally {
-      await output.close();
+      await input.close();
     }
   }
 }

@@ -28,7 +28,7 @@ void speex_echo_get_residual(SpeexEchoState *st, int32_t *Yout, int len) {
 }
 
 #define POCKETASR_CHUNK 4096
-#define POCKETASR_OUT_FLOATS 8192
+#define POCKETASR_OUT_FLOATS 65536
 #define POCKETASR_AGC_MS 20
 
 /*
@@ -207,6 +207,9 @@ intptr_t pocketasr_chain_begin(const char *out_path, int in_rate, int channels,
     goto fail;
   }
 
+  /* Output is already accumulated into 256 KiB blocks by write_floats. */
+  setvbuf(c->out, NULL, _IONBF, 0);
+
   c->frame = (int16_t *)calloc((size_t)c->frame_size, sizeof(int16_t));
   c->mono = (int16_t *)malloc((size_t)POCKETASR_CHUNK * sizeof(int16_t));
   c->outbuf = (float *)malloc(POCKETASR_OUT_FLOATS * sizeof(float));
@@ -343,7 +346,7 @@ long pocketasr_chain_end(intptr_t handle) {
   total = c->total;
 
 done:
-  if (c->out) fclose(c->out);
+  if (c->out && fclose(c->out) != 0) total = POCKETASR_ERR_IO;
   if (c->rs) speex_resampler_destroy(c->rs);
   if (c->agc) speex_preprocess_state_destroy(c->agc);
   free(c->frame);

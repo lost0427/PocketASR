@@ -4,13 +4,15 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pocketasr_chain.h"
 
 /* Canonical file is always mono 16-bit; 44 bytes is the header Dart writes. */
 #define WAV_HEADER_BYTES 44
-#define WAV_MAX_SAMPLES 8192
+#define WAV_MAX_SAMPLES 65536
+#define WAV_WRITE_BYTES (256 * 1024)
 
 static void put_u16(uint8_t *p, uint32_t v) {
   p[0] = (uint8_t)(v & 0xff);
@@ -78,16 +80,15 @@ long pocketasr_write_wav(const char *src_path, const char *dst_path,
     fclose(in);
     return POCKETASR_ERR_IO;
   }
-  setvbuf(out, NULL, _IOFBF, 1 << 16);
-
-  uint8_t header[WAV_HEADER_BYTES];
-  wav_header(header, (uint32_t)(total * 2), (uint32_t)sample_rate);
+  /* Explicit buffering spans segment boundaries, including short VAD spans. */
+  setvbuf(out, NULL, _IONBF, 0);
+  float *fbuf = (float *)malloc(WAV_MAX_SAMPLES * sizeof(float));
+  uint8_t *pcm = (uint8_t *)malloc(WAV_WRITE_BYTES);
   long rc = POCKETASR_ERR_IO;
-  if (fwrite(header, 1, sizeof(header), out) != sizeof(header)) goto done;
+  if (!fbuf || !pcm) goto done;
+  size_t fill = WAV_HEADER_BYTES;
 
-  float fbuf[WAV_MAX_SAMPLES];
-  int16_t sbuf[WAV_MAX_SAMPLES];
-  uint8_t pcm[WAV_MAX_SAMPLES * 2];
+  wav_header(pcm, (uint32_t)(total * 2), (uint32_t)sample_rate);
   for (int i = 0; i < count; i++) {
     int64_t remaining = ends[i] - starts[i];
     int64_t offset = starts[i] * (int64_t)src_bytes;
@@ -99,31 +100,38 @@ long pocketasr_write_wav(const char *src_path, const char *dst_path,
     if (fseek(in, (long)offset, SEEK_SET) != 0) goto done;
     while (remaining > 0) {
       int64_t take = remaining < WAV_MAX_SAMPLES ? remaining : WAV_MAX_SAMPLES;
+      size_t room = (WAV_WRITE_BYTES - fill) / 2;
+      if (take > (int64_t)room) take = (int64_t)room;
       if (src_fmt == POCKETASR_FMT_F32) {
         if (fread(fbuf, sizeof(float), (size_t)take, in) != (size_t)take) {
           goto done;
         }
         for (long k = 0; k < take; k++) {
           int16_t v = to_pcm16(fbuf[k]);
-          pcm[2 * k] = (uint8_t)(v & 0xff);
-          pcm[2 * k + 1] = (uint8_t)(((uint16_t)v >> 8) & 0xff);
+          pcm[fill + 2 * k] = (uint8_t)(v & 0xff);
+          pcm[fill + 2 * k + 1] = (uint8_t)(((uint16_t)v >> 8) & 0xff);
         }
       } else {
-        if (fread(sbuf, sizeof(int16_t), (size_t)take, in) != (size_t)take) {
+        if (fread(pcm + fill, 2, (size_t)take, in) != (size_t)take) {
           goto done;
         }
-        memcpy(pcm, sbuf, (size_t)take * 2);
       }
-      size_t out_bytes = (size_t)take * 2;
-      if (fwrite(pcm, 1, out_bytes, out) != out_bytes) goto done;
+      fill += (size_t)take * 2;
+      if (fill == WAV_WRITE_BYTES) {
+        if (fwrite(pcm, 1, fill, out) != fill) goto done;
+        fill = 0;
+      }
       remaining -= take;
     }
   }
+  if (fill > 0 && fwrite(pcm, 1, fill, out) != fill) goto done;
   rc = (long)total;
 
 done:
-  if (rc < 0) remove(dst_path);
-  fclose(out);
+  free(fbuf);
+  free(pcm);
+  if (fclose(out) != 0) rc = POCKETASR_ERR_IO;
   fclose(in);
+  if (rc < 0) remove(dst_path);
   return rc;
 }
