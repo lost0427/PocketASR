@@ -144,6 +144,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeCopied => '已复制到剪贴板';
 
   @override
+  String get transcribeExportTxt => '导出 TXT';
+
+  @override
+  String get transcribeExported => '转录文本已导出';
+
+  @override
+  String get transcribeExportFailed => 'TXT 导出失败';
+
+  @override
   String get transcribeChooseModel => '选择已下载模型';
 
   @override

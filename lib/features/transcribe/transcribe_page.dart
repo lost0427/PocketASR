@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,6 +19,8 @@ import 'transcription_service.dart';
 import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/model_selection_localizations.dart';
+
+const _textExportChannel = MethodChannel('pocket_asr/text_export');
 
 /// Transcribe tab.
 ///
@@ -421,6 +425,40 @@ class _TranscribePageState extends State<TranscribePage> {
       ..showSnackBar(SnackBar(content: Text(l10n.transcribeCopied)));
   }
 
+  Future<void> _exportTxt() async {
+    if (_result.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    try {
+      if (Platform.isAndroid) {
+        final saved = await _textExportChannel.invokeMethod<bool>('saveText', {
+          'suggestedName': _suggestedTranscriptName,
+          'text': _result,
+        });
+        if (saved != true) return;
+      } else {
+        final location = await getSaveLocation(
+          acceptedTypeGroups: const [
+            XTypeGroup(label: 'Text', extensions: ['txt']),
+          ],
+          suggestedName: _suggestedTranscriptName,
+        );
+        if (location == null) return;
+        await File(location.path).writeAsString(_result);
+      }
+      if (mounted) _notify(l10n.transcribeExported);
+    } catch (error) {
+      if (mounted) _notify('${l10n.transcribeExportFailed}: $error');
+    }
+  }
+
+  String get _suggestedTranscriptName {
+    final stem = (_fileName ?? '').replaceFirst(RegExp(r'\.[^.]+$'), '');
+    final safeStem = stem
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+        .trim();
+    return '${safeStem.isEmpty ? 'transcript' : safeStem}.txt';
+  }
+
   String _backendLabel(
     EngineCapabilities? capabilities,
     AppLocalizations l10n,
@@ -741,6 +779,11 @@ class _TranscribePageState extends State<TranscribePage> {
                         onPressed: hasResult ? _copy : null,
                         icon: const Icon(Icons.copy_all_outlined, size: 18),
                         label: Text(l10n.transcribeCopy),
+                      ),
+                      TextButton.icon(
+                        onPressed: hasResult ? _exportTxt : null,
+                        icon: const Icon(Icons.download_outlined, size: 18),
+                        label: Text(l10n.transcribeExportTxt),
                       ),
                     ],
                   ),

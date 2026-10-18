@@ -147,6 +147,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeCopied => 'Copied to clipboard';
 
   @override
+  String get transcribeExportTxt => 'Export TXT';
+
+  @override
+  String get transcribeExported => 'Transcript exported';
+
+  @override
+  String get transcribeExportFailed => 'TXT export failed';
+
+  @override
   String get transcribeChooseModel => 'Choose downloaded model';
 
   @override

@@ -356,6 +356,24 @@ abstract class AppLocalizations {
   /// **'Copied to clipboard'**
   String get transcribeCopied;
 
+  /// No description provided for @transcribeExportTxt.
+  ///
+  /// In en, this message translates to:
+  /// **'Export TXT'**
+  String get transcribeExportTxt;
+
+  /// No description provided for @transcribeExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript exported'**
+  String get transcribeExported;
+
+  /// No description provided for @transcribeExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT export failed'**
+  String get transcribeExportFailed;
+
   /// No description provided for @transcribeChooseModel.
   ///
   /// In en, this message translates to:
