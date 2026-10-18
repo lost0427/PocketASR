@@ -19,6 +19,8 @@ import 'package:pocket_asr/features/transcribe/transcribe_page.dart';
 import 'package:pocket_asr/features/transcribe/transcription_service.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
+import 'support/pump_until.dart';
+
 /// Available engine that counts native calls, so a test can prove the page
 /// never loaded or transcribed ASR while previewing VAD.
 class _CountingEngine extends UnavailableAsrEngine {
@@ -446,9 +448,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.delete_outline).at(1));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 20)),
-      );
+      await tester.pumpAndSettle();
+      await pumpUntil(tester, () => state.vadModelPath == null);
       await tester.pumpAndSettle();
 
       expect(state.vadModelPath, isNull);

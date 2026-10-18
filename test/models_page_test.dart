@@ -9,6 +9,8 @@ import 'package:pocket_asr/engine/model_downloader.dart';
 import 'package:pocket_asr/features/models/models_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
+import 'support/pump_until.dart';
+
 void main() {
   late Directory dir;
   late LocalModelStore store;
@@ -128,9 +130,7 @@ void main() {
     await tester.pumpAndSettle();
     // Deleting is real file I/O, which the fake-async clock does not advance;
     // let it resolve, then render the rebuilt tile.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
+    await pumpUntil(tester, () => find.text('Downloaded').evaluate().isEmpty);
     await tester.pumpAndSettle();
 
     expect(store.isDownloaded(entry), isFalse);
@@ -306,9 +306,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline).first);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
+    await tester.pumpAndSettle();
+    await pumpUntil(tester, () => state.modelPath == null);
     await tester.pumpAndSettle();
 
     expect(state.modelPath, isNull);

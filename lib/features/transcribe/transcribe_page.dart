@@ -771,10 +771,11 @@ class _TranscribePageState extends State<TranscribePage> {
                     decoderInfo: _decoderInfo,
                   ),
                   const SizedBox(height: 28),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       _SectionLabel(l10n.transcribeResult),
-                      const Spacer(),
                       TextButton.icon(
                         onPressed: hasResult ? _copy : null,
                         icon: const Icon(Icons.copy_all_outlined, size: 18),
