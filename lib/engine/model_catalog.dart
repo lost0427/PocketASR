@@ -101,9 +101,7 @@ class ModelEntry {
         if (file is! Map) {
           throw FormatException('model "$id" has a non-object file entry');
         }
-        files.add(
-          ModelFile.fromJson(file.cast<String, Object?>(), id),
-        );
+        files.add(ModelFile.fromJson(file.cast<String, Object?>(), id));
       }
     }
     final primary = files.isEmpty
@@ -112,7 +110,9 @@ class ModelEntry {
 
     final fileName = _stringOrNull(json['fileName']) ?? primary?.fileName;
     if (fileName == null || fileName.isEmpty) {
-      throw FormatException('model "$id" needs a "fileName" or a "files" entry');
+      throw FormatException(
+        'model "$id" needs a "fileName" or a "files" entry',
+      );
     }
     if (primary == null) _checkPlainName(id, fileName);
 
@@ -313,9 +313,7 @@ class LocalModelStore implements ModelStore {
     if (file.fileName.contains('/') ||
         file.fileName.contains('\\') ||
         file.fileName.contains('..')) {
-      throw StateError(
-        'refusing unsafe model file name "${file.fileName}"',
-      );
+      throw StateError('refusing unsafe model file name "${file.fileName}"');
     }
     return '${bundleDirFor(entry)}${Platform.pathSeparator}${file.fileName}';
   }
@@ -385,6 +383,9 @@ class LocalModelStore implements ModelStore {
       tokensPath: tokensPath,
       encoderPath: pathForRole('encoder'),
       decoderPath: pathForRole('decoder'),
+      llmPath: pathForRole('llm'),
+      embeddingPath: pathForRole('embedding'),
+      tokenizerPath: pathForRole('tokenizer'),
     );
 
     // A catalog id alone is not trust. Promote the spec only when every file
@@ -401,6 +402,9 @@ class LocalModelStore implements ModelStore {
       tokensPath: untrusted.tokensPath,
       encoderPath: untrusted.encoderPath,
       decoderPath: untrusted.decoderPath,
+      llmPath: untrusted.llmPath,
+      embeddingPath: untrusted.embeddingPath,
+      tokenizerPath: untrusted.tokenizerPath,
       trustedBundleId: entry.id,
       modelSizeBytes: primary.sizeBytes!,
       modelSha256: primary.sha256!,

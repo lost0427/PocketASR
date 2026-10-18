@@ -410,6 +410,9 @@ bool _sameModel(EngineModelSpec a, EngineModelSpec b) =>
     a.tokensPath == b.tokensPath &&
     a.encoderPath == b.encoderPath &&
     a.decoderPath == b.decoderPath &&
+    a.llmPath == b.llmPath &&
+    a.embeddingPath == b.embeddingPath &&
+    a.tokenizerPath == b.tokenizerPath &&
     a.trustedBundleId == b.trustedBundleId &&
     a.modelSizeBytes == b.modelSizeBytes &&
     a.modelSha256 == b.modelSha256 &&

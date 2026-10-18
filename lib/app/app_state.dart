@@ -401,6 +401,9 @@ class AppState extends ChangeNotifier {
     _save('model_tokens', '');
     _save('model_encoder', '');
     _save('model_decoder', '');
+    _save('model_llm', '');
+    _save('model_embedding', '');
+    _save('model_tokenizer', '');
     _save('model_trusted_bundle', '');
     _save('model_size_bytes', '');
     _save('model_sha256', '');
@@ -416,6 +419,9 @@ class AppState extends ChangeNotifier {
     _save('model_tokens', spec.tokensPath ?? '');
     _save('model_encoder', spec.encoderPath ?? '');
     _save('model_decoder', spec.decoderPath ?? '');
+    _save('model_llm', spec.llmPath ?? '');
+    _save('model_embedding', spec.embeddingPath ?? '');
+    _save('model_tokenizer', spec.tokenizerPath ?? '');
     _save('model_trusted_bundle', spec.trustedBundleId ?? '');
     _save('model_size_bytes', spec.modelSizeBytes?.toString() ?? '');
     _save('model_sha256', spec.modelSha256 ?? '');
@@ -439,6 +445,9 @@ class AppState extends ChangeNotifier {
     final tokensPath = _nonEmpty(database.getSetting('model_tokens'));
     final encoderPath = _nonEmpty(database.getSetting('model_encoder'));
     final decoderPath = _nonEmpty(database.getSetting('model_decoder'));
+    final llmPath = _nonEmpty(database.getSetting('model_llm'));
+    final embeddingPath = _nonEmpty(database.getSetting('model_embedding'));
+    final tokenizerPath = _nonEmpty(database.getSetting('model_tokenizer'));
     late final EngineModelSpec spec;
     if (manual) {
       spec = EngineModelSpec(path: primary);
@@ -479,6 +488,9 @@ class AppState extends ChangeNotifier {
         tokensPath: tokensPath,
         encoderPath: encoderPath,
         decoderPath: decoderPath,
+        llmPath: llmPath,
+        embeddingPath: embeddingPath,
+        tokenizerPath: tokenizerPath,
         trustedBundleId: bundleId,
         modelSizeBytes: modelSizeBytes,
         modelSha256: modelSha256,
@@ -518,9 +530,26 @@ class AppState extends ChangeNotifier {
       spec.tokensPath,
       spec.encoderPath,
       spec.decoderPath,
+      spec.llmPath,
+      spec.embeddingPath,
+      spec.tokenizerPath,
     ]) {
       if (path != null && path.isNotEmpty && !File(path).existsSync()) {
         return false;
+      }
+    }
+    if (spec.family == 'funasr-nano') {
+      if (spec.llmPath == null ||
+          spec.embeddingPath == null ||
+          spec.tokenizerPath == null) {
+        return false;
+      }
+      final directory = File(spec.tokenizerPath!).parent;
+      for (final name in ['vocab.json', 'merges.txt']) {
+        if (!File('${directory.path}${Platform.pathSeparator}$name')
+            .existsSync()) {
+          return false;
+        }
       }
     }
     return true;

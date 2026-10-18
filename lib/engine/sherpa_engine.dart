@@ -7,6 +7,8 @@
 /// failures always surface as [EngineUnavailableException].
 library;
 
+import 'dart:io';
+
 import '../core/audio/pcm_file.dart';
 import '../core/audio/wav.dart';
 
@@ -147,6 +149,42 @@ class SherpaEngine implements AsrEngine {
           tokens: tokens,
           numThreads: threads,
         );
+      case 'funasr-nano':
+        final llm = spec.llmPath;
+        final embedding = spec.embeddingPath;
+        final tokenizer = spec.tokenizerPath;
+        if (llm == null || embedding == null || tokenizer == null) {
+          throw const EngineUnavailableException(
+            'Fun-ASR-Nano needs encoder adaptor, LLM, embedding and tokenizer files; '
+            'select the complete catalog bundle.',
+          );
+        }
+        final tokenizerDirectory = File(tokenizer).parent.path;
+        for (final path in [
+          spec.path,
+          llm,
+          embedding,
+          tokenizer,
+          _sibling(tokenizer, 'vocab.json'),
+          _sibling(tokenizer, 'merges.txt'),
+        ]) {
+          final file = File(path);
+          if (!file.existsSync() || file.lengthSync() == 0) {
+            throw EngineUnavailableException(
+              'Fun-ASR-Nano file missing or empty: $path',
+            );
+          }
+        }
+        return sherpa.OfflineModelConfig(
+          funasrNano: sherpa.OfflineFunAsrNanoModelConfig(
+            encoderAdaptor: spec.path,
+            llm: llm,
+            embedding: embedding,
+            tokenizer: tokenizerDirectory,
+          ),
+          tokens: '',
+          numThreads: threads,
+        );
       case 'paraformer':
         return sherpa.OfflineModelConfig(
           paraformer: sherpa.OfflineParaformerModelConfig(model: spec.path),
@@ -156,7 +194,7 @@ class SherpaEngine implements AsrEngine {
       default:
         throw EngineUnavailableException(
           'sherpa-onnx adapter does not map model family "$family" yet; '
-          'supported: sensevoice, whisper, paraformer.',
+          'supported: sensevoice, whisper, paraformer, funasr-nano.',
         );
     }
   }
@@ -195,7 +233,9 @@ class SherpaEngine implements AsrEngine {
         stream.free();
       }
     } catch (error) {
-      throw EngineUnavailableException('sherpa-onnx transcription failed: $error');
+      throw EngineUnavailableException(
+        'sherpa-onnx transcription failed: $error',
+      );
     }
   }
 
@@ -224,8 +264,7 @@ class SherpaEngine implements AsrEngine {
       detector = sherpa.VoiceActivityDetector(
         config: _vadConfig(vad, sampleRate, windowSize),
         // Drained every window, so it only ever holds one speech run plus pad.
-        bufferSizeInSeconds:
-            vad.maxSpeechSeconds + vad.speechPadMs / 1000 + 1,
+        bufferSizeInSeconds: vad.maxSpeechSeconds + vad.speechPadMs / 1000 + 1,
       );
     } catch (error) {
       throw EngineUnavailableException(

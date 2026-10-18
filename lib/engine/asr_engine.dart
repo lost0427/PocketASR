@@ -27,6 +27,9 @@ class EngineModelSpec {
     this.tokensPath,
     this.encoderPath,
     this.decoderPath,
+    this.llmPath,
+    this.embeddingPath,
+    this.tokenizerPath,
   }) : trustedBundleId = null,
        modelSizeBytes = null,
        modelSha256 = null,
@@ -52,6 +55,9 @@ class EngineModelSpec {
     String? tokensSha256,
     String? encoderPath,
     String? decoderPath,
+    String? llmPath,
+    String? embeddingPath,
+    String? tokenizerPath,
   }) {
     if (trustedBundleId.isEmpty) {
       throw ArgumentError.value(
@@ -103,6 +109,9 @@ class EngineModelSpec {
       tokensPath: tokensPath,
       encoderPath: encoderPath,
       decoderPath: decoderPath,
+      llmPath: llmPath,
+      embeddingPath: embeddingPath,
+      tokenizerPath: tokenizerPath,
       trustedBundleId: trustedBundleId,
       modelSizeBytes: modelSizeBytes,
       modelSha256: modelSha256.toLowerCase(),
@@ -123,6 +132,9 @@ class EngineModelSpec {
     required this.tokensSha256,
     required this.encoderPath,
     required this.decoderPath,
+    required this.llmPath,
+    required this.embeddingPath,
+    required this.tokenizerPath,
   });
 
   /// Filesystem path to the (primary) model weights.
@@ -142,6 +154,11 @@ class EngineModelSpec {
 
   /// Decoder weights, for encoder/decoder models like whisper.
   final String? decoderPath;
+
+  /// Fun-ASR-Nano companions; tokenizerPath names tokenizer.json.
+  final String? llmPath;
+  final String? embeddingPath;
+  final String? tokenizerPath;
 
   /// Stable allowlist bundle id, or null for a hand-picked/caller-built spec.
   final String? trustedBundleId;
@@ -377,10 +394,7 @@ abstract class AsrEngine {
   /// Returns cut boundaries only — does not run ASR and needs no model
   /// [load]: the neural VAD is a separate model ([NeuralVadSettings.modelPath])
   /// and code path, which is what makes the live preview cheap (§1.2).
-  Future<VadPlan> planVad(
-    TranscribeRequest request,
-    NeuralVadSettings vad,
-  );
+  Future<VadPlan> planVad(TranscribeRequest request, NeuralVadSettings vad);
 
   /// Releases native resources.
   Future<void> dispose();
@@ -456,10 +470,8 @@ class UnavailableAsrEngine implements AsrEngine {
       Stream.error(EngineUnavailableException(reason));
 
   @override
-  Future<VadPlan> planVad(
-    TranscribeRequest request,
-    NeuralVadSettings vad,
-  ) => Future.error(EngineUnavailableException(reason));
+  Future<VadPlan> planVad(TranscribeRequest request, NeuralVadSettings vad) =>
+      Future.error(EngineUnavailableException(reason));
 
   @override
   Future<void> dispose() async {}
