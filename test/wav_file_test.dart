@@ -10,7 +10,9 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('wav-block-test-');
     try {
       final file = File('${dir.path}/audio.wav');
-      final samples = Float32List.fromList(List.generate(40001, (i) => (i % 31 - 15) / 16));
+      final samples = Float32List.fromList(
+        List.generate(3 * 65536 + 123, (i) => (i % 31 - 15) / 16),
+      );
       await writePcm16Wav(file, samples, 16000);
       expect(await file.readAsBytes(), encodePcm16Wav(samples, 16000));
       final audio = await const FileAudioSource().read(file.path);

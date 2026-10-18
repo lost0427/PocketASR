@@ -23,7 +23,7 @@ void main() {
     () async {
       final audio = AudioBuffer(
         samples: Float32List.fromList(
-          List.generate(40001, (i) => (i % 31 - 15) / 16),
+          List.generate(200001, (i) => (i % 31 - 15) / 16),
         ),
         sampleRate: 16000,
       );
@@ -33,27 +33,36 @@ void main() {
           .map((b) => b.length)
           .toList();
       expect(lengths.reduce(max), 1000);
-      expect(lengths.reduce((a, b) => a + b), 40001);
+      expect(lengths.reduce((a, b) => a + b), 200001);
       final wav = File('${dir.path}/slice.wav');
       await pcm.writeWave(
         wav,
         spans: const [
-          AudioChunk(start: Duration.zero, end: Duration(milliseconds: 100)),
-          AudioChunk(
-            start: Duration(seconds: 1),
-            end: Duration(milliseconds: 1200),
-          ),
+          AudioChunk(start: Duration.zero, end: Duration(seconds: 5)),
+          AudioChunk(start: Duration(seconds: 6), end: Duration(seconds: 11)),
         ],
       );
       final decoded = <double>[];
+      final readLengths = <int>[];
       await for (final block in readCanonicalWave(wav.path)) {
-        expect(block.length, lessThanOrEqualTo(512));
+        expect(block.length, lessThanOrEqualTo(65536));
+        readLengths.add(block.length);
         decoded.addAll(block);
       }
+      expect(readLengths, [65536, 65536, 28928]);
       expect(decoded, [
-        ...audio.samples.take(1600),
-        ...audio.samples.skip(16000).take(3200),
+        ...audio.samples.take(80000),
+        ...audio.samples.skip(96000).take(80000),
       ]);
+      final smallBlocks = await readCanonicalWave(
+        wav.path,
+        blockSize: 512,
+      ).toList();
+      expect(
+        smallBlocks.map((block) => block.length),
+        everyElement(lessThanOrEqualTo(512)),
+      );
+      expect(smallBlocks.expand((block) => block), decoded);
       await expectLater(
         pcm.blocks(isCancelled: () => true).drain<void>(),
         throwsA(isA<EngineCancelledException>()),

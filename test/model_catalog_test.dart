@@ -187,7 +187,37 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(10));
+      expect(entries, hasLength(11));
+      final nano = entries.singleWhere(
+        (entry) => entry.id == 'sherpa-funasr-nano-int8',
+      );
+      expect(nano.engine, 'sherpa');
+      expect(nano.family, 'funasr-nano');
+      expect(nano.quant, 'int8');
+      expect(nano.languages, ['zh', 'en', 'ja']);
+      expect(nano.sizeBytes, 1009605061);
+      expect(nano.files.map((file) => (file.role, file.fileName)), [
+        ('model', 'encoder_adaptor.int8.onnx'),
+        ('llm', 'llm.int8.onnx'),
+        ('embedding', 'embedding.int8.onnx'),
+        ('tokenizer', 'tokenizer.json'),
+        ('vocab', 'vocab.json'),
+        ('merges', 'merges.txt'),
+      ]);
+      for (final file in nano.files) {
+        expect(file.sha256, matches(RegExp(r'^[0-9a-f]{64}$')));
+        expect(
+          file.url,
+          contains('/resolve/6f16bd378457e13f36ccf3910df9017f96c346fb/'),
+        );
+      }
+      final store = LocalModelStore(Directory('models'));
+      final spec = store.specFor(nano);
+      expect(spec.trustedBundleId, nano.id);
+      expect(spec.path, store.pathFor(nano));
+      expect(spec.llmPath, store.pathToFile(nano, nano.files[1]));
+      expect(spec.embeddingPath, store.pathToFile(nano, nano.files[2]));
+      expect(spec.tokenizerPath, store.pathToFile(nano, nano.files[3]));
       final mnn = entries.singleWhere(
         (entry) => entry.id == 'model-sherpa-mnn-sensevoice-q8-v1',
       );
@@ -250,7 +280,7 @@ void main() {
         expect(entry.engine, isNotNull);
         expect(entry.type, anyOf('asr', 'embedding', 'vad'));
       }
-      // The two multi-file sherpa bundles keep their companions distinct.
+      // Multi-file sherpa bundles keep their companions distinct.
       final whisper = entries.firstWhere((e) => e.family == 'whisper');
       expect(
         whisper.bundleFiles.map((f) => f.role),
