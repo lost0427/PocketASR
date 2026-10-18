@@ -1,7 +1,7 @@
 name: pocket_asr
 description: "On-device speech recognition."
 publish_to: 'none'
-version: 1.0.24+25
+version: 1.0.25+26
 
 environment:
   sdk: ^3.13.3
