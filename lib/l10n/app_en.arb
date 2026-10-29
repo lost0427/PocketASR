@@ -110,6 +110,14 @@
       "count": { "type": "int" }
     }
   },
+  "historyExportTxt": "Export TXT",
+  "historyExportedMany": "{count, plural, =1{Exported 1 transcript} other{Exported {count} transcripts}}",
+  "@historyExportedMany": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "historyExportFailed": "TXT export failed",
   "historyMoveToTrash": "Move to trash",
   "historyRestore": "Restore",
   "historyDeletePermanently": "Delete permanently",

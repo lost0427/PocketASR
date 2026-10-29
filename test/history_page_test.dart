@@ -8,6 +8,7 @@ import 'package:pocket_asr/data/db.dart';
 import 'package:pocket_asr/data/search_repo.dart';
 import 'package:pocket_asr/data/semantic_indexer.dart';
 import 'package:pocket_asr/data/transcript_repo.dart';
+import 'package:pocket_asr/core/text/transcript_export.dart';
 import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/features/history/history_page.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
@@ -151,6 +152,7 @@ void main() {
     WidgetTester tester, {
     SearchRepo? searchRepo,
     SemanticIndexer? indexer,
+    Future<int?> Function(List<TranscriptExport>)? exportFiles,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -161,6 +163,7 @@ void main() {
             repo: repo,
             search: searchRepo ?? search,
             indexer: indexer,
+            exportFiles: exportFiles,
           ),
         ),
       ),
@@ -289,6 +292,37 @@ void main() {
 
     expect(copied, ['copy me']);
     expect(find.text('Copied to clipboard'), findsOneWidget);
+  });
+
+  testWidgets('batch export writes one deduped txt per selected transcript', (
+    tester,
+  ) async {
+    final saved = <String, String>{};
+    repo.insert(title: 'Meeting.mp3', text: 'first body');
+    repo.insert(title: 'Meeting.wav', text: 'second body');
+    repo.insert(title: 'Hidden', text: 'not selected');
+    await pumpHistory(
+      tester,
+      exportFiles: (files) async {
+        for (final file in files) {
+          saved[file.fileName] = file.text;
+        }
+        return files.length;
+      },
+    );
+
+    await tester.longPress(find.text('Meeting.mp3'));
+    await tester.tap(find.text('Meeting.wav'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Export TXT'));
+    await tester.pumpAndSettle();
+
+    // One `.txt` per selected row; the audio extension is dropped and the
+    // duplicate title gets a " (2)" suffix instead of overwriting the first.
+    expect(saved.keys.toSet(), {'Meeting.txt', 'Meeting (2).txt'});
+    expect(saved.values.toSet(), {'first body', 'second body'});
+    expect(find.text('Exported 2 transcripts'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing); // selection cleared
   });
 
   testWidgets('a marked search result still copies the plain original text', (

@@ -314,6 +314,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get historyExportTxt => '导出 TXT';
+
+  @override
+  String historyExportedMany(int count) {
+    return '已导出 $count 条转录';
+  }
+
+  @override
+  String get historyExportFailed => 'TXT 导出失败';
+
+  @override
   String get historyMoveToTrash => '移入回收站';
 
   @override

@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,14 +11,13 @@ import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/audio/pcm_file.dart';
 import '../../core/text/token_counter.dart';
+import '../../core/text/transcript_export.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
 import 'transcription_service.dart';
 import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/model_selection_localizations.dart';
-
-const _textExportChannel = MethodChannel('pocket_asr/text_export');
 
 /// Transcribe tab.
 ///
@@ -429,22 +426,8 @@ class _TranscribePageState extends State<TranscribePage> {
     if (_result.isEmpty) return;
     final l10n = AppLocalizations.of(context);
     try {
-      if (Platform.isAndroid) {
-        final saved = await _textExportChannel.invokeMethod<bool>('saveText', {
-          'suggestedName': _suggestedTranscriptName,
-          'text': _result,
-        });
-        if (saved != true) return;
-      } else {
-        final location = await getSaveLocation(
-          acceptedTypeGroups: const [
-            XTypeGroup(label: 'Text', extensions: ['txt']),
-          ],
-          suggestedName: _suggestedTranscriptName,
-        );
-        if (location == null) return;
-        await File(location.path).writeAsString(_result);
-      }
+      final saved = await saveTranscriptTxt(_suggestedTranscriptName, _result);
+      if (!saved) return;
       if (mounted) _notify(l10n.transcribeExported);
     } catch (error) {
       if (mounted) _notify('${l10n.transcribeExportFailed}: $error');

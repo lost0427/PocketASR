@@ -338,6 +338,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get historyExportTxt => 'Export TXT';
+
+  @override
+  String historyExportedMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Exported $count transcripts',
+      one: 'Exported 1 transcript',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historyExportFailed => 'TXT export failed';
+
+  @override
   String get historyMoveToTrash => 'Move to trash';
 
   @override

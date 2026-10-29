@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/text/token_counter.dart';
+import '../../core/text/transcript_export.dart';
 import '../../data/search_repo.dart';
 import '../../data/semantic_indexer.dart';
 import '../../data/transcript_repo.dart';
@@ -24,6 +25,7 @@ class HistoryPage extends StatefulWidget {
     required this.repo,
     required this.search,
     this.indexer,
+    this.exportFiles,
   });
 
   final TranscriptRepo repo;
@@ -32,6 +34,11 @@ class HistoryPage extends StatefulWidget {
   /// The semantic indexer, when an embedding model is loaded. Drives the
   /// indexing status row and its retry/rebuild actions.
   final SemanticIndexer? indexer;
+
+  /// Writes the selected transcripts; production asks the user for a folder.
+  /// Tests inject a recorder and return how many files were written. Null
+  /// means the user cancelled.
+  final Future<int?> Function(List<TranscriptExport> files)? exportFiles;
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -43,6 +50,7 @@ class _HistoryPageState extends State<HistoryPage> {
   SearchMode _mode = SearchMode.literal;
   List<Transcript> _rows = const [];
   final Set<int> _selectedIds = {};
+  bool _exporting = false;
 
   bool get _hasEmbedder => widget.search.embedder != null;
   bool get _selecting => _selectedIds.isNotEmpty;
@@ -296,6 +304,57 @@ class _HistoryPageState extends State<HistoryPage> {
       );
   }
 
+  Future<void> _exportSelectedTxt() async {
+    final rows = _selectedRows;
+    if (rows.isEmpty || _exporting) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final used = <String>{};
+    final files = [
+      for (final row in rows)
+        TranscriptExport(fileName: _exportFileName(row, used), text: row.text),
+    ];
+    setState(() => _exporting = true);
+    try {
+      final saved =
+          await (widget.exportFiles?.call(files) ?? saveTranscriptTxts(files));
+      if (!mounted || saved == null) return;
+      _clearSelection();
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.historyExportedMany(saved))),
+        );
+    } catch (error) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${l10n.historyExportFailed}: $error')),
+        );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  /// A `.txt` name per row, taken from its title without the audio extension
+  /// and de-duplicated within one export so nothing is overwritten.
+  String _exportFileName(Transcript row, Set<String> used) {
+    final base = row.title.split(RegExp(r'[\\/]')).last;
+    final stem = base
+        .replaceFirst(RegExp(r'\.[^.]+$'), '')
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+        .trim();
+    final safeStem = stem.isEmpty ? 'transcript_${row.id}' : stem;
+    var name = '$safeStem.txt';
+    var index = 2;
+    while (!used.add(name.toLowerCase())) {
+      name = '$safeStem ($index).txt';
+      index++;
+    }
+    return name;
+  }
+
   void _moveSelectedToTrash() {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) return;
@@ -400,6 +459,11 @@ class _HistoryPageState extends State<HistoryPage> {
                 : l10n.historySelectAll,
             onPressed: _toggleSelectAll,
             icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+          ),
+          IconButton(
+            tooltip: l10n.historyExportTxt,
+            onPressed: _exporting ? null : _exportSelectedTxt,
+            icon: const Icon(Icons.download_outlined),
           ),
           IconButton(
             tooltip: l10n.historyCopy,

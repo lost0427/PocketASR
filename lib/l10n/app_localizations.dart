@@ -686,6 +686,24 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Copied 1 transcript to clipboard} other{Copied {count} transcripts to clipboard}}'**
   String historyCopiedMany(int count);
 
+  /// No description provided for @historyExportTxt.
+  ///
+  /// In en, this message translates to:
+  /// **'Export TXT'**
+  String get historyExportTxt;
+
+  /// No description provided for @historyExportedMany.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Exported 1 transcript} other{Exported {count} transcripts}}'**
+  String historyExportedMany(int count);
+
+  /// No description provided for @historyExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT export failed'**
+  String get historyExportFailed;
+
   /// No description provided for @historyMoveToTrash.
   ///
   /// In en, this message translates to:
