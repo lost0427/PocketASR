@@ -16,21 +16,28 @@ Widget host(
   AppState state, {
   ModelLibrary? modelLibrary,
   bool showDecoderPreference = true,
+  bool? showAndroidTools,
 }) => AppStateScope(
   notifier: state,
   child: _Host(
     modelLibrary: modelLibrary,
     showDecoderPreference: showDecoderPreference,
+    showAndroidTools: showAndroidTools,
   ),
 );
 
 /// Mirrors [main.dart]'s `_LocalizedApp`: it depends on [AppStateScope], so a
 /// locale or theme change rebuilds the [MaterialApp] under test.
 class _Host extends StatelessWidget {
-  const _Host({this.modelLibrary, required this.showDecoderPreference});
+  const _Host({
+    this.modelLibrary,
+    required this.showDecoderPreference,
+    this.showAndroidTools,
+  });
 
   final ModelLibrary? modelLibrary;
   final bool showDecoderPreference;
+  final bool? showAndroidTools;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +51,7 @@ class _Host extends StatelessWidget {
         body: SettingsPage(
           modelLibrary: modelLibrary,
           showDecoderPreference: showDecoderPreference,
+          showAndroidTools: showAndroidTools,
         ),
       ),
     );
@@ -57,6 +65,7 @@ void main() {
     AppState state, {
     ModelLibrary? modelLibrary,
     bool showDecoderPreference = true,
+    bool? showAndroidTools,
   }) async {
     tester.view.physicalSize = const Size(1200, 4200);
     tester.view.devicePixelRatio = 1.0;
@@ -66,6 +75,7 @@ void main() {
         state,
         modelLibrary: modelLibrary,
         showDecoderPreference: showDecoderPreference,
+        showAndroidTools: showAndroidTools,
       ),
     );
   }
@@ -200,5 +210,16 @@ void main() {
       AppState.defaultChunkSettings.energyThreshold,
     );
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
+  });
+
+  testWidgets('Android backup tools show export and import under About', (
+    tester,
+  ) async {
+    final state = AppState();
+    addTearDown(state.dispose);
+    await pumpSettings(tester, state, showAndroidTools: true);
+
+    expect(find.text('Export data and models'), findsOneWidget);
+    expect(find.text('Import backup'), findsOneWidget);
   });
 }

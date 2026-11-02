@@ -1172,6 +1172,150 @@ abstract class AppLocalizations {
   /// **'Settings are saved on this device and restored on restart.'**
   String get settingsPersistenceHint;
 
+  /// No description provided for @settingsData.
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsData;
+
+  /// No description provided for @settingsExportBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Export data and models'**
+  String get settingsExportBackup;
+
+  /// No description provided for @settingsExportBackupHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Write transcripts, settings and downloaded models to a zip.'**
+  String get settingsExportBackupHint;
+
+  /// No description provided for @settingsImportBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Import backup'**
+  String get settingsImportBackup;
+
+  /// No description provided for @settingsImportBackupHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace this device\'s data and models from a zip.'**
+  String get settingsImportBackupHint;
+
+  /// No description provided for @settingsBackupConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export backup?'**
+  String get settingsBackupConfirmTitle;
+
+  /// No description provided for @settingsBackupConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes all transcripts, settings and {size} of downloaded models.'**
+  String settingsBackupConfirmBody(String size);
+
+  /// No description provided for @settingsBackupOverwriteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import backup?'**
+  String get settingsBackupOverwriteTitle;
+
+  /// No description provided for @settingsBackupOverwriteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This replaces all transcripts, settings and downloaded models on this device.'**
+  String get settingsBackupOverwriteBody;
+
+  /// No description provided for @settingsBackupExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved'**
+  String get settingsBackupExported;
+
+  /// No description provided for @settingsBackupRestartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart required'**
+  String get settingsBackupRestartTitle;
+
+  /// No description provided for @settingsBackupRestartBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is ready. Close the app to finish restoring.'**
+  String get settingsBackupRestartBody;
+
+  /// No description provided for @settingsBackupRestartLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get settingsBackupRestartLater;
+
+  /// No description provided for @settingsBackupRestartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Close app'**
+  String get settingsBackupRestartNow;
+
+  /// No description provided for @settingsBackupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed'**
+  String get settingsBackupFailed;
+
+  /// No description provided for @settingsUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get settingsUpdates;
+
+  /// No description provided for @settingsCheckUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get settingsCheckUpdates;
+
+  /// No description provided for @settingsCheckUpdatesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Look for a newer GitHub release.'**
+  String get settingsCheckUpdatesHint;
+
+  /// No description provided for @settingsUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'You are up to date'**
+  String get settingsUpToDate;
+
+  /// No description provided for @settingsUpdateAvailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get settingsUpdateAvailableTitle;
+
+  /// No description provided for @settingsUpdateAvailableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} is available.'**
+  String settingsUpdateAvailableBody(String version);
+
+  /// No description provided for @settingsUpdateNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get settingsUpdateNotes;
+
+  /// No description provided for @settingsUpdateDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download APK'**
+  String get settingsUpdateDownload;
+
+  /// No description provided for @settingsUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update check failed'**
+  String get settingsUpdateFailed;
+
   /// No description provided for @benchTitle.
   ///
   /// In en, this message translates to:

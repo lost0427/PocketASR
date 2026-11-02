@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/app_state.dart';
 import 'app/theme.dart';
+import 'core/backup/backup_service.dart';
 import 'data/db.dart';
 import 'features/models/models_page.dart';
 import 'features/models/model_library.dart';
@@ -17,10 +18,15 @@ import 'l10n/app_localizations.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final directory = await getApplicationDocumentsDirectory();
+  final support = await getApplicationSupportDirectory();
+  await BackupService.applyPendingRestore(
+    documentsDirectory: directory.path,
+    supportDirectory: support.path,
+  );
   runApp(
     PocketAsrApp(
       database: AppDatabase.open(
-        path: '${directory.path}${Platform.pathSeparator}pocket_asr.sqlite',
+        path: '${directory.path}${Platform.pathSeparator}$databaseFileName',
       ),
     ),
   );

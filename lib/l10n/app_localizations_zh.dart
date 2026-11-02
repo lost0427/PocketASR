@@ -579,6 +579,82 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPersistenceHint => '设置已保存在本机，重启后会恢复。';
 
   @override
+  String get settingsData => '数据';
+
+  @override
+  String get settingsExportBackup => '导出数据与模型';
+
+  @override
+  String get settingsExportBackupHint => '将转录、设置和已下载模型写入一个 zip。';
+
+  @override
+  String get settingsImportBackup => '导入备份';
+
+  @override
+  String get settingsImportBackupHint => '用 zip 替换本机的数据和模型。';
+
+  @override
+  String get settingsBackupConfirmTitle => '导出备份？';
+
+  @override
+  String settingsBackupConfirmBody(String size) {
+    return '将包含全部转录、设置以及 $size 的已下载模型。';
+  }
+
+  @override
+  String get settingsBackupOverwriteTitle => '导入备份？';
+
+  @override
+  String get settingsBackupOverwriteBody => '这会替换本机全部转录、设置和已下载模型。';
+
+  @override
+  String get settingsBackupExported => '备份已保存';
+
+  @override
+  String get settingsBackupRestartTitle => '需要重启';
+
+  @override
+  String get settingsBackupRestartBody => '备份已就绪。关闭应用后完成恢复。';
+
+  @override
+  String get settingsBackupRestartLater => '稍后';
+
+  @override
+  String get settingsBackupRestartNow => '关闭应用';
+
+  @override
+  String get settingsBackupFailed => '备份失败';
+
+  @override
+  String get settingsUpdates => '更新';
+
+  @override
+  String get settingsCheckUpdates => '检查更新';
+
+  @override
+  String get settingsCheckUpdatesHint => '查找更新的 GitHub Release。';
+
+  @override
+  String get settingsUpToDate => '已是最新版本';
+
+  @override
+  String get settingsUpdateAvailableTitle => '有新版本';
+
+  @override
+  String settingsUpdateAvailableBody(String version) {
+    return '新版本 $version 可用。';
+  }
+
+  @override
+  String get settingsUpdateNotes => '更新说明';
+
+  @override
+  String get settingsUpdateDownload => '下载 APK';
+
+  @override
+  String get settingsUpdateFailed => '检查更新失败';
+
+  @override
   String get benchTitle => '性能基准';
 
   @override

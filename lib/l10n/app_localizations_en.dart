@@ -623,6 +623,86 @@ class AppLocalizationsEn extends AppLocalizations {
       'Settings are saved on this device and restored on restart.';
 
   @override
+  String get settingsData => 'Data';
+
+  @override
+  String get settingsExportBackup => 'Export data and models';
+
+  @override
+  String get settingsExportBackupHint =>
+      'Write transcripts, settings and downloaded models to a zip.';
+
+  @override
+  String get settingsImportBackup => 'Import backup';
+
+  @override
+  String get settingsImportBackupHint =>
+      'Replace this device\'s data and models from a zip.';
+
+  @override
+  String get settingsBackupConfirmTitle => 'Export backup?';
+
+  @override
+  String settingsBackupConfirmBody(String size) {
+    return 'Includes all transcripts, settings and $size of downloaded models.';
+  }
+
+  @override
+  String get settingsBackupOverwriteTitle => 'Import backup?';
+
+  @override
+  String get settingsBackupOverwriteBody =>
+      'This replaces all transcripts, settings and downloaded models on this device.';
+
+  @override
+  String get settingsBackupExported => 'Backup saved';
+
+  @override
+  String get settingsBackupRestartTitle => 'Restart required';
+
+  @override
+  String get settingsBackupRestartBody =>
+      'The backup is ready. Close the app to finish restoring.';
+
+  @override
+  String get settingsBackupRestartLater => 'Later';
+
+  @override
+  String get settingsBackupRestartNow => 'Close app';
+
+  @override
+  String get settingsBackupFailed => 'Backup failed';
+
+  @override
+  String get settingsUpdates => 'Updates';
+
+  @override
+  String get settingsCheckUpdates => 'Check for updates';
+
+  @override
+  String get settingsCheckUpdatesHint => 'Look for a newer GitHub release.';
+
+  @override
+  String get settingsUpToDate => 'You are up to date';
+
+  @override
+  String get settingsUpdateAvailableTitle => 'Update available';
+
+  @override
+  String settingsUpdateAvailableBody(String version) {
+    return 'Version $version is available.';
+  }
+
+  @override
+  String get settingsUpdateNotes => 'Release notes';
+
+  @override
+  String get settingsUpdateDownload => 'Download APK';
+
+  @override
+  String get settingsUpdateFailed => 'Update check failed';
+
+  @override
   String get benchTitle => 'Benchmark';
 
   @override

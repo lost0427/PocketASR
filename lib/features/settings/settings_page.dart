@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
 import '../../core/audio/audio_source.dart';
+import '../../core/backup/backup_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
@@ -28,6 +32,7 @@ class SettingsPage extends StatelessWidget {
     this.modelLibrary,
     this.onManageModels,
     this.showDecoderPreference,
+    this.showAndroidTools,
   });
 
   final ModelLibrary? modelLibrary;
@@ -36,12 +41,16 @@ class SettingsPage extends StatelessWidget {
   /// Overrides the Android-only decoder preference visibility (test seam).
   final bool? showDecoderPreference;
 
+  /// Overrides the Android-only backup tools visibility (test seam).
+  final bool? showAndroidTools;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final state = AppStateScope.of(context);
     final showDecoder = showDecoderPreference ?? Platform.isAndroid;
+    final showDataTools = showAndroidTools ?? Platform.isAndroid;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -140,6 +149,10 @@ class SettingsPage extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
+        if (showDataTools) ...[
+          const SizedBox(height: 20),
+          _DataSection(modelLibrary: modelLibrary),
+        ],
         const SizedBox(height: 20),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -642,6 +655,250 @@ class _ChunkControl extends StatelessWidget {
 }
 
 /// Rounded card matching the transcribe/models surfaces.
+class _DataSection extends StatefulWidget {
+  const _DataSection({required this.modelLibrary});
+
+  final ModelLibrary? modelLibrary;
+
+  @override
+  State<_DataSection> createState() => _DataSectionState();
+}
+
+class _DataSectionState extends State<_DataSection> {
+  bool _busy = false;
+  BackupProgress? _progress;
+  StreamSubscription<BackupProgress>? _progressSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (!mounted) return;
+        final documents = await getApplicationDocumentsDirectory();
+        final error = BackupService.takeRestoreError(documents.path);
+        if (error == null || !mounted) return;
+        final l10n = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${l10n.settingsBackupFailed}: $error')),
+        );
+      } catch (_) {
+        // path_provider is unavailable in widget tests; nothing to surface.
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _progressSub?.cancel();
+    super.dispose();
+  }
+
+  Future<BackupService?> _create() async {
+    final library = widget.modelLibrary;
+    if (library == null) return null;
+    final state = AppStateScope.of(context);
+    return BackupService.create(
+      database: state.database,
+      library: library,
+      appVersion: settingsAppVersion,
+    );
+  }
+
+  void _listen(BackupService service) {
+    _progressSub?.cancel();
+    _progress = null;
+    _progressSub = service.progress.listen((value) {
+      if (mounted) setState(() => _progress = value);
+    });
+  }
+
+  Future<void> _export() async {
+    if (_busy) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final service = await _create();
+      if (service == null) return;
+      final plan = await service.plan();
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.settingsBackupConfirmTitle),
+          content: Text(
+            l10n.settingsBackupConfirmBody(_formatBytes(plan.totalBytes)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.modelsCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.settingsExportBackup),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      _listen(service);
+      final saved = await service.export(plan);
+      if (!mounted) return;
+      if (saved) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(l10n.settingsBackupExported)));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${l10n.settingsBackupFailed}: $error')),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = null;
+        });
+      }
+      await _progressSub?.cancel();
+      _progressSub = null;
+    }
+  }
+
+  Future<void> _import() async {
+    if (_busy) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsBackupOverwriteTitle),
+        content: Text(l10n.settingsBackupOverwriteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.modelsCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.settingsImportBackup),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final service = await _create();
+      if (service == null) return;
+      _listen(service);
+      final staged = await service.pickAndStage();
+      if (!mounted || staged == null) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.settingsBackupRestartTitle),
+          content: Text(l10n.settingsBackupRestartBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.settingsBackupRestartLater),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                SystemNavigator.pop();
+              },
+              child: Text(l10n.settingsBackupRestartNow),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${l10n.settingsBackupFailed}: $error')),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = null;
+        });
+      }
+      await _progressSub?.cancel();
+      _progressSub = null;
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes >= 1 << 30) {
+      return '${(bytes / (1 << 30)).toStringAsFixed(1)} GB';
+    }
+    if (bytes >= 1 << 20) {
+      return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1 << 10) {
+      return '${(bytes / (1 << 10)).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final enabled = !_busy && widget.modelLibrary != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel(l10n.settingsData),
+        const SizedBox(height: 12),
+        _Card(
+          child: Column(
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.archive_outlined),
+                  title: Text(l10n.settingsExportBackup),
+                  subtitle: Text(l10n.settingsExportBackupHint),
+                  enabled: enabled,
+                  onTap: _export,
+                ),
+              ),
+              const Divider(height: 1),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.unarchive_outlined),
+                  title: Text(l10n.settingsImportBackup),
+                  subtitle: Text(l10n.settingsImportBackupHint),
+                  enabled: enabled,
+                  onTap: _import,
+                ),
+              ),
+              if (_busy)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(value: _progress?.fraction),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Card extends StatelessWidget {
   const _Card({required this.child});
 
