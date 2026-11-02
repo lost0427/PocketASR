@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_state.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/backup/backup_service.dart';
+import '../../core/update/release_check.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
@@ -152,6 +154,8 @@ class SettingsPage extends StatelessWidget {
         if (showDataTools) ...[
           const SizedBox(height: 20),
           _DataSection(modelLibrary: modelLibrary),
+          const SizedBox(height: 28),
+          const _UpdatesSection(),
         ],
         const SizedBox(height: 20),
         Row(
@@ -655,6 +659,127 @@ class _ChunkControl extends StatelessWidget {
 }
 
 /// Rounded card matching the transcribe/models surfaces.
+class _UpdatesSection extends StatefulWidget {
+  const _UpdatesSection();
+
+  @override
+  State<_UpdatesSection> createState() => _UpdatesSectionState();
+}
+
+class _UpdatesSectionState extends State<_UpdatesSection> {
+  bool _checking = false;
+
+  Future<void> _check() async {
+    if (_checking) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _checking = true);
+    try {
+      final info = await ReleaseChecker(currentVersion: settingsAppVersion)
+          .check();
+      if (!mounted) return;
+      if (info == null) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(l10n.settingsUpToDate)));
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.settingsUpdateAvailableTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(l10n.settingsUpdateAvailableBody(info.version)),
+                if (info.notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.settingsUpdateNotes,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(info.notes),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.modelsCancel),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                try {
+                  final opened = await launchUrl(
+                    Uri.parse(info.downloadUrl),
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (!opened) throw StateError('No browser available');
+                } catch (error) {
+                  messenger
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text('${l10n.settingsUpdateFailed}: $error'),
+                      ),
+                    );
+                }
+              },
+              child: Text(l10n.settingsUpdateDownload),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${l10n.settingsUpdateFailed}: $error')),
+        );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel(l10n.settingsUpdates),
+        const SizedBox(height: 12),
+        _Card(
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.system_update_alt_outlined),
+              title: Text(l10n.settingsCheckUpdates),
+              subtitle: Text(l10n.settingsCheckUpdatesHint),
+              trailing: _checking
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+              enabled: !_checking,
+              onTap: _check,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DataSection extends StatefulWidget {
   const _DataSection({required this.modelLibrary});
 

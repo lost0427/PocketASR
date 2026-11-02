@@ -23,6 +23,7 @@ dependencies:
   sqlite3: ^3.6.0
   path_provider: ^2.1.6
   record: ^7.1.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   ffigen: 22.0.0

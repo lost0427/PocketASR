@@ -212,7 +212,7 @@ void main() {
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
   });
 
-  testWidgets('Android backup tools show export and import under About', (
+  testWidgets('Android tools show backup and update actions under About', (
     tester,
   ) async {
     final state = AppState();
@@ -221,5 +221,6 @@ void main() {
 
     expect(find.text('Export data and models'), findsOneWidget);
     expect(find.text('Import backup'), findsOneWidget);
+    expect(find.text('Check for updates'), findsOneWidget);
   });
 }

@@ -166,7 +166,7 @@ jobs:
         run: |
           bash scripts/ci/build_native_android.sh
           bash scripts/ci/build_native_sherpa_mnn.sh
-      - run: flutter build apk --release --target-platform android-arm64
+      - run: flutter build apk --release --target-platform android-arm64 --dart-define=POCKETASR_VARIANT=${{ matrix.variant }}
         if: env.BUILD_APK == 'true'
       - name: Verify APK native payload
         if: env.BUILD_APK == 'true'
