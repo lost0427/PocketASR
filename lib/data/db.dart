@@ -3,6 +3,9 @@ import 'package:sqlite3/sqlite3.dart';
 /// On-disk schema version, tracked with `PRAGMA user_version`.
 const int schemaVersion = 2;
 
+/// File name of the app database inside its documents directory.
+const String databaseFileName = 'pocket_asr.sqlite';
+
 /// Opens the app's SQLite database and brings it up to [schemaVersion].
 ///
 /// Omit [path] for an in-memory database (tests); the app passes a file under
