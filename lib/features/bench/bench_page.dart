@@ -235,6 +235,7 @@ class _BenchPageState extends State<BenchPage> {
                   decoderPreference:
                       state?.audioDecoderPreference ??
                       AudioDecoderPreference.automatic,
+                  autoCorrectPeriods: state?.autoCorrectPeriods ?? false,
                 ),
             chunkSettings: state?.chunkSettings,
             neuralVad: state?.neuralVadSettings,
@@ -303,6 +304,7 @@ class _BenchPageState extends State<BenchPage> {
                     decoderPreference:
                         state?.audioDecoderPreference ??
                         AudioDecoderPreference.automatic,
+                    autoCorrectPeriods: state?.autoCorrectPeriods ?? false,
                   );
               ownedRunner = BenchmarkRunner(
                 engine,

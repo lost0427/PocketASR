@@ -1148,6 +1148,24 @@ abstract class AppLocalizations {
   /// **'Reset chunking'**
   String get settingsChunkReset;
 
+  /// No description provided for @settingsTextCorrection.
+  ///
+  /// In en, this message translates to:
+  /// **'Text correction'**
+  String get settingsTextCorrection;
+
+  /// No description provided for @settingsMergePeriods.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge consecutive periods'**
+  String get settingsMergePeriods;
+
+  /// No description provided for @settingsMergePeriodsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse runs of Chinese and English periods into one Chinese full stop (。). Single periods are left alone.'**
+  String get settingsMergePeriodsHint;
+
   /// No description provided for @settingsAbout.
   ///
   /// In en, this message translates to:

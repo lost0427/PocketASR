@@ -122,6 +122,25 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 12),
         _Card(child: _ChunkControl(state: state)),
         const SizedBox(height: 28),
+        _SectionLabel(l10n.settingsTextCorrection),
+        const SizedBox(height: 12),
+        _Card(
+          child: Material(
+            color: Colors.transparent,
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(
+                Icons.auto_fix_high_outlined,
+                color: scheme.onSurfaceVariant,
+              ),
+              title: Text(l10n.settingsMergePeriods),
+              subtitle: Text(l10n.settingsMergePeriodsHint),
+              value: state.autoCorrectPeriods,
+              onChanged: (value) => state.autoCorrectPeriods = value,
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
         _SectionLabel(l10n.settingsAbout),
         const SizedBox(height: 12),
         _Card(

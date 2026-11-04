@@ -121,6 +121,7 @@ class _QueuePageState extends State<QueuePage> {
             decoderPreference:
                 state?.audioDecoderPreference ??
                 AudioDecoderPreference.automatic,
+            autoCorrectPeriods: state?.autoCorrectPeriods ?? false,
           ),
       model,
       transcriptRepo: widget.transcriptRepo,

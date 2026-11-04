@@ -234,6 +234,26 @@ void main() {
     expect(result.audioDuration, const Duration(seconds: 1));
   });
 
+  test('period correction follows the service flag', () async {
+    Future<String> run({required bool autoCorrectPeriods}) async {
+      final engine = _FakeEngine(const [
+        TranscribeProgress(elapsed: Duration(milliseconds: 1), ratio: 1, partialText: '你好。。。'),
+      ]);
+      final result = await TranscriptionService(
+        engine: engine,
+        source: const _FakeSource(),
+        autoCorrectPeriods: autoCorrectPeriods,
+      ).transcribe(
+        audioPath: 'ignored.wav',
+        model: const EngineModelSpec(path: 'model.gguf'),
+      );
+      return result.text;
+    }
+
+    expect(await run(autoCorrectPeriods: true), '你好。');
+    expect(await run(autoCorrectPeriods: false), '你好。。。');
+  });
+
   test('reports each processing stage in execution order', () async {
     final engine = _FakeEngine(const [
       TranscribeProgress(

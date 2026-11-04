@@ -242,6 +242,9 @@
   },
   "settingsChunkHint": "Energy detection is a loudness gate over the audio, not a neural VAD. Overlap stays off: this build does not merge repeated text at chunk seams.",
   "settingsChunkReset": "Reset chunking",
+  "settingsTextCorrection": "Text correction",
+  "settingsMergePeriods": "Merge consecutive periods",
+  "settingsMergePeriodsHint": "Collapse runs of Chinese and English periods into one Chinese full stop (。). Single periods are left alone.",
   "settingsAbout": "About",
   "settingsVersion": "Version {version}",
   "@settingsVersion": {

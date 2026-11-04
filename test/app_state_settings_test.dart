@@ -64,6 +64,16 @@ void main() {
     );
   });
 
+  test('period correction defaults off and persists', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    final state = AppState(database: db);
+    expect(state.autoCorrectPeriods, isFalse);
+
+    state.autoCorrectPeriods = true;
+    expect(AppState(database: db).autoCorrectPeriods, isTrue);
+  });
+
   test('invalid stored values fall back to the defaults', () {
     final db = AppDatabase.open();
     addTearDown(db.close);

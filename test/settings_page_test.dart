@@ -212,6 +212,20 @@ void main() {
     expect(state.speechPadMs, AppState.defaultChunkSettings.speechPadMs);
   });
 
+  testWidgets('period correction switch writes to AppState', (tester) async {
+    final state = AppState();
+    addTearDown(state.dispose);
+    await pumpSettings(tester, state);
+
+    expect(state.autoCorrectPeriods, isFalse);
+    final toggle = find.byType(Switch);
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.autoCorrectPeriods, isTrue);
+  });
+
   testWidgets('Android tools show backup and update actions under About', (
     tester,
   ) async {

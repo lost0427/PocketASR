@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../../core/audio/audio_source.dart';
 import '../../core/audio/chunk_planner.dart';
 import '../../core/audio/pcm_file.dart';
+import '../../core/text/period_merger.dart';
 import '../../engine/asr_engine.dart';
 import 'transcription_stage.dart';
 
@@ -61,6 +62,7 @@ class TranscriptionService {
     required this.engine,
     this.vadEngine,
     this.decoderPreference = AudioDecoderPreference.automatic,
+    this.autoCorrectPeriods = false,
     this._source = const FileAudioSource(),
   });
 
@@ -72,6 +74,9 @@ class TranscriptionService {
   /// VAD is not bound to one ASR engine. The caller owns its disposal.
   final AsrEngine? vadEngine;
   final AudioDecoderPreference decoderPreference;
+
+  /// Whether the final text has consecutive periods merged into one `。`.
+  final bool autoCorrectPeriods;
   final AudioSource _source;
   AudioDecoderInfo? _lastDecoderInfo;
 
@@ -308,8 +313,9 @@ class TranscriptionService {
         );
       }
       onStage?.call(TranscriptionStage.finalizing);
+      final text = parts.join(' ').trim();
       return TranscriptionJobResult(
-        text: parts.join(' ').trim(),
+        text: autoCorrectPeriods ? mergeConsecutivePeriods(text) : text,
         elapsed: elapsed,
         audioDuration: audio.duration,
         engine: engine.id,

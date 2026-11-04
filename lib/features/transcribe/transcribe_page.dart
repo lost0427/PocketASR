@@ -198,6 +198,7 @@ class _TranscribePageState extends State<TranscribePage> {
         vadEngine: state?.activeVadEngine,
         decoderPreference:
             state?.audioDecoderPreference ?? AudioDecoderPreference.automatic,
+        autoCorrectPeriods: state?.autoCorrectPeriods ?? false,
       );
 
   Future<void> _start() async {

@@ -607,6 +607,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsChunkReset => 'Reset chunking';
 
   @override
+  String get settingsTextCorrection => 'Text correction';
+
+  @override
+  String get settingsMergePeriods => 'Merge consecutive periods';
+
+  @override
+  String get settingsMergePeriodsHint =>
+      'Collapse runs of Chinese and English periods into one Chinese full stop (。). Single periods are left alone.';
+
+  @override
   String get settingsAbout => 'About';
 
   @override

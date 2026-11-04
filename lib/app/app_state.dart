@@ -114,6 +114,7 @@ class AppState extends ChangeNotifier {
       (value) => value.name == database.getSetting('audio_decoder_preference'),
       orElse: () => AudioDecoderPreference.automatic,
     );
+    _autoCorrectPeriods = database.getSetting('auto_correct_periods') == 'true';
     _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
@@ -302,6 +303,17 @@ class AppState extends ChangeNotifier {
     if (value == _audioDecoderPreference) return;
     _audioDecoderPreference = value;
     _save('audio_decoder_preference', value.name);
+    notifyListeners();
+  }
+
+  /// Whether new transcripts collapse consecutive Chinese/English periods into
+  /// one Chinese full stop. Off by default.
+  bool _autoCorrectPeriods = false;
+  bool get autoCorrectPeriods => _autoCorrectPeriods;
+  set autoCorrectPeriods(bool value) {
+    if (value == _autoCorrectPeriods) return;
+    _autoCorrectPeriods = value;
+    _save('auto_correct_periods', '$value');
     notifyListeners();
   }
 

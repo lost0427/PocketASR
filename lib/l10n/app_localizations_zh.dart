@@ -565,6 +565,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsChunkReset => '恢复默认切割';
 
   @override
+  String get settingsTextCorrection => '文本修正';
+
+  @override
+  String get settingsMergePeriods => '合并连续句号';
+
+  @override
+  String get settingsMergePeriodsHint => '把连续的中文和英文句号合并成一个中文句号（。）；单个句号保持不变。';
+
+  @override
   String get settingsAbout => '关于';
 
   @override
