@@ -7,6 +7,23 @@ import '../../engine/model_catalog.dart';
 typedef ModelEntriesLoader = Future<List<ModelEntry>> Function();
 typedef ModelStoreLoader = Future<ModelStore> Function();
 
+/// Deletes bundles whose engine no longer exists in this build.
+///
+/// Runs before any engine can load a model, so the directory is not in use.
+/// On Windows a locked file must not fail startup: it is left for the next run.
+Future<void> retireRemovedModelBundles(String supportPath) async {
+  const removed = ['crispasr-sensevoice-q8', 'crispasr-qwen3-asr-0.6b-q8'];
+  final models = '$supportPath${Platform.pathSeparator}models';
+  for (final id in removed) {
+    final dir = Directory('$models${Platform.pathSeparator}$id');
+    try {
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    } catch (_) {
+      // Retried on the next launch.
+    }
+  }
+}
+
 /// The catalog and local store shared by every model-selection surface.
 class ModelLibrary {
   ModelLibrary(this._loadEntries, this._loadStore);

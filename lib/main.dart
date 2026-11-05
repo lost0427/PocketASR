@@ -23,6 +23,8 @@ Future<void> main() async {
     documentsDirectory: directory.path,
     supportDirectory: support.path,
   );
+  // After restore, so an old backup cannot resurrect retired bundles.
+  await retireRemovedModelBundles(support.path);
   runApp(
     PocketAsrApp(
       database: AppDatabase.open(
