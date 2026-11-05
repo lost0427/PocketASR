@@ -47,7 +47,7 @@ android {
         }
     }
 
-    // Keep the CI-built libcrispasr.so / libcrispembed.so loadable by
+    // Keep the CI-built libcrispembed.so loadable by
     // DynamicLibrary.open at runtime; app jniLibs are `src/main/jniLibs/<abi>/`
     // by default, where scripts/ci/build_native_android.sh stages them.
     // useLegacyPackaging=false keeps them STORED so zipalign/16KB checks pass.

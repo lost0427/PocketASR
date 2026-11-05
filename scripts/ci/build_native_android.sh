@@ -4,8 +4,8 @@
 # pinned upstream sources, and stage them into the Flutter app's jniLibs.
 #
 # This REPLACES the retired fetch of upstream prebuilt tarballs
-# (scripts/ci/fetch_native_android.sh, deleted): the pinned v0.8.32 /
-# v0.16.1 prebuilt assets were SHA-256-genuine but only 4KB LOAD-aligned
+# (scripts/ci/fetch_native_android.sh, deleted): the pinned v0.16.1
+# prebuilt assets were SHA-256-genuine but only 4KB LOAD-aligned
 # (measured: p_align=0x1000), which is not safe to ship for Android 16's
 # 16KB-page devices. Some Android 16 devices run a 4KB compat mode, so we
 # never claimed "cannot install" — we simply refuse to rely on it.
@@ -13,41 +13,15 @@
 # is no supported post-hoc fix, so the libraries must be rebuilt. No
 # patchelf, no packaging tricks.
 #
-# Sources are pinned by full commit SHA (tags dereferenced, recorded 2026-09):
-#   CrispASR   v0.8.32  -> e2a356146e36bc1cc0410edefb01990448766979
-#   CrispEmbed v0.16.1  -> e6411e48bfd2572cc29a7c04eccee8a8153bef2e
-# Each repo pins its OWN ggml fork commit (5049ebb… vs 0714117…), i.e. two
-# different ggml trees. A matching exported-symbol set does NOT prove ABI
-# compatibility between ggml builds, so the two ggml versions must never be
-# shared between the libraries: each engine embeds its own pinned ggml
-# statically and no libggml*.so sibling is ever shipped. Mechanisms,
-# verified against the CMakeLists.txt of the pinned tags:
-#   CrispEmbed: -DBUILD_SHARED_LIBS=OFF leaves its ggml targets static while
-#     `crispembed-shared` is declared with an explicit SHARED keyword ->
-#     libcrispembed.so bakes its ggml in. -fvisibility=hidden is safe because
-#     crispembed.h marks the whole C API with CRISPEMBED_API
-#     __attribute__((visibility("default"))) under CRISPEMBED_BUILD.
-#   CrispASR: `crispasr-lib` is a keywordless target (follows
-#     BUILD_SHARED_LIBS), so a single knob cannot give shared-crispasr +
-#     static-ggml. Its root CMake supports find_package(ggml) via
-#     -DCRISPASR_USE_SYSTEM_GGML=ON, so we build the repo's OWN pinned ggml
-#     submodule statically first and feed it back: libcrispasr.so links the
-#     static ggml archives and gains no ggml DT_NEEDED. Package location must
-#     be passed as -Dggml_DIR, NOT -DCMAKE_PREFIX_PATH: the NDK toolchain sets
-#     CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY (CMake's Android-Initialize.cmake
-#     does too), which re-roots every config-mode search path — including
-#     CMAKE_PREFIX_PATH — under the NDK sysroot, so the freshly installed
-#     prefix is never searched and find_package(ggml REQUIRED) fails with
-#     "Could not find a package configuration file provided by ggml" even
-#     though ggml-config.cmake was installed (android/ndk#2048). <pkg>_DIR is
-#     used as-is and is the targeted workaround (the other one, because it
-#     loosens host searching for every package, is
-#     -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH). The tree is not
-#     visibility-hidden (crispasr.h's CRISPASR_API path exists, but the C
-#     API's annotation coverage was not verified; exporting more than needed
-#     is the status quo of the old bundle and safe under RTLD_LOCAL since
-#     libcrispembed.so is the only other ggml holder and its copies are
-#     hidden).
+# CrispEmbed is pinned by full commit SHA (tag dereferenced, recorded 2026-09):
+#   CrispEmbed v0.16.1 -> e6411e48bfd2572cc29a7c04eccee8a8153bef2e
+# Its repo pins its own ggml fork commit (0714117…); the library embeds that
+# ggml statically and no libggml*.so sibling is ever shipped. Mechanism,
+# verified against the CMakeLists.txt of the pinned tag: -DBUILD_SHARED_LIBS=OFF
+# leaves the ggml targets static while `crispembed-shared` is declared with an
+# explicit SHARED keyword -> libcrispembed.so bakes its ggml in.
+# -fvisibility=hidden is safe because crispembed.h marks the whole C API with
+# CRISPEMBED_API __attribute__((visibility("default"))) under CRISPEMBED_BUILD.
 #
 # Models are NEVER downloaded or bundled here (or anywhere in CI): users
 # supply model files at runtime (assets/model_allowlist.json).
@@ -56,10 +30,6 @@
 #   bash scripts/ci/build_native_android.sh [output-dir]
 # Env overrides: NDK_VERSION, ANDROID_HOME.
 set -euo pipefail
-
-CRISPASR_URL="https://github.com/CrispStrobe/CrispASR"
-CRISPASR_COMMIT="e2a356146e36bc1cc0410edefb01990448766979" # v0.8.32
-CRISPASR_GGML="5049ebb8472fdc965eb3fb72c1cb111260726186"   # pinned gitlink (CrispStrobe/ggml)
 
 CRISPEMBED_URL="https://github.com/CrispStrobe/CrispEmbed"
 CRISPEMBED_COMMIT="e6411e48bfd2572cc29a7c04eccee8a8153bef2e" # v0.16.1
@@ -87,10 +57,7 @@ PAGE_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 # used: the vdotq_s32/vmmlaq_s32 intrinsics do not even *compile* there, and the
 # arm64 libraries shipped so far were verified with llvm-objdump to contain ZERO
 # sdot / smmla instructions, i.e. every Q8_0 matmul ran the slow NEON path.
-# CrispASR's pinned ggml (5049ebb…) is a different commit and is not verified to
-# know this option; cmake ignores an unknown cache var, so it silently stays at
-# the baseline there rather than failing. Targets that consume no ggml at all
-# (native/decode) ignore it too.
+# Targets that consume no ggml at all (native/decode) ignore it.
 # Cost of the choice: the APK's arm64 floor rises to armv8.6-a (i8mm, ~2021+
 # SoCs). Devices without it would fault on these kernels, so the release also
 # ships a second, -legacy APK built from the plain armv8-a baseline: set this
@@ -184,32 +151,6 @@ clone_at() { # url commit dest
   git -C "$3" submodule update --init --recursive
 }
 
-# --- CrispASR: pinned ggml (static) -> libcrispasr.so with ggml baked in ---
-clone_at "$CRISPASR_URL" "$CRISPASR_COMMIT" "$WORK/crispasr"
-[ "$(git -C "$WORK/crispasr" rev-parse :ggml)" = "$CRISPASR_GGML" ] || {
-  log "FATAL: CrispASR ggml gitlink != $CRISPASR_GGML"; exit 1; }
-
-cmake -S "$WORK/crispasr/ggml" -B "$WORK/ggml-static" "${common_cmake[@]}" \
-  -DBUILD_SHARED_LIBS=OFF \
-  -DGGML_OPENMP=OFF \
-  -DGGML_BUILD_TESTS=OFF \
-  -DGGML_BUILD_EXAMPLES=OFF \
-  -DCMAKE_INSTALL_PREFIX="$WORK/ggml-static-prefix"
-cmake --build "$WORK/ggml-static"
-cmake --install "$WORK/ggml-static"
-
-cmake -S "$WORK/crispasr" -B "$WORK/crispasr-build" "${common_cmake[@]}" \
-  -DBUILD_SHARED_LIBS=ON \
-  -DCRISPASR_USE_SYSTEM_GGML=ON \
-  -Dggml_DIR="$WORK/ggml-static-prefix/lib/cmake/ggml" \
-  -DCRISPASR_BUILD_TESTS=OFF \
-  -DCRISPASR_BUILD_EXAMPLES=OFF \
-  -DCRISPASR_BUILD_SERVER=OFF \
-  -DCRISPASR_OPUS=OFF \
-  -DCRISPASR_AMR=OFF \
-  -DCMAKE_SHARED_LINKER_FLAGS="$PAGE_LDFLAGS -L$WORK/ggml-static-prefix/lib"
-cmake --build "$WORK/crispasr-build" --target crispasr-lib
-
 # --- CrispEmbed: one shared lib, its own ggml static + internals hidden ---
 clone_at "$CRISPEMBED_URL" "$CRISPEMBED_COMMIT" "$WORK/crispembed"
 [ "$(git -C "$WORK/crispembed" rev-parse :ggml)" = "$CRISPEMBED_GGML" ] || {
@@ -235,7 +176,6 @@ cmake --build "$WORK/decode-build" --target pocketasr_decode
 
 # --- stage (cp -L resolves CMake's unversioned .so symlinks to real files) ---
 mkdir -p "$OUT"
-cp -Lf "$(find "$WORK/crispasr-build/src" -maxdepth 1 -name 'libcrispasr.so*' -type f | sort | tail -1)" "$OUT/libcrispasr.so"
 cp -Lf "$(find "$WORK/crispembed-build" -maxdepth 1 -name 'libcrispembed.so*' -type f | sort | tail -1)" "$OUT/libcrispembed.so"
 cp -Lf "$WORK/decode-build/libpocketasr_decode.so" "$OUT/libpocketasr_decode.so"
 
@@ -290,8 +230,6 @@ if [ -n "$GGML_CPU_ARM_ARCH_ANDROID" ]; then
 else
   arm_isa_report "$OUT/libcrispembed.so" forbidden
 fi
-arm_isa_report "$OUT/libcrispasr.so" optional
-
 log "staged:"
 ls -l "$OUT"
 if [ "$USE_CCACHE" = "1" ]; then
@@ -301,7 +239,6 @@ fi
 
 log "pre-check (the authoritative run happens against the built APK):"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \
-  --require libcrispasr.so --require libcrispembed.so --require libpocketasr_decode.so \
-  --require-symbol libcrispasr.so:whisper_full \
+  --require libcrispembed.so --require libpocketasr_decode.so \
   --require-symbol libcrispembed.so:crispembed_init \
   --require-symbol libpocketasr_decode.so:pocketasr_chain_begin

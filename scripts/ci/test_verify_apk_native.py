@@ -136,7 +136,7 @@ def run():
         os.makedirs(d2)
         with open(os.path.join(d2, "libggml.so"), "wb") as fh:
             fh.write(good)
-        assert verify([d2, "--require", "libcrispasr.so"]) == 1, \
+        assert verify([d2, "--require", "libmissing.so"]) == 1, \
             "missing required lib must FAIL"
 
     print("test_verify_apk_native: all assertions passed")

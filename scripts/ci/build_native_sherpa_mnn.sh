@@ -207,10 +207,9 @@ ls -l "$OUT"
 
 log "fail-closed native payload pre-check:"
 python3 "$ROOT/scripts/ci/verify_apk_native.py" "$OUT" \
-  --require libcrispasr.so --require libcrispembed.so \
+  --require libcrispembed.so \
   --require libpocketasr_decode.so \
   --require libsherpa-mnn-c-api.so \
-  --require-symbol libcrispasr.so:whisper_full \
   --require-symbol libcrispembed.so:crispembed_init \
   --require-symbol libpocketasr_decode.so:pocketasr_chain_begin \
   --require-symbol libsherpa-mnn-c-api.so:SherpaMnnCreateOfflineRecognizer \
