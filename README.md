@@ -28,8 +28,8 @@ Tap the version seven times in Settings to open benchmarks using your own audio.
 - Cancellation is cooperative during Android decoding and an active native VAD
   or ASR call; the result is discarded and files cleaned after the call returns.
   Windows FFmpeg is terminated on cancellation.
-- Windows bundles Sherpa's native runtime; CrispASR/CrispEmbed DLLs are not
-  bundled by the release workflow. Their features require those native libraries.
+- Windows bundles Sherpa's native runtime and the CrispEmbed DLL. Speech
+  recognition there runs through sherpa-onnx; there is no GGUF ASR engine.
 - CPU is the supported inference backend. Vulkan and NPU are not implemented.
 - Local automated tests and builds do not establish microphone/device behavior
   or real-model recognition quality. Android native source builds and 16 KB APK
@@ -72,8 +72,8 @@ complete archive contents. See `native/FFMPEG-NOTICE.txt` for version and source
 
 ## Native libraries
 
-The CrispASR/CrispEmbed engine libraries are **not committed**. CI builds them
-from pinned upstream commits with NDK r28+ so every shipped `.so` is
+The CrispEmbed engine library is **not committed**. CI builds it from a pinned
+upstream commit with NDK r28+ so every shipped `.so` is
 16KB-page-aligned, and gates the APK on ELF alignment, `DT_NEEDED` closure and
 zipalign before any release is published:
 

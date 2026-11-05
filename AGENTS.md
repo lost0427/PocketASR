@@ -2,9 +2,9 @@
 
 ## Build & release honesty
 
-- Native CrispASR/CrispEmbed libraries are **not committed** to this repo.
-  `.so` files stay gitignored. The Android release **builds them from pinned
-  source** (commit SHAs, submodule pins asserted) — the old prebuilt-tarball
+- The native CrispEmbed library is **not committed** to this repo.
+  `.so` files stay gitignored. The Android release **builds it from pinned
+  source** (commit SHA, submodule pin asserted) — the old prebuilt-tarball
   fetch (`fetch_native_android.sh`) is deleted: its SHA-256s were genuine but
   the binaries were only 4KB LOAD-aligned, and 16KB alignment is a link-time
   property that cannot be fixed post-hoc (no patchelf, no pickFirst).
@@ -12,19 +12,17 @@
 - **Windows** release builds CrispEmbed v0.16.1 from its pinned source commit
   and asserted ggml gitlink, then bundles the CPU-only x64 `crispembed.dll`;
   host-native/AVX512 compilation is disabled in favor of an AVX2 baseline, and
-  models are still user-supplied at runtime. CrispASR remains unavailable
-  because there is no Windows CrispASR native build step. That is not "no ASR
-  on Windows": **SherpaEngine works there** — its DLLs are bundled by the
-  `sherpa_onnx` plugin (`sherpa_onnx_windows`).
+  models are still user-supplied at runtime. ASR on Windows runs through
+  **SherpaEngine** — its DLLs are bundled by the `sherpa_onnx` plugin
+  (`sherpa_onnx_windows`).
 - **Android** release ships **two** arm64-v8a APKs built in parallel from the
   same source, because ggml selects its ARM int8 kernels at *compile* time:
   `pocket-asr-android-<tag>.apk` (i8mm) and `...-<tag>-legacy.apk` (baseline).
   Each job restores a native cache or runs
   `scripts/ci/build_native_android.sh` before `flutter build apk`: NDK r28+
   (r30 LTS pinned), arm64-v8a / android-24,
-  16KB `max-page-size` link flags; each engine statically embeds its own
-  pinned ggml (the two repos pin **different** ggml commits and the versions
-  are never shared), and needed NDK runtimes (`libc++_shared.so` /
+  16KB `max-page-size` link flags; CrispEmbed statically embeds its own pinned
+  ggml, and needed NDK runtimes (`libc++_shared.so` /
   `libomp.so`) are staged explicitly — AGP does not add them for jniLibs.
   `GGML_CPU_ARM_ARCH_ANDROID` selects the target: unset/`armv8.6-a+dotprod+
   fp16+i8mm` for the i8mm APK, an explicitly **empty** value for the legacy

@@ -49,7 +49,7 @@ app.*.map.json
 /plan
 .slim/deepwork/
 
-# Native CrispASR/CrispEmbed binaries are fetched by scripts/ci, never committed.
+# Native CrispEmbed binaries are built by scripts/ci, never committed.
 # native/ is ignored except its README, which documents versions/licenses, and
 # the first-party decode source tree (third_party/ is cloned by scripts/ci).
 native/*
