@@ -1,7 +1,7 @@
 /// Native sherpa-onnx [AsrEngine] adapter (plan §2 / §10).
 ///
-/// Wraps `package:sherpa_onnx`'s offline recognizer. Unlike CrispASR, the
-/// sherpa-onnx Flutter plugin bundles its own native libraries (Windows `.dll`s
+/// Wraps `package:sherpa_onnx`'s offline recognizer. The sherpa-onnx Flutter
+/// plugin bundles its own native libraries (Windows `.dll`s
 /// and per-ABI Android packages), so this adapter can be genuinely available
 /// once the plugin builds. It runs CPU-only here; native init/load/transcribe
 /// failures always surface as [EngineUnavailableException].

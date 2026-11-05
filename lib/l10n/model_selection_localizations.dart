@@ -9,5 +9,7 @@ extension ModelSelectionLocalizations on AppLocalizations {
         ModelSelectionProblem.sherpaMnnCatalogBundleRequired =>
           modelNeedsVerifiedMnnBundle,
         ModelSelectionProblem.sherpaMnnTokensRequired => modelNeedsMnnTokens,
+        ModelSelectionProblem.unsupportedModelFormat =>
+          modelUnsupportedFormat,
       };
 }

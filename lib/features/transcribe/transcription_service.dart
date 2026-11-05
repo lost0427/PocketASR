@@ -70,7 +70,7 @@ class TranscriptionService {
 
   /// Engine that runs [AsrEngine.planVad] for `neuralVad` jobs and
   /// [previewVad]; defaults to [engine]. Pass a separate sherpa-onnx worker
-  /// (e.g. `WorkerAsrEngine.sherpa()`) when [engine] is CrispASR, so neural
+  /// (e.g. `WorkerAsrEngine.sherpa()`) when [engine] cannot detect VAD, so neural
   /// VAD is not bound to one ASR engine. The caller owns its disposal.
   final AsrEngine? vadEngine;
   final AudioDecoderPreference decoderPreference;

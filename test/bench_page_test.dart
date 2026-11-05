@@ -315,22 +315,22 @@ void main() {
         ModelFile(fileName: 'tokens.txt', role: 'tokens'),
       ],
     );
-    const crisp = ModelEntry(
-      id: 'crisp',
-      displayName: 'Crisp',
-      fileName: 'model.gguf',
+    const second = ModelEntry(
+      id: 'second',
+      displayName: 'Second',
+      fileName: 'model.bin',
       family: 'sensevoice',
       quant: 'q8_0',
-      engine: 'crispasr',
+      engine: 'unavailable',
     );
     download(whisper);
-    download(crisp);
+    download(second);
 
     final engines = <_NamedEngine>[];
     final calls = <(String, EngineModelSpec)>[];
     await pumpBench(
       tester,
-      entries: const [whisper, crisp],
+      entries: const [whisper, second],
       audio: 'picked.wav',
       engineFactory: (id) {
         final engine = _NamedEngine(id);
@@ -345,10 +345,10 @@ void main() {
     await tester.tap(find.text('Run benchmark'));
     await tester.pumpAndSettle();
 
-    expect(engines.map((engine) => engine.id), ['sherpa', 'crispasr']);
+    expect(engines.map((engine) => engine.id), ['sherpa', 'unavailable']);
     expect(calls, hasLength(6));
     expect(calls.take(3).every((call) => call.$1 == 'sherpa'), isTrue);
-    expect(calls.skip(3).every((call) => call.$1 == 'crispasr'), isTrue);
+    expect(calls.skip(3).every((call) => call.$1 == 'unavailable'), isTrue);
     final whisperSpec = calls.first.$2;
     expect(whisperSpec.encoderPath, endsWith('encoder.onnx'));
     expect(whisperSpec.decoderPath, endsWith('decoder.onnx'));

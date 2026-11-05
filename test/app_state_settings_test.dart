@@ -205,28 +205,36 @@ void main() {
     expect(restored.modelSelectionMissing, isTrue);
   });
 
-  test('a hand-picked file maps to its format engine and restores', () {
+  test('a hand-picked GGUF is rejected, not routed to an engine', () {
     final db = AppDatabase.open();
     addTearDown(db.close);
 
     final path = write('voice.gguf', [1, 2, 3]);
-    final state = AppState(database: db)
-      ..modelFamily = 'sensevoice'
-      ..modelPath = path;
+    final state = AppState(database: db)..modelPath = path;
 
-    // A GGUF goes to CrispASR, not silently to the sherpa adapter.
-    expect(state.engineId, 'crispasr');
-    expect(state.modelPath, path);
-    expect(state.modelSelectionIsManual, isTrue);
-    // Family/quant come from the Settings controls, not a bundle.
-    expect(state.modelSpec!.family, 'sensevoice');
-    expect(state.modelSpec!.quant, 'q8_0');
+    // CrispASR is gone: the format must not reach any native loader.
+    expect(state.engineId, 'sherpa');
+    expect(
+      state.modelSelectionProblem,
+      ModelSelectionProblem.unsupportedModelFormat,
+    );
 
     final restored = AppState(database: db);
-    expect(restored.engineId, 'crispasr');
-    expect(restored.modelPath, path);
-    expect(restored.modelSelectionIsManual, isTrue);
-    expect(restored.modelSpec!.quant, 'q8_0');
+    expect(restored.engineId, 'sherpa');
+    expect(
+      restored.modelSelectionProblem,
+      ModelSelectionProblem.unsupportedModelFormat,
+    );
+  });
+
+  test('a retired engine id falls back to the default', () {
+    final db = AppDatabase.open();
+    addTearDown(db.close);
+    db.setSetting('engine_id', 'crispasr');
+
+    final state = AppState(database: db);
+    expect(state.engineId, 'sherpa');
+    expect(state.engine, isNotNull);
   });
 
   test('a hand-picked MNN file routes correctly but cannot start', () {

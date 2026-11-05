@@ -187,7 +187,7 @@ void main() {
     test('the shipped asset lists only verified bundles with real facts', () {
       final source = File(modelAllowlistAsset).readAsStringSync();
       final entries = parseModelAllowlist(source);
-      expect(entries, hasLength(11));
+      expect(entries, hasLength(9));
       final nano = entries.singleWhere(
         (entry) => entry.id == 'sherpa-funasr-nano-int8',
       );
@@ -235,12 +235,8 @@ void main() {
         'license',
       ]);
       expect(mnn.licenseFile?.fileName, 'FunASR-MODEL-LICENSE.txt');
-      final qwenAsr = entries.singleWhere(
-        (entry) => entry.id == 'crispasr-qwen3-asr-0.6b-q8',
-      );
-      expect(qwenAsr.engine, 'crispasr');
-      expect(qwenAsr.parameters, 938034704);
-      expect(qwenAsr.primaryFile.sha256, hasLength(64));
+      // The retired CrispASR adapter must not come back through the catalog.
+      expect(entries.where((entry) => entry.engine == 'crispasr'), isEmpty);
       final qwenEmbedding = entries.singleWhere(
         (entry) => entry.id == 'crispembed-qwen3-0.6b-q8',
       );
@@ -255,18 +251,6 @@ void main() {
         qwenEmbedding.primaryFile.sha256,
         '072c5ca5019996cd0464e028801039055b38e78e038f7846010c70ddbe20e670',
       );
-      final crispAsr = entries
-          .where((entry) => entry.engine == 'crispasr')
-          .toList();
-      expect(crispAsr.map((entry) => entry.id), [
-        'crispasr-sensevoice-q8',
-        'crispasr-qwen3-asr-0.6b-q8',
-      ]);
-      expect(crispAsr.map((entry) => entry.quant), everyElement('q8_0'));
-      expect(crispAsr.map((entry) => entry.primaryFile.fileName), [
-        'sensevoice-small-q8_0.gguf',
-        'qwen3-asr-0.6b-q8_0.gguf',
-      ]);
       for (final entry in entries) {
         // Every allowlist file must carry a verified size and checksum —
         // the store and downloader gate on both.

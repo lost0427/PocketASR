@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/crisp_embedder.dart';
-import 'package:pocket_asr/engine/crispasr_engine.dart';
 import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/engine/engine_registry.dart';
 import 'package:pocket_asr/engine/native_worker.dart';
@@ -19,15 +18,11 @@ void main() {
 
       expect(
         registry.asrEngineIds,
-        containsAll(['unavailable', 'crispasr', 'sherpa', 'sherpa-mnn']),
+        containsAll(['unavailable', 'sherpa', 'sherpa-mnn']),
       );
       expect(registry.createAsr('unavailable'), isA<UnavailableAsrEngine>());
       // Native engines are worker facades: the real adapter (and its native
       // session) is built inside a private isolate, never in the root one.
-      expect(
-        registry.createAsr('crispasr'),
-        isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'crispasr'),
-      );
       expect(
         registry.createAsr('sherpa'),
         isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa'),
@@ -68,10 +63,6 @@ void main() {
       // is still a WorkerAsrEngine and a caller override is not bypassed.
       final registry = EngineRegistry();
       expect(registry.createAsr('sherpa', threads: 2), isA<WorkerAsrEngine>());
-      expect(
-        registry.createAsr('crispasr', threads: 1),
-        isA<WorkerAsrEngine>(),
-      );
       expect(
         registry.createAsr('sherpa-mnn', threads: 3),
         isA<WorkerAsrEngine>().having((e) => e.id, 'id', 'sherpa-mnn'),
@@ -140,40 +131,6 @@ void main() {
 
       state.engineBusy = false;
       expect(identical(state.engine, first), isFalse); // rebuilt after the run
-    });
-  });
-
-  group('CrispAsrEngine without the native library', () {
-    test('reports unavailable with a reason and no backends', () async {
-      final engine = CrispAsrEngine();
-
-      final caps = await engine.capabilities();
-      expect(caps.available, isFalse);
-      expect(caps.backends, isEmpty);
-      expect(caps.supportsVad, isFalse);
-      expect(caps.unavailableReason, isNotEmpty);
-      expect(await engine.availableBackends(), isEmpty);
-    });
-
-    test('errors instead of fabricating text', () async {
-      final engine = CrispAsrEngine();
-      const request = TranscribeRequest(audioPath: 'sample.wav');
-
-      await expectLater(
-        engine.load(const EngineModelSpec(path: 'missing.gguf'), Backend.cpu),
-        throwsA(isA<EngineUnavailableException>()),
-      );
-      await expectLater(
-        engine.transcribe(request),
-        emitsError(isA<EngineUnavailableException>()),
-      );
-      await expectLater(
-        engine.planVad(
-          request,
-          const NeuralVadSettings(modelPath: 'missing-vad.onnx'),
-        ),
-        throwsA(isA<EngineUnavailableException>()),
-      );
     });
   });
 

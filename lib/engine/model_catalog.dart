@@ -182,7 +182,7 @@ class ModelEntry {
   /// Quantization tag (`q8_0`, `q4_k`, ...), for labels/logs.
   final String? quant;
 
-  /// Engine that runs this bundle (`sherpa`, `crispasr`, `crispembed`).
+  /// Engine that runs this bundle (`sherpa`, `sherpa-mnn`, `crispembed`).
   final String? engine;
 
   /// What the model produces: `asr`, `embedding`, or `vad`.

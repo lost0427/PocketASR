@@ -172,6 +172,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelNeedsMnnTokens => '已校验的 MNN 模型包缺少词表文件，请前往“模型”页重新下载。';
 
   @override
+  String get modelUnsupportedFormat =>
+      '本版本不再支持该模型格式的语音识别，请前往“模型”页选择 sherpa-onnx 或 MNN 模型。';
+
+  @override
   String get modelSelectionMissing => '上次选择的已下载模型已不在本机，请选择其他模型。';
 
   @override

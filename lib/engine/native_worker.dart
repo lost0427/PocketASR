@@ -1,7 +1,7 @@
 /// Dedicated worker isolate for one native [AsrEngine] (plan §2 execution).
 ///
 /// [WorkerAsrEngine] is the production adapter the registry hands out for
-/// `crispasr`/`sherpa`/`sherpa-mnn`: the real engine — and every native handle
+/// `sherpa`/`sherpa-mnn`: the real engine — and every native handle
 /// it opens — is constructed *inside* a private isolate and never in the root
 /// isolate.
 /// Commands are processed strictly one at a time by the worker's own event
@@ -23,7 +23,6 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'asr_engine.dart';
-import 'crispasr_engine.dart';
 import 'sherpa_engine.dart';
 import 'sherpa_mnn_engine.dart';
 
@@ -39,19 +38,6 @@ typedef WorkerEngineBuilder = AsrEngine Function(Object? config);
 /// Lifecycle: constructed cheaply, the isolate spawns lazily on the first
 /// command, serializes all commands, and [dispose] shuts the worker down.
 class WorkerAsrEngine implements CancellableAsrEngine {
-  /// CrispASR on a private worker isolate. [threads]/[libPath] configure the
-  /// native session built inside the worker.
-  factory WorkerAsrEngine.crispAsr({int threads = 4, String? libPath}) =>
-      WorkerAsrEngine._(
-        'crispasr',
-        _buildNative,
-        _NativeSetup(
-          engineKind: 'crispasr',
-          threads: threads,
-          libPath: libPath,
-        ),
-      );
-
   /// sherpa-onnx on a private worker isolate.
   factory WorkerAsrEngine.sherpa({int threads = 4, String? libraryPath}) =>
       WorkerAsrEngine._(
@@ -382,10 +368,6 @@ const _eventFatal = 'fatal';
 AsrEngine _buildNative(Object? config) {
   final setup = config as _NativeSetup;
   return switch (setup.engineKind) {
-    'crispasr' => CrispAsrEngine(
-      libPath: setup.libPath,
-      threads: setup.threads,
-    ),
     'sherpa' => SherpaEngine(
       threads: setup.threads,
       libraryPath: setup.libPath,

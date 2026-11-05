@@ -1,9 +1,9 @@
 /// ASR engine domain layer — engine- and backend-agnostic (plan §2).
 ///
-/// Only [UnavailableAsrEngine] ships today: the native CrispASR library is not
-/// in the repo, so the app must surface "unavailable" rather than fake text.
-/// A real `CrispAsrEngine` implements [AsrEngine] later without touching the UI
-/// or the data layer — the interface is the single swap point (plan §2 / §10).
+/// [UnavailableAsrEngine] is the stand-in when no real adapter can run on this
+/// platform, so the app surfaces "unavailable" rather than fake text.
+/// Real adapters implement [AsrEngine] without touching the UI or the data
+/// layer — the interface is the single swap point (plan §2 / §10).
 library;
 
 /// Compute backend a model runs on.
@@ -18,7 +18,7 @@ enum Backend { cpu, vulkan, npu }
 /// The Phase 7 catalog produces these from `assets/model_allowlist.json` via
 /// `LocalModelStore.specFor`; the engine layer only needs on-disk paths plus
 /// labels for display. Multi-file engines (sherpa-onnx) read the companion
-/// paths; single-file engines (CrispASR GGUF) use [path] alone.
+/// paths; single-file engines use [path] alone.
 class EngineModelSpec {
   const EngineModelSpec({
     required this.path,
@@ -373,10 +373,10 @@ class TranscribeProgress {
 
 /// The single swap point for ASR engines (plan §2).
 ///
-/// One implementation (`CrispAsrEngine`) is planned; keeping the interface
-/// lets §10 add sherpa-onnx as a new implementation rather than a rewrite.
+/// Concrete implementations (`sherpa`, `sherpa-mnn`) live in their own
+/// adapters; the interface is what keeps the UI and data layer out of them.
 abstract class AsrEngine {
-  /// Stable engine id, e.g. `crispasr`.
+  /// Stable engine id, e.g. `sherpa`.
   String get id;
 
   /// Backends usable on this device. Empty when the engine cannot run.
@@ -438,15 +438,14 @@ class EngineUnavailableException implements Exception {
   String toString() => 'EngineUnavailableException: $message';
 }
 
-/// Stand-in [AsrEngine] for builds without the native CrispASR library.
+/// Stand-in [AsrEngine] for builds without a usable native library.
 ///
 /// Reports [EngineCapabilities.unavailable] and fails every operation with a
 /// clear [EngineUnavailableException]. It never emits partial text or a fake
-/// result. Replace with `CrispAsrEngine` once the `.so` is bundled.
+/// result.
 class UnavailableAsrEngine implements AsrEngine {
   const UnavailableAsrEngine({
-    this.reason =
-        'Native CrispASR library is not bundled; transcription is unavailable.',
+    this.reason = 'No native ASR library is available on this build.',
   });
 
   final String reason;

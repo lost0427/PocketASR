@@ -43,6 +43,7 @@ enum ModelSelectionProblem {
   missingWhisperDecoder,
   sherpaMnnCatalogBundleRequired,
   sherpaMnnTokensRequired,
+  unsupportedModelFormat,
 }
 
 /// App-wide settings.
@@ -102,7 +103,18 @@ class AppState extends ChangeNotifier {
     _locale = language == null || language.isEmpty ? null : Locale(language);
     _modelFamily = database.getSetting('model_family') ?? _modelFamily;
     _modelQuant = database.getSetting('model_quant') ?? _modelQuant;
-    _engineId = database.getSetting('engine_id') ?? _engineId;
+    // A persisted id may name an engine this build no longer registers (e.g.
+    // the retired CrispASR adapter). Falling back keeps `state.engine` from
+    // throwing on an id nobody can build.
+    final storedEngineId = database.getSetting('engine_id');
+    _engineId =
+        storedEngineId != null &&
+            engineRegistry.asrEngineIds.contains(storedEngineId)
+        ? storedEngineId
+        : defaultEngineId;
+    if (storedEngineId != null && storedEngineId != _engineId) {
+      _save('engine_id', _engineId);
+    }
     _threads = _boundedInt(
       database.getSetting('threads'),
       1,
@@ -214,8 +226,8 @@ class AppState extends ChangeNotifier {
   final EngineRegistry engineRegistry;
 
   /// Real engine preferred by default: sherpa-onnx's Flutter plugin bundles its
-  /// own natives, so it is the one adapter that can be genuinely available on a
-  /// stock build. CrispASR stays selectable via [engineId] once staged.
+  /// own natives, so it is the adapter that can be genuinely available on a
+  /// stock build.
   static const String defaultEngineId = 'sherpa';
 
   String _engineId = defaultEngineId;
@@ -328,8 +340,9 @@ class AppState extends ChangeNotifier {
   String? get modelPath => _selectedSpec?.path;
 
   /// Sets a hand-picked model file. Replaces any bundle selection with a
-  /// path-only spec and points the engine at the format's adapter, so a GGUF is
-  /// never silently fed to a sherpa adapter (or vice versa).
+  /// path-only spec and points the engine at the format's adapter, so an MNN
+  /// file is never silently fed to the sherpa adapter (or vice versa). A GGUF
+  /// no longer has an ASR adapter here; [selectionProblemFor] rejects it.
   ///
   /// ponytail: retained for persisted-data and test compatibility; production
   /// UI selects complete catalog bundles through [selectModel].
@@ -570,9 +583,11 @@ class AppState extends ChangeNotifier {
   /// Best-effort engine for a hand-picked file. The mapping does not make the
   /// file trusted: in particular, a `.mnn` selection is blocked until it came
   /// from a verified catalog bundle with its exact tokens companion.
+  ///
+  /// `.gguf` has no ASR adapter in this build; it falls through to `sherpa`
+  /// here and is rejected by [selectionProblemFor] before any native load.
   static String engineIdForModelFile(String path) {
     final lower = path.toLowerCase();
-    if (lower.endsWith('.gguf')) return 'crispasr';
     if (lower.endsWith('.mnn')) return 'sherpa-mnn';
     return 'sherpa';
   }
@@ -819,9 +834,8 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   /// sherpa-onnx is the adapter that runs the supported neural VAD models, so
-  /// worker is always a sherpa worker even when CrispASR (or anything else)
-  /// transcribes. That separation is the point: neural VAD is not bound to one
-  /// ASR engine.
+  /// the worker is always a sherpa worker even when another engine transcribes.
+  /// That separation is the point: neural VAD is not bound to one ASR engine.
   static const String vadEngineId = 'sherpa';
 
   AsrEngine? _vadEngine;
@@ -829,7 +843,7 @@ class AppState extends ChangeNotifier {
 
   /// The worker that runs [AsrEngine.planVad]/[TranscriptionService.previewVad].
   /// Built lazily and owned by this [AppState]; [dispose] releases it. Kept
-  /// distinct from [engine] so a CrispASR ASR never has to carry a VAD.
+  /// distinct from [engine] so an ASR engine never has to carry a VAD.
   AsrEngine get vadEngine =>
       _vadEngine ??= engineRegistry.createAsr(vadEngineId, threads: _threads);
 
@@ -905,6 +919,9 @@ class AppState extends ChangeNotifier {
     required String engineId,
     required EngineModelSpec spec,
   }) {
+    if (spec.path.toLowerCase().endsWith('.gguf')) {
+      return ModelSelectionProblem.unsupportedModelFormat;
+    }
     if (engineId == 'sherpa-mnn') {
       if (spec.trustedBundleId == null ||
           spec.modelSizeBytes == null ||

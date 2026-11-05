@@ -178,6 +178,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The verified MNN model bundle is missing its tokens file. Download it again from Models.';
 
   @override
+  String get modelUnsupportedFormat =>
+      'This model format is no longer supported for speech recognition. Choose a sherpa-onnx or MNN model from Models.';
+
+  @override
   String get modelSelectionMissing =>
       'The downloaded model selected last time is no longer on this device. Choose another one.';
 

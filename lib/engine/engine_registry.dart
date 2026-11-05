@@ -31,10 +31,9 @@ class EngineRegistry {
   static final Map<String, AsrEngineBuilder> _builtinAsr = {
     'unavailable': () => const UnavailableAsrEngine(),
     // The native adapters run on a dedicated worker isolate: the real
-    // CrispAsrEngine/SherpaEngine/SherpaMnnEngine and their native sessions are
-    // constructed inside the worker, never here. Custom thread counts use
-    // an `asrBuilders` override with `WorkerAsrEngine.sherpa(threads: n)`.
-    'crispasr': () => WorkerAsrEngine.crispAsr(),
+    // SherpaEngine/SherpaMnnEngine and their native sessions are constructed
+    // inside the worker, never here. Custom thread counts use an
+    // `asrBuilders` override with `WorkerAsrEngine.sherpa(threads: n)`.
     'sherpa': () => WorkerAsrEngine.sherpa(),
     'sherpa-mnn': () => WorkerAsrEngine.sherpaMnn(),
   };
@@ -42,7 +41,6 @@ class EngineRegistry {
   /// Worker-backed native engines, rebuilt with a caller's thread count through
   /// their existing [WorkerAsrEngine] factories.
   static final Map<String, AsrEngine Function(int threads)> _threadedAsr = {
-    'crispasr': (threads) => WorkerAsrEngine.crispAsr(threads: threads),
     'sherpa': (threads) => WorkerAsrEngine.sherpa(threads: threads),
     'sherpa-mnn': (threads) => WorkerAsrEngine.sherpaMnn(threads: threads),
   };
@@ -70,7 +68,7 @@ class EngineRegistry {
   /// Builds the ASR engine registered as [id]; throws [ArgumentError] on a miss.
   ///
   /// [threads] configures the built-in worker-backed native engines
-  /// (`crispasr`/`sherpa`/`sherpa-mnn`) through their [WorkerAsrEngine]
+  /// (`sherpa`/`sherpa-mnn`) through their [WorkerAsrEngine]
   /// factories. A caller-supplied override for the same id still wins, so tests can keep
   /// injecting their own engine.
   AsrEngine createAsr(String id, {int? threads}) {

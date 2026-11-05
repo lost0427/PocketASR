@@ -410,6 +410,12 @@ abstract class AppLocalizations {
   /// **'The verified MNN model bundle is missing its tokens file. Download it again from Models.'**
   String get modelNeedsMnnTokens;
 
+  /// No description provided for @modelUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'This model format is no longer supported for speech recognition. Choose a sherpa-onnx or MNN model from Models.'**
+  String get modelUnsupportedFormat;
+
   /// No description provided for @modelSelectionMissing.
   ///
   /// In en, this message translates to:

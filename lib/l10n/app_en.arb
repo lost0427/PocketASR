@@ -54,6 +54,7 @@
   "modelNeedsDecoder": "The selected model bundle is incomplete. Download it again from Models.",
   "modelNeedsVerifiedMnnBundle": "MNN models can only run from a verified download in Models. Select or download the complete MNN bundle there.",
   "modelNeedsMnnTokens": "The verified MNN model bundle is missing its tokens file. Download it again from Models.",
+  "modelUnsupportedFormat": "This model format is no longer supported for speech recognition. Choose a sherpa-onnx or MNN model from Models.",
   "modelSelectionMissing": "The downloaded model selected last time is no longer on this device. Choose another one.",
   "modelPickerTitle": "Choose speech model",
   "modelPickerEmpty": "No downloaded speech models. Download one from Models first.",
