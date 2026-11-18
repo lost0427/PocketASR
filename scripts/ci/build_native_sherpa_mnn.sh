@@ -159,8 +159,13 @@ find "$WORK/mnn-install" -maxdepth 3 -type f | sort
 
 # --- stage 2: sherpa-mnn C API ---
 log "configuring sherpa-mnn C API"
+# CMake 4 removed compatibility with projects that declare
+# cmake_minimum_required(<3.5). The pinned sherpa-mnn fetches
+# kaldi-native-fbank v1.21.1, which still does; that pin is upstream's, not
+# ours, so raise the policy floor here instead of pinning an old CMake.
 cmake -S "$WORK/mnn/apps/frameworks/sherpa-mnn" -B "$WORK/sherpa-mnn-build" \
   "${common_cmake[@]}" \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DBUILD_SHARED_LIBS=ON \
   -DMNN_LIB_DIR="$WORK/mnn-install" \
   -DSHERPA_MNN_ENABLE_C_API=ON \

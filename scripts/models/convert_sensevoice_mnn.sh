@@ -137,9 +137,13 @@ log "converting FP32 ONNX to weight-quantized MNN"
 mv -f "$MODEL_TEMP" "$MODEL_OUTPUT"
 
 log "building the pinned host sherpa-mnn SenseVoice smoke test"
+# Same CMake 4 policy floor as scripts/ci/build_native_sherpa_mnn.sh: the pinned
+# sherpa-mnn pulls kaldi-native-fbank v1.21.1, which declares
+# cmake_minimum_required(<3.5) and no longer configures on CMake >= 4.
 cmake -S "$WORK/mnn/apps/frameworks/sherpa-mnn" \
   -B "$WORK/sherpa-mnn-build" \
   -G Ninja \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
   -DMNN_LIB_DIR="$WORK/mnn-install" \
