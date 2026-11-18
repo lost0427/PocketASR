@@ -3,3 +3,8 @@ template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 output-class: AppLocalizations
 nullable-getter: false
+# The generator still emits the `flutter_localizations` GlobalMaterial/Cupertino
+# delegates, which Flutter 3.50 deprecates in favour of material_ui/cupertino_ui.
+# The app uses the material_ui delegates through app_delegates.dart, so silencing
+# the deprecation here keeps regeneration from failing `flutter analyze`.
+header: "// ignore_for_file: deprecated_member_use\n"

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/data/db.dart';
@@ -11,6 +11,7 @@ import 'package:pocket_asr/data/transcript_repo.dart';
 import 'package:pocket_asr/core/text/transcript_export.dart';
 import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/features/history/history_page.dart';
+import 'package:pocket_asr/l10n/app_delegates.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
 /// Records the query texts it is asked to embed; no native library needed.
@@ -156,7 +157,7 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: HistoryPage(

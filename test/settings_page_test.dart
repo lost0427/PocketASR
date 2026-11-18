@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
@@ -10,6 +10,7 @@ import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
 import 'package:pocket_asr/features/models/model_library.dart';
 import 'package:pocket_asr/features/settings/settings_page.dart';
+import 'package:pocket_asr/l10n/app_delegates.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
 Widget host(
@@ -45,7 +46,7 @@ class _Host extends StatelessWidget {
     return MaterialApp(
       locale: state.locale,
       themeMode: state.themeMode,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: SettingsPage(

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One seed keeps the light and dark schemes in step.
 const Color seedColor = Color(0xFF4F46E5);

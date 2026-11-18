@@ -1,12 +1,13 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
 import 'package:pocket_asr/engine/embedder.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/engine/model_downloader.dart';
 import 'package:pocket_asr/features/models/models_page.dart';
+import 'package:pocket_asr/l10n/app_delegates.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
 import 'support/pump_until.dart';
@@ -27,7 +28,7 @@ void main() {
     ModelDownloadRunner? download,
     AppState? state,
   }) => MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: ModelsPage(

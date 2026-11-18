@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/core/audio/audio_source.dart';
 import 'package:pocket_asr/core/audio/chunk_planner.dart';
@@ -9,6 +9,7 @@ import 'package:pocket_asr/engine/asr_engine.dart';
 import 'package:pocket_asr/engine/model_catalog.dart';
 import 'package:pocket_asr/features/bench/bench_page.dart';
 import 'package:pocket_asr/features/transcribe/transcription_service.dart';
+import 'package:pocket_asr/l10n/app_delegates.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
 /// Engine whose capabilities the test fixes; extends the unavailable stand-in
@@ -201,7 +202,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: BenchPage(
           engine: engine,

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pocket_asr/app/app_state.dart';
@@ -17,6 +17,7 @@ import 'package:pocket_asr/features/queue/queue_page.dart';
 import 'package:pocket_asr/features/settings/settings_page.dart';
 import 'package:pocket_asr/features/transcribe/transcribe_page.dart';
 import 'package:pocket_asr/features/transcribe/transcription_service.dart';
+import 'package:pocket_asr/l10n/app_delegates.dart';
 import 'package:pocket_asr/l10n/app_localizations.dart';
 
 import 'support/pump_until.dart';
@@ -177,7 +178,7 @@ Widget _transcribeApp({
   required AsrEngine engine,
   required TranscriptionService service,
 }) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: TranscribePage(
@@ -194,7 +195,7 @@ Widget _queueApp({
   required TranscriptionService service,
   AsrEngine engine = const UnavailableAsrEngine(),
 }) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: QueuePage(
@@ -219,7 +220,7 @@ class _SettingsHost extends StatelessWidget {
     return MaterialApp(
       locale: state.locale,
       themeMode: state.themeMode,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const Scaffold(body: SettingsPage()),
     );
@@ -414,7 +415,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: ModelsPage(
@@ -671,7 +672,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: BenchPage(
             engine: _CountingEngine(),

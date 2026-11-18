@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app_state.dart';
@@ -13,6 +13,7 @@ import 'features/history/history_page.dart';
 import 'features/queue/queue_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
+import 'l10n/app_delegates.dart';
 import 'l10n/app_localizations.dart';
 
 Future<void> main() async {
@@ -83,7 +84,7 @@ class _LocalizedApp extends StatelessWidget {
       darkTheme: buildDarkTheme(),
       themeMode: state.themeMode,
       locale: state.locale, // null = follow the system language
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: HomeShell(modelLibrary: modelLibrary),
     );

@@ -5,6 +5,9 @@ version: 1.0.30+31
 
 environment:
   sdk: ^3.13.3
+  # material_ui (the Material library extracted out of package:flutter) requires
+  # this as its floor; the deprecation that forced the migration lands in 3.50.
+  flutter: ">=3.47.0"
 
 dependencies:
   characters: ^1.4.1
@@ -16,6 +19,9 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  # Material widgets moved out of package:flutter/material.dart; the old import
+  # is deprecated as of Flutter 3.50.
+  material_ui: ^1.11.1
   sherpa_onnx: 1.13.8
   # sqlite3 3.x provides native assets; the obsolete sqlite3_flutter_libs
   # plugin is intentionally not used because it is incompatible with AGP 9.
