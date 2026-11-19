@@ -17,7 +17,7 @@ import '../models/model_library.dart';
 import '../models/model_picker.dart';
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
-const String settingsAppVersion = '1.0.30';
+const String settingsAppVersion = '1.0.31';
 
 const String _systemLanguage = 'system';
 
