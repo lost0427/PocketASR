@@ -16,7 +16,7 @@ subprojects {
     buildscript.configurations.configureEach {
         resolutionStrategy.eachDependency {
             if (requested.group == "com.android.tools.build" && requested.name == "gradle") {
-                useVersion("9.1.0")
+                useVersion("9.1.1")
             }
             if (requested.group == "org.jetbrains.kotlin" && requested.name == "kotlin-gradle-plugin") {
                 useVersion("2.4.0")
