@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/app_state.dart';
@@ -9,6 +11,7 @@ import '../../l10n/app_localizations.dart';
 import '../../l10n/model_selection_localizations.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
+import '../remote/remote_widgets.dart';
 import '../transcribe/transcription_service.dart';
 import 'queue_worker.dart';
 import 'transcription_queue.dart';
@@ -158,6 +161,21 @@ class _QueuePageState extends State<QueuePage> {
     setState(() {});
   }
 
+  Future<void> _sendAll() async {
+    final state = widget.state;
+    final host = state?.remoteHost;
+    if (state == null || host == null) return;
+    final pending = [
+      for (final job in _queue.jobs)
+        if (job.status == TranscriptionJobStatus.pending) job,
+    ];
+    for (final job in pending) {
+      _queue.remove(job.id);
+      await state.remoteOutbox.submit(host, job.audioPath, job.displayName);
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _pickModel() async {
     if (_running) return; // a run owns the current model
     final state = widget.state;
@@ -213,15 +231,24 @@ class _QueuePageState extends State<QueuePage> {
   Widget _buildContent(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final state = widget.state;
     final jobs = _queue.jobs;
     final running = _running;
     final modelPath = _modelPath;
     final selectionProblem = _selectionProblem;
     final needsVad = _needsVadModel;
     final busyElsewhere = _engineBusyElsewhere;
+    final remote = state?.remoteHost;
 
     return Column(
       children: [
+        if (state != null && state.remoteHosts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: RemoteTargetBar(state: state),
+          ),
+        if (state != null && !Platform.isAndroid)
+          RemoteInboxSection(state: state),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -256,7 +283,7 @@ class _QueuePageState extends State<QueuePage> {
             ],
           ),
         ),
-        if (selectionProblem != null)
+        if (remote == null && selectionProblem != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
@@ -265,7 +292,7 @@ class _QueuePageState extends State<QueuePage> {
               color: scheme.error,
             ),
           )
-        else if (widget.state?.modelSelectionMissing ?? false)
+        else if (remote == null && (widget.state?.modelSelectionMissing ?? false))
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
@@ -274,7 +301,7 @@ class _QueuePageState extends State<QueuePage> {
               color: scheme.error,
             ),
           )
-        else if (modelPath == null)
+        else if (remote == null && modelPath == null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
@@ -283,7 +310,7 @@ class _QueuePageState extends State<QueuePage> {
               color: scheme.onSurfaceVariant,
             ),
           ),
-        if (busyElsewhere)
+        if (remote == null && busyElsewhere)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
@@ -292,7 +319,7 @@ class _QueuePageState extends State<QueuePage> {
               color: scheme.onSurfaceVariant,
             ),
           ),
-        if (needsVad)
+        if (remote == null && needsVad)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _Note(
@@ -304,22 +331,28 @@ class _QueuePageState extends State<QueuePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: FilledButton.icon(
-            onPressed:
-                modelPath != null &&
-                    selectionProblem == null &&
-                    !needsVad &&
-                    _queue.hasPending &&
-                    !running &&
-                    !busyElsewhere
+            onPressed: remote != null
+                ? (_queue.hasPending && !running ? _sendAll : null)
+                : modelPath != null &&
+                      selectionProblem == null &&
+                      !needsVad &&
+                      _queue.hasPending &&
+                      !running &&
+                      !busyElsewhere
                 ? _run
                 : null,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(l10n.queueRun),
+            icon: Icon(remote != null ? Icons.computer : Icons.play_arrow),
+            label: Text(remote != null ? l10n.remoteSendAll : l10n.queueRun),
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(48),
             ),
           ),
         ),
+        if (remote != null && state != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: RemoteOutboxCard(state: state, hostId: remote.id),
+          ),
         const SizedBox(height: 8),
         Expanded(
           child: jobs.isEmpty

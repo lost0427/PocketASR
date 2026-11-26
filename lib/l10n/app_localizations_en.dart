@@ -948,4 +948,155 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get comingSoon => 'Coming soon';
+
+  @override
+  String get remoteThisDevice => 'This phone';
+
+  @override
+  String get remoteSend => 'Send to computer';
+
+  @override
+  String get remoteSendAll => 'Send all to computer';
+
+  @override
+  String get remoteComputerHint =>
+      'The computer transcribes this file with the model you pick there. The text comes back to this phone.';
+
+  @override
+  String get remoteLink => 'Computer link';
+
+  @override
+  String get remoteLinkHint =>
+      'Pair with the desktop app over the local network or Tailscale.';
+
+  @override
+  String get remoteAddComputer => 'Add computer';
+
+  @override
+  String get remoteScanHint =>
+      'Scan the QR code on the computer with the system camera, or type the address and pairing code.';
+
+  @override
+  String get remoteAddress => 'Address';
+
+  @override
+  String get remotePort => 'Port';
+
+  @override
+  String get remotePairCode => 'Pairing code';
+
+  @override
+  String get remotePair => 'Pair';
+
+  @override
+  String get remotePairing => 'Pairing…';
+
+  @override
+  String remotePaired(String name) {
+    return 'Paired with $name';
+  }
+
+  @override
+  String remotePairFailed(String error) {
+    return 'Pairing failed: $error';
+  }
+
+  @override
+  String get remoteOnline => 'Online';
+
+  @override
+  String get remoteOffline => 'Offline';
+
+  @override
+  String get remoteUnpair => 'Unpair';
+
+  @override
+  String get remoteNoComputer => 'No computer paired.';
+
+  @override
+  String get remoteServer => 'Phone connection';
+
+  @override
+  String get remoteServerEnable => 'Accept files from phones';
+
+  @override
+  String get remoteServerEnableHint =>
+      'Off by default. Only the local network and Tailscale are accepted.';
+
+  @override
+  String get remoteServerAddresses => 'Addresses';
+
+  @override
+  String remoteServerPort(String port) {
+    return 'Port $port';
+  }
+
+  @override
+  String get remoteShowCode => 'Show pairing code';
+
+  @override
+  String get remoteCodeHint => 'Valid for 2 minutes and one phone.';
+
+  @override
+  String get remoteDevices => 'Paired phones';
+
+  @override
+  String get remoteNoDevices => 'No phones paired.';
+
+  @override
+  String get remoteFirewallHint =>
+      'If the phone cannot connect, allow PocketASR through the Windows firewall.';
+
+  @override
+  String get remoteInbox => 'From phone';
+
+  @override
+  String get remoteStatusPending => 'Waiting to run';
+
+  @override
+  String get remoteStatusRunning => 'Transcribing';
+
+  @override
+  String get remoteStatusDone => 'Done';
+
+  @override
+  String get remoteStatusFailed => 'Failed';
+
+  @override
+  String get remoteStatusCancelled => 'Cancelled';
+
+  @override
+  String get remoteRun => 'Run';
+
+  @override
+  String get remoteCancel => 'Cancel';
+
+  @override
+  String get remoteDelete => 'Delete';
+
+  @override
+  String get remoteViewText => 'Text';
+
+  @override
+  String get remoteModelRequired => 'Select a model';
+
+  @override
+  String remoteUploading(int percent) {
+    return 'Uploading $percent%';
+  }
+
+  @override
+  String get remoteWaiting => 'Sent, waiting for the computer';
+
+  @override
+  String get remoteSaved => 'Saved to this phone';
+
+  @override
+  String get remoteWithdraw => 'Withdraw';
+
+  @override
+  String get remoteRetry => 'Retry';
+
+  @override
+  String get remoteDismiss => 'Dismiss';
 }

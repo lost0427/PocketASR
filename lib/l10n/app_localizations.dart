@@ -1755,6 +1755,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Coming soon'**
   String get comingSoon;
+
+  /// No description provided for @remoteThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get remoteThisDevice;
+
+  /// No description provided for @remoteSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to computer'**
+  String get remoteSend;
+
+  /// No description provided for @remoteSendAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Send all to computer'**
+  String get remoteSendAll;
+
+  /// No description provided for @remoteComputerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The computer transcribes this file with the model you pick there. The text comes back to this phone.'**
+  String get remoteComputerHint;
+
+  /// No description provided for @remoteLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer link'**
+  String get remoteLink;
+
+  /// No description provided for @remoteLinkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with the desktop app over the local network or Tailscale.'**
+  String get remoteLinkHint;
+
+  /// No description provided for @remoteAddComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add computer'**
+  String get remoteAddComputer;
+
+  /// No description provided for @remoteScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the QR code on the computer with the system camera, or type the address and pairing code.'**
+  String get remoteScanHint;
+
+  /// No description provided for @remoteAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get remoteAddress;
+
+  /// No description provided for @remotePort.
+  ///
+  /// In en, this message translates to:
+  /// **'Port'**
+  String get remotePort;
+
+  /// No description provided for @remotePairCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing code'**
+  String get remotePairCode;
+
+  /// No description provided for @remotePair.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair'**
+  String get remotePair;
+
+  /// No description provided for @remotePairing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing…'**
+  String get remotePairing;
+
+  /// No description provided for @remotePaired.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired with {name}'**
+  String remotePaired(String name);
+
+  /// No description provided for @remotePairFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing failed: {error}'**
+  String remotePairFailed(String error);
+
+  /// No description provided for @remoteOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get remoteOnline;
+
+  /// No description provided for @remoteOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get remoteOffline;
+
+  /// No description provided for @remoteUnpair.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpair'**
+  String get remoteUnpair;
+
+  /// No description provided for @remoteNoComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'No computer paired.'**
+  String get remoteNoComputer;
+
+  /// No description provided for @remoteServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone connection'**
+  String get remoteServer;
+
+  /// No description provided for @remoteServerEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept files from phones'**
+  String get remoteServerEnable;
+
+  /// No description provided for @remoteServerEnableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. Only the local network and Tailscale are accepted.'**
+  String get remoteServerEnableHint;
+
+  /// No description provided for @remoteServerAddresses.
+  ///
+  /// In en, this message translates to:
+  /// **'Addresses'**
+  String get remoteServerAddresses;
+
+  /// No description provided for @remoteServerPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Port {port}'**
+  String remoteServerPort(String port);
+
+  /// No description provided for @remoteShowCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Show pairing code'**
+  String get remoteShowCode;
+
+  /// No description provided for @remoteCodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid for 2 minutes and one phone.'**
+  String get remoteCodeHint;
+
+  /// No description provided for @remoteDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired phones'**
+  String get remoteDevices;
+
+  /// No description provided for @remoteNoDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'No phones paired.'**
+  String get remoteNoDevices;
+
+  /// No description provided for @remoteFirewallHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If the phone cannot connect, allow PocketASR through the Windows firewall.'**
+  String get remoteFirewallHint;
+
+  /// No description provided for @remoteInbox.
+  ///
+  /// In en, this message translates to:
+  /// **'From phone'**
+  String get remoteInbox;
+
+  /// No description provided for @remoteStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to run'**
+  String get remoteStatusPending;
+
+  /// No description provided for @remoteStatusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing'**
+  String get remoteStatusRunning;
+
+  /// No description provided for @remoteStatusDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get remoteStatusDone;
+
+  /// No description provided for @remoteStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get remoteStatusFailed;
+
+  /// No description provided for @remoteStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get remoteStatusCancelled;
+
+  /// No description provided for @remoteRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run'**
+  String get remoteRun;
+
+  /// No description provided for @remoteCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get remoteCancel;
+
+  /// No description provided for @remoteDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get remoteDelete;
+
+  /// No description provided for @remoteViewText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get remoteViewText;
+
+  /// No description provided for @remoteModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a model'**
+  String get remoteModelRequired;
+
+  /// No description provided for @remoteUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {percent}%'**
+  String remoteUploading(int percent);
+
+  /// No description provided for @remoteWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent, waiting for the computer'**
+  String get remoteWaiting;
+
+  /// No description provided for @remoteSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to this phone'**
+  String get remoteSaved;
+
+  /// No description provided for @remoteWithdraw.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdraw'**
+  String get remoteWithdraw;
+
+  /// No description provided for @remoteRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get remoteRetry;
+
+  /// No description provided for @remoteDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get remoteDismiss;
 }
 
 class _AppLocalizationsDelegate

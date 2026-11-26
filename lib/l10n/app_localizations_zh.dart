@@ -888,4 +888,150 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get comingSoon => '即将推出';
+
+  @override
+  String get remoteThisDevice => '这台手机';
+
+  @override
+  String get remoteSend => '发送到电脑转录';
+
+  @override
+  String get remoteSendAll => '全部发送到电脑';
+
+  @override
+  String get remoteComputerHint => '电脑用它上面选好的模型转写这个文件，完成后文本自动回到手机。';
+
+  @override
+  String get remoteLink => '电脑协作';
+
+  @override
+  String get remoteLinkHint => '通过局域网或 Tailscale 与电脑版配对。';
+
+  @override
+  String get remoteAddComputer => '添加电脑';
+
+  @override
+  String get remoteScanHint => '用系统相机扫描电脑上的二维码，或手动填写地址和配对码。';
+
+  @override
+  String get remoteAddress => '地址';
+
+  @override
+  String get remotePort => '端口';
+
+  @override
+  String get remotePairCode => '配对码';
+
+  @override
+  String get remotePair => '配对';
+
+  @override
+  String get remotePairing => '正在配对…';
+
+  @override
+  String remotePaired(String name) {
+    return '已配对 $name';
+  }
+
+  @override
+  String remotePairFailed(String error) {
+    return '配对失败：$error';
+  }
+
+  @override
+  String get remoteOnline => '在线';
+
+  @override
+  String get remoteOffline => '离线';
+
+  @override
+  String get remoteUnpair => '解除配对';
+
+  @override
+  String get remoteNoComputer => '尚未配对电脑。';
+
+  @override
+  String get remoteServer => '手机连接';
+
+  @override
+  String get remoteServerEnable => '允许手机发送文件';
+
+  @override
+  String get remoteServerEnableHint => '默认关闭，仅接受局域网与 Tailscale 来源。';
+
+  @override
+  String get remoteServerAddresses => '本机地址';
+
+  @override
+  String remoteServerPort(String port) {
+    return '端口 $port';
+  }
+
+  @override
+  String get remoteShowCode => '生成配对码';
+
+  @override
+  String get remoteCodeHint => '2 分钟内有效，仅限一台手机。';
+
+  @override
+  String get remoteDevices => '已配对设备';
+
+  @override
+  String get remoteNoDevices => '没有已配对设备。';
+
+  @override
+  String get remoteFirewallHint => '如果手机连不上，请在 Windows 防火墙中放行 PocketASR。';
+
+  @override
+  String get remoteInbox => '来自手机';
+
+  @override
+  String get remoteStatusPending => '等待运行';
+
+  @override
+  String get remoteStatusRunning => '转写中';
+
+  @override
+  String get remoteStatusDone => '已完成';
+
+  @override
+  String get remoteStatusFailed => '失败';
+
+  @override
+  String get remoteStatusCancelled => '已取消';
+
+  @override
+  String get remoteRun => '运行';
+
+  @override
+  String get remoteCancel => '取消';
+
+  @override
+  String get remoteDelete => '删除';
+
+  @override
+  String get remoteViewText => '查看文本';
+
+  @override
+  String get remoteModelRequired => '请先选择模型';
+
+  @override
+  String remoteUploading(int percent) {
+    return '上传中 $percent%';
+  }
+
+  @override
+  String get remoteWaiting => '已发送，等待电脑运行';
+
+  @override
+  String get remoteSaved => '已保存到本机';
+
+  @override
+  String get remoteWithdraw => '撤回';
+
+  @override
+  String get remoteRetry => '重试';
+
+  @override
+  String get remoteDismiss => '移除';
 }

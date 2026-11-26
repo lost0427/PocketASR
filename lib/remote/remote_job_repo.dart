@@ -142,6 +142,13 @@ class RemoteJobRepo extends ChangeNotifier {
       RemoteJob.fromRow(row),
   ];
 
+  List<RemoteJob> listAll() => [
+    for (final row in _db.select(
+      'SELECT * FROM remote_job ORDER BY created_at ASC',
+    ))
+      RemoteJob.fromRow(row),
+  ];
+
   void insert(RemoteJob job) {
     _db.execute(
       'INSERT INTO remote_job(id, device_id, device_name, title, audio_path, '

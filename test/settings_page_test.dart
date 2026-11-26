@@ -219,7 +219,7 @@ void main() {
     await pumpSettings(tester, state);
 
     expect(state.autoCorrectPeriods, isFalse);
-    final toggle = find.byType(Switch);
+    final toggle = find.byType(Switch).first;
     await tester.ensureVisible(toggle);
     await tester.pumpAndSettle();
     await tester.tap(toggle);

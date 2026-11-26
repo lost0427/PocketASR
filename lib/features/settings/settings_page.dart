@@ -15,6 +15,7 @@ import '../bench/bench_page.dart';
 import '../bench/seven_tap.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
+import '../remote/remote_widgets.dart';
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
 const String settingsAppVersion = '1.0.31';
@@ -139,6 +140,16 @@ class SettingsPage extends StatelessWidget {
               onChanged: (value) => state.autoCorrectPeriods = value,
             ),
           ),
+        ),
+        const SizedBox(height: 28),
+        _SectionLabel(
+          Platform.isAndroid ? l10n.remoteLink : l10n.remoteServer,
+        ),
+        const SizedBox(height: 12),
+        _Card(
+          child: Platform.isAndroid
+              ? ComputerLinkSection(state: state)
+              : HostServerSection(state: state),
         ),
         const SizedBox(height: 28),
         _SectionLabel(l10n.settingsAbout),

@@ -14,6 +14,9 @@ import '../../core/text/token_counter.dart';
 import '../../core/text/transcript_export.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
+import '../../remote/remote_outbox.dart';
+import '../../remote/remote_protocol.dart';
+import '../remote/remote_widgets.dart';
 import 'transcription_service.dart';
 import 'recording_controls.dart';
 import '../../l10n/app_localizations.dart';
@@ -79,6 +82,7 @@ class _TranscribePageState extends State<TranscribePage> {
   double? _progress;
   TranscriptionStage? _stage;
   bool _running = false;
+  bool _remoteBusy = false;
   bool _recordingBusy = false;
   String? _error;
 
@@ -311,6 +315,25 @@ class _TranscribePageState extends State<TranscribePage> {
     }
   }
 
+  Future<void> _sendRemote(RemoteHost host) async {
+    final state = widget.state;
+    final path = _filePath;
+    final name = _fileName;
+    if (state == null || path == null || name == null) return;
+    setState(() {
+      _remoteBusy = true;
+      _error = null;
+    });
+    final item = await state.remoteOutbox.submit(host, path, name);
+    if (!mounted) return;
+    setState(() => _remoteBusy = false);
+    if (item.status == OutboxStatus.failed) {
+      setState(() => _error = item.error ?? '');
+    } else {
+      _notify(AppLocalizations.of(context).remoteWaiting);
+    }
+  }
+
   /// Asks the running job to stop. The engine refuses later chunks and the VAD
   /// worker is told too (a neural job may still be planning); both surface the
   /// abort at their next safe boundary.
@@ -502,6 +525,13 @@ class _TranscribePageState extends State<TranscribePage> {
             !_previewing &&
             !_recordingBusy;
         final hasResult = _result.isNotEmpty;
+        final remote = state?.remoteHost;
+        final canSend =
+            _fileName != null &&
+            !running &&
+            !_remoteBusy &&
+            !_recordingBusy &&
+            !_previewing;
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
         final transcript = _result.isNotEmpty ? _result : _partialText;
@@ -526,6 +556,10 @@ class _TranscribePageState extends State<TranscribePage> {
                       height: 1.5,
                     ),
                   ),
+                  if (state != null && state.remoteHosts.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    RemoteTargetBar(state: state),
+                  ],
                   const SizedBox(height: 16),
                   _SourceCard(
                     fileName: _fileName,
@@ -561,6 +595,37 @@ class _TranscribePageState extends State<TranscribePage> {
                     ),
                   ],
                   const SizedBox(height: 32),
+                  if (remote != null) ...[
+                    _SectionLabel(l10n.remoteLink),
+                    const SizedBox(height: 12),
+                    _Panel(
+                      child: Text(
+                        l10n.remoteComputerHint,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(_error!, style: TextStyle(color: scheme.error)),
+                    ],
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: canSend ? () => _sendRemote(remote) : null,
+                      icon: const Icon(Icons.computer),
+                      label: Text(l10n.remoteSend),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        textStyle: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (state != null)
+                      RemoteOutboxCard(state: state, hostId: remote.id),
+                  ] else ...[
                   _SectionLabel(l10n.transcribeEngineSection),
                   const SizedBox(height: 12),
                   LayoutBuilder(
@@ -789,6 +854,7 @@ class _TranscribePageState extends State<TranscribePage> {
                             ),
                           ),
                   ),
+                  ],
                 ],
               ),
             ),
