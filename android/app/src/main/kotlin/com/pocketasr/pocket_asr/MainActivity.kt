@@ -1,6 +1,7 @@
 package com.pocketasr.pocket_asr
 
 import android.content.Intent
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -9,6 +10,7 @@ class MainActivity : FlutterActivity() {
     private var audioPickerChannel: AudioPickerChannel? = null
     private var textExportChannel: TextExportChannel? = null
     private var backupChannel: BackupChannel? = null
+    private var pairLinkChannel: PairLinkChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -28,6 +30,25 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             this,
         ).also { it.install() }
+        pairLinkChannel = PairLinkChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+        ).also { it.install() }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        deliverPairLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deliverPairLink(intent)
+    }
+
+    private fun deliverPairLink(intent: Intent?) {
+        val data = intent?.dataString ?: return
+        if (data.startsWith("pocketasr://")) pairLinkChannel?.deliver(data)
     }
 
     @Deprecated("Deprecated in Android; required by the SAF result bridge")
@@ -45,6 +66,8 @@ class MainActivity : FlutterActivity() {
         textExportChannel = null
         backupChannel?.shutdown()
         backupChannel = null
+        pairLinkChannel?.shutdown()
+        pairLinkChannel = null
         audioDecodeChannel?.shutdown()
         audioDecodeChannel = null
         super.onDestroy()

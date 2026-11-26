@@ -242,7 +242,16 @@ class RemoteOutbox extends ChangeNotifier {
     String id,
     OutboxItem item,
   ) async {
-    if (item.imported) return;
+    if (item.imported) {
+      if (item.error == null) return;
+      try {
+        await client.ack(id);
+        item.error = null;
+      } on Object catch (error) {
+        item.error = '$error';
+      }
+      return;
+    }
     final detail = await client.job(id);
     final text = (detail['text'] as String? ?? '').trim();
     item.imported = true;

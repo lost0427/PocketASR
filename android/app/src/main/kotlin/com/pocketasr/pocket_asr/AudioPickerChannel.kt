@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 /** Selects local audio through Android SAF without copying bytes through Flutter. */
 class AudioPickerChannel(
@@ -47,6 +48,23 @@ class AudioPickerChannel(
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (call.method == "copyToCache") {
+            val uri = call.argument<String>("uri")
+            if (uri.isNullOrBlank()) {
+                result.error("copy_failed", "Missing uri", null)
+                return
+            }
+            try {
+                result.success(copyToCache(Uri.parse(uri)))
+            } catch (error: Exception) {
+                result.error(
+                    "copy_failed",
+                    error.message ?: error.javaClass.simpleName,
+                    null,
+                )
+            }
+            return
+        }
         val request = when (call.method) {
             "pickAudio" -> PICK_ONE
             "pickAudios" -> PICK_MANY
@@ -112,8 +130,41 @@ class AudioPickerChannel(
         return true
     }
 
-    private fun describe(uri: Uri, resultFlags: Int): Map<String, Any> {
+    private fun copyToCache(uri: Uri): String {
+        val directory = File(activity.cacheDir, "outbox").apply { mkdirs() }
+        val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+        directory.listFiles()?.forEach { file ->
+            if (file.lastModified() < cutoff) runCatching { file.delete() }
+        }
         val resolver = activity.contentResolver
+        val name = queryName(resolver, uri) ?: uri.lastPathSegment ?: ""
+        val extension = name.substringAfterLast('.', "")
+            .lowercase()
+            .takeIf { it.length in 1..8 && it.all(Char::isLetterOrDigit) }
+        val target = File(
+            directory,
+            "upload_${System.currentTimeMillis()}" +
+                if (extension != null) ".$extension" else "",
+        )
+        resolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: throw IllegalStateException("Cannot open $uri")
+        return target.absolutePath
+    }
+
+    private fun queryName(resolver: android.content.ContentResolver, uri: Uri): String? {
+        var name: String? = null
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0 && !cursor.isNull(index)) name = cursor.getString(index)
+                }
+            }
+        return name
+    }
+
+    private fun describe(uri: Uri, resultFlags: Int): Map<String, Any> {        val resolver = activity.contentResolver
         val takeFlags = resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION
         if (takeFlags != 0) {
             runCatching { resolver.takePersistableUriPermission(uri, takeFlags) }

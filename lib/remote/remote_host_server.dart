@@ -30,17 +30,16 @@ class RemoteHostServer extends ChangeNotifier {
 
   bool get running => _server != null;
 
+  int get port => _server?.port ?? remoteDefaultPort;
+
   String get pairCode =>
       _pairExpiry != null && DateTime.now().isBefore(_pairExpiry!)
       ? _pairCode!
       : '';
 
-  Future<void> start() async {
+  Future<void> start({int port = remoteDefaultPort}) async {
     if (_server != null) return;
-    final server = await HttpServer.bind(
-      InternetAddress.anyIPv4,
-      remoteDefaultPort,
-    );
+    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _server = server;
     server.listen(_handle);
     notifyListeners();

@@ -203,6 +203,13 @@ class RemoteJobRepo extends ChangeNotifier {
     notifyListeners();
   }
 
+  Set<String> audioPaths() => {
+    for (final row in _db.select(
+      'SELECT audio_path FROM remote_job WHERE audio_path IS NOT NULL',
+    ))
+      row['audio_path'] as String,
+  };
+
   int pendingCount() =>
       _db.select(
             'SELECT COUNT(*) AS n FROM remote_job WHERE status = ?',

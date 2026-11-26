@@ -73,6 +73,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     _supportDirectory = supportDirectory;
     _loadSettings();
     remoteJobs.failInterrupted();
+    if (!Platform.isAndroid) _cleanRemoteInbox();
     if (_remoteServerEnabled && !Platform.isAndroid) {
       unawaited(_startRemoteServer());
     }
@@ -1164,6 +1165,19 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
   String get remoteInboxDirectory {
     final base = _supportDirectory ?? Directory.systemTemp.path;
     return '$base${Platform.pathSeparator}remote_inbox';
+  }
+
+  void _cleanRemoteInbox() {
+    final directory = Directory(remoteInboxDirectory);
+    if (!directory.existsSync()) return;
+    final keep = remoteJobs.audioPaths();
+    for (final entity in directory.listSync()) {
+      if (entity is File && !keep.contains(entity.path)) {
+        try {
+          entity.deleteSync();
+        } catch (_) {}
+      }
+    }
   }
 
   bool _remoteServerEnabled = false;

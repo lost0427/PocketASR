@@ -16,6 +16,10 @@ import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
 import 'l10n/app_delegates.dart';
 import 'l10n/app_localizations.dart';
+import 'remote/pair_link.dart';
+
+final GlobalKey<ScaffoldMessengerState> appScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +70,36 @@ class _PocketAsrAppState extends State<PocketAsrApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _state.startRemoteOutbox();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_listenForPairLinks()),
+    );
+  }
+
+  Future<void> _listenForPairLinks() async {
+    await listenForPairLinks((link) async {
+      try {
+        await _state.pairWithLink(link);
+        _showSnack(
+          _l10n?.remotePaired(link.name) ?? 'Paired with ${link.name}',
+        );
+      } on Object catch (error) {
+        _showSnack(
+          _l10n?.remotePairFailed('$error') ?? 'Pairing failed: $error',
+        );
+      }
+    });
+  }
+
+  AppLocalizations? get _l10n {
+    final context = appScaffoldMessengerKey.currentContext;
+    return context == null ? null : AppLocalizations.of(context);
+  }
+
+  void _showSnack(String text) {
+    final messenger = appScaffoldMessengerKey.currentState;
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -111,6 +145,7 @@ class _LocalizedApp extends StatelessWidget {
       darkTheme: buildDarkTheme(),
       themeMode: state.themeMode,
       locale: state.locale, // null = follow the system language
+      scaffoldMessengerKey: appScaffoldMessengerKey,
       localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: HomeShell(modelLibrary: modelLibrary),
