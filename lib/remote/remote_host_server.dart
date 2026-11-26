@@ -24,6 +24,7 @@ class RemoteHostServer extends ChangeNotifier {
   final RemoteHostBridge bridge;
 
   HttpServer? _server;
+  bool _starting = false;
   String? _pairCode;
   DateTime? _pairExpiry;
   final Map<String, List<DateTime>> _pairAttempts = {};
@@ -38,11 +39,16 @@ class RemoteHostServer extends ChangeNotifier {
       : '';
 
   Future<void> start({int port = remoteDefaultPort}) async {
-    if (_server != null) return;
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-    _server = server;
-    server.listen(_handle);
-    notifyListeners();
+    if (_server != null || _starting) return;
+    _starting = true;
+    try {
+      final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+      _server = server;
+      server.listen(_handle);
+      notifyListeners();
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> stop() async {
