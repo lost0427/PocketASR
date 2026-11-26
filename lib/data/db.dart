@@ -1,7 +1,7 @@
 import 'package:sqlite3/sqlite3.dart';
 
 /// On-disk schema version, tracked with `PRAGMA user_version`.
-const int schemaVersion = 2;
+const int schemaVersion = 3;
 
 /// File name of the app database inside its documents directory.
 const String databaseFileName = 'pocket_asr.sqlite';
@@ -61,6 +61,7 @@ void _migrate(Database db) {
   try {
     if (version < 1) db.execute(_schemaV1);
     if (version < 2) db.execute(_migrationV2);
+    if (version < 3) db.execute(_migrationV3);
     db.execute('PRAGMA user_version = $schemaVersion');
     db.execute('COMMIT');
   } catch (_) {
@@ -160,5 +161,42 @@ CREATE TABLE embedding(
   model TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   PRIMARY KEY (transcript_id, chunk)
+);
+''';
+
+// v3: phone→PC inbox plus the phone-side dedupe table. Both live in the same
+// schema because one binary runs on both ends.
+const String _migrationV3 = '''
+CREATE TABLE remote_job(
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  device_name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  audio_path TEXT,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  audio_seconds REAL,
+  status TEXT NOT NULL,
+  stage TEXT,
+  ratio REAL,
+  error TEXT,
+  text TEXT,
+  engine TEXT,
+  model_family TEXT,
+  model_quant TEXT,
+  model_path TEXT,
+  backend TEXT,
+  rtf REAL,
+  total_ms INTEGER,
+  decoder TEXT,
+  created_at INTEGER NOT NULL,
+  started_at INTEGER,
+  finished_at INTEGER
+);
+
+CREATE TABLE imported_remote_job(
+  remote_id TEXT PRIMARY KEY,
+  host_id TEXT NOT NULL,
+  transcript_id INTEGER,
+  imported_at INTEGER NOT NULL
 );
 ''';

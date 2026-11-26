@@ -106,39 +106,121 @@ class TranscriptRepo extends ChangeNotifier {
     List<SegmentDraft> segments = const [],
     DateTime? createdAt,
   }) {
-    final createdAtMs = (createdAt ?? DateTime.now()).millisecondsSinceEpoch;
-
     _db.execute('BEGIN');
     try {
-      _db.execute(
-        'INSERT INTO transcript(title, audio_path, audio_seconds, text, lang, '
-        'engine, model_family, model_path, backend, rtf, total_ms, created_at) '
-        'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-        [
-          title,
-          audioPath,
-          audioSeconds,
-          text,
-          lang,
-          engine,
-          modelFamily,
-          modelPath,
-          backend,
-          rtf,
-          totalMs,
-          createdAtMs,
-        ],
+      final id = _insertRow(
+        title: title,
+        text: text,
+        audioPath: audioPath,
+        audioSeconds: audioSeconds,
+        lang: lang,
+        engine: engine,
+        modelFamily: modelFamily,
+        modelPath: modelPath,
+        backend: backend,
+        rtf: rtf,
+        totalMs: totalMs,
+        segments: segments,
+        createdAt: createdAt,
       );
-      final id = _db.lastInsertRowId;
+      _db.execute('COMMIT');
+      notifyListeners();
+      return id;
+    } catch (_) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
 
-      for (final segment in segments) {
-        _db.execute(
-          'INSERT INTO segment(transcript_id, start_ms, end_ms, text) '
-          'VALUES(?,?,?,?)',
-          [id, segment.startMs, segment.endMs, segment.text],
-        );
-      }
+  int _insertRow({
+    required String title,
+    required String text,
+    String? audioPath,
+    double? audioSeconds,
+    String? lang,
+    String? engine,
+    String? modelFamily,
+    String? modelPath,
+    String? backend,
+    double? rtf,
+    int? totalMs,
+    List<SegmentDraft> segments = const [],
+    DateTime? createdAt,
+  }) {
+    final createdAtMs = (createdAt ?? DateTime.now()).millisecondsSinceEpoch;
+    _db.execute(
+      'INSERT INTO transcript(title, audio_path, audio_seconds, text, lang, '
+      'engine, model_family, model_path, backend, rtf, total_ms, created_at) '
+      'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+      [
+        title,
+        audioPath,
+        audioSeconds,
+        text,
+        lang,
+        engine,
+        modelFamily,
+        modelPath,
+        backend,
+        rtf,
+        totalMs,
+        createdAtMs,
+      ],
+    );
+    final id = _db.lastInsertRowId;
+    for (final segment in segments) {
+      _db.execute(
+        'INSERT INTO segment(transcript_id, start_ms, end_ms, text) '
+        'VALUES(?,?,?,?)',
+        [id, segment.startMs, segment.endMs, segment.text],
+      );
+    }
+    return id;
+  }
 
+  bool hasImportedRemote(String remoteId) => _db.select(
+    'SELECT 1 FROM imported_remote_job WHERE remote_id = ?',
+    [remoteId],
+  ).isNotEmpty;
+
+  /// Stores a transcript that came from a paired computer, at most once per
+  /// [remoteId]. Returns the new id, or null when it was already imported.
+  int? insertRemoteOnce({
+    required String remoteId,
+    required String hostId,
+    required String title,
+    required String text,
+    String? audioPath,
+    double? audioSeconds,
+    String? engine,
+    String? modelFamily,
+    String? modelPath,
+    String? backend,
+    double? rtf,
+    int? totalMs,
+    DateTime? createdAt,
+  }) {
+    if (hasImportedRemote(remoteId)) return null;
+    _db.execute('BEGIN');
+    try {
+      final id = _insertRow(
+        title: title,
+        text: text,
+        audioPath: audioPath,
+        audioSeconds: audioSeconds,
+        engine: engine,
+        modelFamily: modelFamily,
+        modelPath: modelPath,
+        backend: backend,
+        rtf: rtf,
+        totalMs: totalMs,
+        createdAt: createdAt,
+      );
+      _db.execute(
+        'INSERT INTO imported_remote_job(remote_id, host_id, transcript_id, '
+        'imported_at) VALUES(?,?,?,?)',
+        [remoteId, hostId, id, DateTime.now().millisecondsSinceEpoch],
+      );
       _db.execute('COMMIT');
       notifyListeners();
       return id;
