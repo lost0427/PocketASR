@@ -1099,4 +1099,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteDismiss => 'Dismiss';
+
+  @override
+  String remoteMore(int count) {
+    return '$count more';
+  }
 }

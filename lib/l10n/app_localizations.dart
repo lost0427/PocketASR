@@ -2031,6 +2031,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dismiss'**
   String get remoteDismiss;
+
+  /// No description provided for @remoteMore.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more'**
+  String remoteMore(int count);
 }
 
 class _AppLocalizationsDelegate

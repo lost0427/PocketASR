@@ -71,12 +71,13 @@ class RemoteOutboxCard extends StatelessWidget {
             if (hostId == null || item.hostId == hostId) item,
         ];
         if (items.isEmpty) return const SizedBox.shrink();
+        final shown = items.take(3).toList();
         return Card(
           elevation: 0,
           margin: EdgeInsets.zero,
           child: Column(
             children: [
-              for (final item in items)
+              for (final item in shown)
                 ListTile(
                   dense: true,
                   leading: Icon(_icon(item.status), color: scheme.primary),
@@ -128,6 +129,14 @@ class RemoteOutboxCard extends StatelessWidget {
                           onPressed: () => state.remoteOutbox.dismiss(item),
                         ),
                     ],
+                  ),
+                ),
+              if (items.length > shown.length)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Text(
+                    l10n.remoteMore(items.length - shown.length),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
             ],
@@ -190,7 +199,15 @@ class RemoteInboxSection extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
-              for (final job in jobs) _row(context, l10n, scheme, job),
+              for (final job in jobs.take(3)) _row(context, l10n, scheme, job),
+              if (jobs.length > 3)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Text(
+                    l10n.remoteMore(jobs.length - 3),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
             ],
           ),
         );
@@ -342,13 +359,21 @@ class _HostServerSectionState extends State<HostServerSection> {
       final addresses = [
         for (final interface in interfaces)
           for (final address in interface.addresses) address.address,
-      ];
+      ]..sort((a, b) => _rank(a).compareTo(_rank(b)));
       if (!mounted) return;
       setState(() {
         _addresses = addresses;
         _selected = addresses.isEmpty ? null : addresses.first;
       });
     } catch (_) {}
+  }
+
+  static int _rank(String address) {
+    if (address.startsWith('192.168.')) return 0;
+    if (address.startsWith('10.')) return 1;
+    if (address.startsWith('172.')) return 2;
+    if (address.startsWith('100.')) return 3;
+    return 4;
   }
 
   @override

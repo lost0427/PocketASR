@@ -436,5 +436,7 @@
   "remoteSaved": "Saved to this phone",
   "remoteWithdraw": "Withdraw",
   "remoteRetry": "Retry",
-  "remoteDismiss": "Dismiss"
+  "remoteDismiss": "Dismiss",
+  "remoteMore": "{count} more",
+  "@remoteMore": {"placeholders": {"count": {"type": "int"}}}
 }

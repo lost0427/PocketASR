@@ -1034,4 +1034,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteDismiss => '移除';
+
+  @override
+  String remoteMore(int count) {
+    return '还有 $count 个';
+  }
 }

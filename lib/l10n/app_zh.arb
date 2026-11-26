@@ -325,5 +325,7 @@
   "remoteSaved": "已保存到本机",
   "remoteWithdraw": "撤回",
   "remoteRetry": "重试",
-  "remoteDismiss": "移除"
+  "remoteDismiss": "移除",
+  "remoteMore": "还有 {count} 个",
+  "@remoteMore": {"placeholders": {"count": {"type": "int"}}}
 }
