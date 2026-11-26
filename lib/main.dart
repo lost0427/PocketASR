@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:material_ui/material_ui.dart';
@@ -53,14 +54,30 @@ class PocketAsrApp extends StatefulWidget {
   State<PocketAsrApp> createState() => _PocketAsrAppState();
 }
 
-class _PocketAsrAppState extends State<PocketAsrApp> {
+class _PocketAsrAppState extends State<PocketAsrApp>
+    with WidgetsBindingObserver {
   late final AppState _state = AppState(
     database: widget.database,
     supportDirectory: widget.supportDirectory,
   );
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _state.startRemoteOutbox();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_state.remoteOutbox.tick());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _state.dispose();
     super.dispose();
   }

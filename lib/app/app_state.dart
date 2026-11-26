@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
@@ -15,8 +16,10 @@ import '../data/semantic_indexer.dart';
 import '../data/transcript_repo.dart';
 import '../features/transcribe/transcription_service.dart';
 import '../remote/remote_auth.dart';
+import '../remote/remote_client.dart';
 import '../remote/remote_host_server.dart';
 import '../remote/remote_job_repo.dart';
+import '../remote/remote_outbox.dart';
 import '../remote/remote_protocol.dart';
 
 /// Builds the [Embedder] for a selected embedding model path. Production uses
@@ -195,6 +198,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     );
     _restoreVadSelection();
     _restoreEmbedding();
+    _restoreRemoteHosts();
     _remoteServerEnabled = database.getSetting('remote_server') == 'true';
   }
 
@@ -1189,6 +1193,123 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
 
   final Set<String> _remoteCancelled = {};
 
+  List<RemoteHost> _remoteHosts = [];
+  List<RemoteHost> get remoteHosts => List.unmodifiable(_remoteHosts);
+
+  String? _remoteTarget;
+  String? get remoteTarget => _remoteTarget;
+  set remoteTarget(String? value) {
+    if (value == _remoteTarget) return;
+    _remoteTarget = value;
+    _save('transcription_target', value ?? '');
+    notifyListeners();
+  }
+
+  RemoteHost? get remoteHost {
+    for (final host in _remoteHosts) {
+      if (host.id == _remoteTarget) return host;
+    }
+    return null;
+  }
+
+  final Map<String, bool> _hostOnline = {};
+  bool hostOnline(String id) => _hostOnline[id] ?? false;
+
+  void noteHostReachable(String id, bool online) {
+    if ((_hostOnline[id] ?? false) == online) return;
+    _hostOnline[id] = online;
+    notifyListeners();
+  }
+
+  void addRemoteHost(RemoteHost host) {
+    _remoteHosts = [
+      for (final item in _remoteHosts)
+        if (item.id != host.id) item,
+      host,
+    ];
+    _saveRemoteHosts();
+    _remoteTarget = host.id;
+    _save('transcription_target', host.id);
+    notifyListeners();
+  }
+
+  void removeRemoteHost(String id) {
+    _remoteHosts = [
+      for (final host in _remoteHosts)
+        if (host.id != id) host,
+    ];
+    _saveRemoteHosts();
+    if (_remoteTarget == id) {
+      _remoteTarget = null;
+      _save('transcription_target', '');
+    }
+    notifyListeners();
+  }
+
+  void _saveRemoteHosts() => _save(
+    'remote_hosts',
+    jsonEncode([for (final host in _remoteHosts) host.toJson()]),
+  );
+
+  void _restoreRemoteHosts() {
+    final raw = database.getSetting('remote_hosts');
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List<dynamic>;
+        _remoteHosts = [
+          for (final item in list)
+            RemoteHost.fromJson(item as Map<String, dynamic>),
+        ];
+      } catch (_) {
+        _remoteHosts = [];
+      }
+    }
+    final target = database.getSetting('transcription_target');
+    _remoteTarget = _remoteHosts.any((host) => host.id == target)
+        ? target
+        : null;
+  }
+
+  RemoteOutbox? _remoteOutbox;
+  RemoteOutbox get remoteOutbox => _remoteOutbox ??= RemoteOutbox(this);
+
+  void startRemoteOutbox() {
+    if (Platform.isAndroid) remoteOutbox.start();
+  }
+
+  Future<void> pairHost({
+    required String host,
+    required int port,
+    required String code,
+    String? hostId,
+    String? name,
+  }) async {
+    final client = RemoteClient(host: host, port: port);
+    final result = await client.pair(code: code, deviceName: hostName);
+    final token = result['token'] as String? ?? '';
+    if (token.isEmpty) {
+      throw const RemoteClientException('pair_failed', 'No token returned.');
+    }
+    addRemoteHost(
+      RemoteHost(
+        id: result['hostId'] as String? ?? hostId ?? host,
+        name: result['name'] as String? ?? name ?? host,
+        host: host,
+        port: port,
+        token: token,
+      ),
+    );
+    unawaited(remoteOutbox.tick());
+  }
+
+  Future<void> pairWithLink(RemotePairLink link) => pairHost(
+    host: link.host,
+    port: link.port,
+    code: link.code,
+    hostId: link.hostId,
+    name: link.name,
+  );
+
   @override
   void cancelRemoteJob(String id) {
     _remoteCancelled.add(id);
@@ -1287,6 +1408,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
   void dispose() {
     _disposed = true;
     unawaited(remoteServer.stop());
+    _remoteOutbox?.dispose();
     remoteJobs.dispose();
     transcriptRepo.removeListener(_onTranscriptChanged);
     // The indexer drops queued jobs after dispose, and an in-flight embed
