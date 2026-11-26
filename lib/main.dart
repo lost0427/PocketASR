@@ -31,23 +31,33 @@ Future<void> main() async {
       database: AppDatabase.open(
         path: '${directory.path}${Platform.pathSeparator}$databaseFileName',
       ),
+      supportDirectory: support.path,
     ),
   );
 }
 
 /// Root of the app. Owns the single [AppState] and hands it to the tree.
 class PocketAsrApp extends StatefulWidget {
-  const PocketAsrApp({super.key, this.database, this.modelLibrary});
+  const PocketAsrApp({
+    super.key,
+    this.database,
+    this.modelLibrary,
+    this.supportDirectory,
+  });
 
   final AppDatabase? database;
   final ModelLibrary? modelLibrary;
+  final String? supportDirectory;
 
   @override
   State<PocketAsrApp> createState() => _PocketAsrAppState();
 }
 
 class _PocketAsrAppState extends State<PocketAsrApp> {
-  late final AppState _state = AppState(database: widget.database);
+  late final AppState _state = AppState(
+    database: widget.database,
+    supportDirectory: widget.supportDirectory,
+  );
 
   @override
   void dispose() {

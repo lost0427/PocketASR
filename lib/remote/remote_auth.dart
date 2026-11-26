@@ -109,8 +109,7 @@ class RemoteAuth {
     return null;
   }
 
-  RemoteDevice addDevice(String name) {
-    final token = newRemoteToken();
+  RemoteDevice addDevice(String name, String token) {
     final device = RemoteDevice(
       id: 'd_${randomHex(6)}',
       name: name,
@@ -126,11 +125,18 @@ class RemoteAuth {
     final list = devices();
     var changed = false;
     for (var i = 0; i < list.length; i++) {
-      if (list[i].id == id) {
-        list[i] = list[i].seen();
-        changed = true;
+      if (list[i].id != id) continue;
+      final seen = list[i].lastSeenAt;
+      if (seen != null &&
+          DateTime.now().difference(seen) < const Duration(minutes: 1)) {
+        return;
       }
+      list[i] = list[i].seen();
+      changed = true;
     }
     if (changed) saveDevices(list);
   }
+
+  void removeDevice(String id) =>
+      saveDevices([for (final device in devices()) if (device.id != id) device]);
 }

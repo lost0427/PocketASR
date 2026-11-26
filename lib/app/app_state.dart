@@ -13,6 +13,11 @@ import '../data/db.dart';
 import '../data/search_repo.dart';
 import '../data/semantic_indexer.dart';
 import '../data/transcript_repo.dart';
+import '../features/transcribe/transcription_service.dart';
+import '../remote/remote_auth.dart';
+import '../remote/remote_host_server.dart';
+import '../remote/remote_job_repo.dart';
+import '../remote/remote_protocol.dart';
 
 /// Builds the [Embedder] for a selected embedding model path. Production uses
 /// [WorkerEmbedder] (the real CrispEmbed instance lives on its worker isolate,
@@ -53,15 +58,21 @@ enum ModelSelectionProblem {
 /// count, loudness and chunking values round out the Settings tab. These
 /// settings are stored in the sqlite `settings` table and restored on start;
 /// anything unparseable or out of range falls back to the default.
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier implements RemoteHostBridge {
   AppState({
     AppDatabase? database,
     EmbedderFactory? embedderFactory,
     EngineRegistry? engineRegistry,
+    String? supportDirectory,
   }) : database = database ?? AppDatabase.open(),
        engineRegistry = engineRegistry ?? EngineRegistry(),
        _embedderFactory = embedderFactory ?? _crispEmbedder {
+    _supportDirectory = supportDirectory;
     _loadSettings();
+    remoteJobs.failInterrupted();
+    if (_remoteServerEnabled && !Platform.isAndroid) {
+      unawaited(_startRemoteServer());
+    }
   }
 
   static Future<Embedder> _crispEmbedder(
@@ -85,7 +96,13 @@ class AppState extends ChangeNotifier {
 
   final AppDatabase database;
   final EmbedderFactory _embedderFactory;
+  String? _supportDirectory;
   late final TranscriptRepo transcriptRepo = TranscriptRepo(database);
+  @override
+  late final RemoteAuth remoteAuth = RemoteAuth(database);
+  @override
+  late final RemoteJobRepo remoteJobs = RemoteJobRepo(database);
+  late final RemoteHostServer remoteServer = RemoteHostServer(this);
 
   SearchRepo? _searchRepo;
 
@@ -178,6 +195,7 @@ class AppState extends ChangeNotifier {
     );
     _restoreVadSelection();
     _restoreEmbedding();
+    _remoteServerEnabled = database.getSetting('remote_server') == 'true';
   }
 
   void _save(String key, String value) => database.setSetting(key, value);
@@ -595,6 +613,7 @@ class AppState extends ChangeNotifier {
   /// True while a transcription owns the loaded engine. The Models page reads
   /// this to refuse swapping the in-use model mid-run.
   bool _engineBusy = false;
+  @override
   bool get engineBusy => _engineBusy;
   set engineBusy(bool value) {
     if (value == _engineBusy) return;
@@ -1118,9 +1137,157 @@ class AppState extends ChangeNotifier {
     return half < 1 ? 1 : half;
   }
 
+  String? _deviceId;
+
+  @override
+  String get hostId => _deviceId ??= _ensureHostId();
+
+  String _ensureHostId() {
+    final stored = database.getSetting('device_id');
+    if (stored != null && stored.isNotEmpty) return stored;
+    final id = 'h_${randomHex(6)}';
+    _save('device_id', id);
+    return id;
+  }
+
+  @override
+  String get hostName {
+    final stored = database.getSetting('device_name');
+    return stored == null || stored.isEmpty ? defaultDeviceName() : stored;
+  }
+
+  @override
+  String get remoteInboxDirectory {
+    final base = _supportDirectory ?? Directory.systemTemp.path;
+    return '$base${Platform.pathSeparator}remote_inbox';
+  }
+
+  bool _remoteServerEnabled = false;
+  bool get remoteServerEnabled => _remoteServerEnabled;
+  set remoteServerEnabled(bool value) {
+    if (value == _remoteServerEnabled) return;
+    _remoteServerEnabled = value;
+    _save('remote_server', '$value');
+    notifyListeners();
+    unawaited(value ? _startRemoteServer() : remoteServer.stop());
+  }
+
+  String? _remoteServerError;
+  String? get remoteServerError => _remoteServerError;
+
+  Future<void> _startRemoteServer() async {
+    try {
+      await remoteServer.start();
+      _remoteServerError = null;
+    } catch (error) {
+      _remoteServerError = '$error';
+      _remoteServerEnabled = false;
+      _save('remote_server', 'false');
+    }
+    notifyListeners();
+  }
+
+  final Set<String> _remoteCancelled = {};
+
+  @override
+  void cancelRemoteJob(String id) {
+    _remoteCancelled.add(id);
+    final engine = _engine;
+    if (engine is CancellableAsrEngine) unawaited(engine.cancel());
+    unawaited(cancelVad());
+  }
+
+  Future<void> runRemoteJob(RemoteJob job) async {
+    if (_engineBusy) return;
+    final model = modelSpec;
+    final problem = modelSelectionProblem;
+    if (model == null || problem != null) {
+      job
+        ..status = RemoteJobStatus.failed
+        ..error = 'No usable model is selected on this computer.'
+        ..finishedAt = DateTime.now();
+      remoteJobs.save(job);
+      return;
+    }
+    resetVadEngine();
+    _engineBusy = true;
+    notifyListeners();
+    _remoteCancelled.remove(job.id);
+    job
+      ..status = RemoteJobStatus.running
+      ..stage = TranscriptionStage.decoding.name
+      ..ratio = 0
+      ..error = null
+      ..startedAt = DateTime.now();
+    remoteJobs.save(job);
+    final service = TranscriptionService(
+      engine: engine,
+      vadEngine: activeVadEngine,
+      decoderPreference: _audioDecoderPreference,
+      autoCorrectPeriods: _autoCorrectPeriods,
+    );
+    try {
+      final result = await service.transcribe(
+        audioPath: job.audioPath!,
+        model: model,
+        backend: _backend,
+        chunkSettings: chunkSettings,
+        neuralVad: neuralVadSettings,
+        onStage: (stage) {
+          job.stage = stage.name;
+          remoteJobs.save(job);
+        },
+        onProgress: (progress) {
+          if (progress.ratio >= 0) job.ratio = progress.ratio;
+          remoteJobs.save(job);
+        },
+        isCancelled: () => _remoteCancelled.contains(job.id),
+      );
+      job
+        ..status = RemoteJobStatus.done
+        ..text = result.text
+        ..engine = result.engine
+        ..modelFamily = result.model.family
+        ..modelQuant = result.model.quant
+        ..modelPath = result.model.path
+        ..backend = result.backend.name
+        ..rtf = result.rtf
+        ..totalMs = result.elapsed.inMilliseconds
+        ..audioSeconds = result.audioDuration.inMilliseconds / 1000
+        ..decoder = result.decoderInfo?.name
+        ..ratio = 1
+        ..stage = null;
+    } on EngineCancelledException {
+      job
+        ..status = RemoteJobStatus.cancelled
+        ..stage = null;
+    } catch (error) {
+      job
+        ..status = RemoteJobStatus.failed
+        ..stage = null
+        ..error = '$error';
+    } finally {
+      job.finishedAt = DateTime.now();
+      _engineBusy = false;
+      _remoteCancelled.remove(job.id);
+      resetVadEngine();
+      final path = job.audioPath;
+      if (path != null) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+        job.audioPath = null;
+      }
+      remoteJobs.save(job);
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    unawaited(remoteServer.stop());
+    remoteJobs.dispose();
     transcriptRepo.removeListener(_onTranscriptChanged);
     // The indexer drops queued jobs after dispose, and an in-flight embed
     // stops before its write, so a mid-teardown run cannot touch the closed
