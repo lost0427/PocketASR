@@ -19,6 +19,7 @@ void main() {
   test('finds the newest application release and the legacy APK', () async {
     final checker = ReleaseChecker(
       currentVersion: '1.0.27',
+      assetName: (tag) => ReleaseChecker.androidAssetName(tag, 'legacy'),
       fetch: () async => [
         release(tag: 'model-sherpa-mnn-sensevoice-q8-v2'),
         release(

@@ -14,25 +14,43 @@ class ReleaseInfo {
     required this.version,
     required this.notes,
     required this.downloadUrl,
+    this.releaseUrl = '',
+    this.sha256,
+    this.size,
   });
 
   final String version;
   final String notes;
 
-  /// Direct APK asset URL, or the release page when the asset is missing.
+  /// Direct asset URL for this platform, or the release page when the asset is
+  /// missing.
   final String downloadUrl;
+
+  final String releaseUrl;
+
+  /// SHA-256 of the asset, from GitHub's release digest, when available.
+  final String? sha256;
+
+  final int? size;
 }
 
 typedef ReleaseFetcher = Future<List<Map<String, Object?>>> Function();
 
-/// Finds the newest application release on GitHub and the APK for this
-/// variant. Model-only releases (`model-*`) are ignored.
+typedef AssetNameResolver = String? Function(String tag);
+
+/// Finds the newest application release on GitHub and the asset for this
+/// platform. Model-only releases (`model-*`) are ignored.
 class ReleaseChecker {
-  ReleaseChecker({required this.currentVersion, ReleaseFetcher? fetch})
-    : _fetch = fetch ?? _fetchReleases;
+  ReleaseChecker({
+    required this.currentVersion,
+    ReleaseFetcher? fetch,
+    AssetNameResolver? assetName,
+  }) : _fetch = fetch ?? _fetchReleases,
+       _assetName = assetName ?? defaultAssetName;
 
   final String currentVersion;
   final ReleaseFetcher _fetch;
+  final AssetNameResolver _assetName;
 
   Future<ReleaseInfo?> check() async {
     final releases = await _fetch();
@@ -48,26 +66,43 @@ class ReleaseChecker {
           .whereType<Map>()
           .map((asset) => asset.cast<String, Object?>())
           .toList();
-      final expected = androidAssetName(tag, kCpuVariant);
+      final expected = _assetName(tag);
       String? download;
+      String? sha256;
+      int? size;
       for (final asset in assets) {
-        if (asset['name'] == expected) {
-          download = asset['browser_download_url'] as String?;
-          if (download != null) break;
+        if (expected == null || asset['name'] != expected) continue;
+        download = asset['browser_download_url'] as String?;
+        final digest = asset['digest'];
+        if (digest is String && digest.startsWith('sha256:')) {
+          sha256 = digest.substring(7).toLowerCase();
         }
+        size = asset['size'] as int?;
+        if (download != null) break;
       }
       final releaseUrl = release['html_url'] as String? ?? '';
       return ReleaseInfo(
         version: version,
         notes: release['body'] as String? ?? '',
         downloadUrl: download ?? releaseUrl,
+        releaseUrl: releaseUrl,
+        sha256: download == null ? null : sha256,
+        size: download == null ? null : size,
       );
     }
     return null;
   }
 
+  static String? defaultAssetName(String tag) {
+    if (Platform.isAndroid) return androidAssetName(tag, kCpuVariant);
+    if (Platform.isWindows) return windowsAssetName(tag);
+    return null;
+  }
+
   static String androidAssetName(String tag, String variant) =>
       'pocket-asr-android-$tag${variant == 'i8mm' ? '' : '-legacy'}.apk';
+
+  static String windowsAssetName(String tag) => 'pocket-asr-windows-$tag.zip';
 
   static bool isNewerVersion(String candidate, String current) {
     final left = candidate.split('.').map(int.parse).toList();

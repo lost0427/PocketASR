@@ -148,6 +148,11 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
       orElse: () => AudioDecoderPreference.automatic,
     );
     _autoCorrectPeriods = database.getSetting('auto_correct_periods') == 'true';
+    _updateCheckStartup = database.getSetting('update_check_startup') != 'false';
+    final skippedUpdate = database.getSetting('update_skipped_version');
+    _skippedUpdateVersion = skippedUpdate == null || skippedUpdate.isEmpty
+        ? null
+        : skippedUpdate;
     _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
@@ -350,6 +355,25 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     if (value == _autoCorrectPeriods) return;
     _autoCorrectPeriods = value;
     _save('auto_correct_periods', '$value');
+    notifyListeners();
+  }
+
+  bool _updateCheckStartup = true;
+  bool get updateCheckStartup => _updateCheckStartup;
+  set updateCheckStartup(bool value) {
+    if (value == _updateCheckStartup) return;
+    _updateCheckStartup = value;
+    _save('update_check_startup', '$value');
+    notifyListeners();
+  }
+
+  String? _skippedUpdateVersion;
+  String? get skippedUpdateVersion => _skippedUpdateVersion;
+  set skippedUpdateVersion(String? value) {
+    final next = value == null || value.isEmpty ? null : value;
+    if (next == _skippedUpdateVersion) return;
+    _skippedUpdateVersion = next;
+    _save('update_skipped_version', next ?? '');
     notifyListeners();
   }
 
