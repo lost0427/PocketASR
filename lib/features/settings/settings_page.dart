@@ -18,7 +18,7 @@ import '../models/model_picker.dart';
 import '../remote/remote_widgets.dart';
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
-const String settingsAppVersion = '1.0.31';
+const String settingsAppVersion = '1.1.0';
 
 const String _systemLanguage = 'system';
 
