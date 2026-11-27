@@ -149,7 +149,7 @@ class _Brand extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(18 - 2 * t, 22, 12, 16),
+      padding: const EdgeInsets.fromLTRB(18, 22, 12, 16),
       child: Row(
         children: [
           Icon(Icons.graphic_eq, size: 20, color: scheme.primary),
@@ -206,7 +206,7 @@ class _RailItem extends StatelessWidget {
           child: SizedBox(
             height: 40,
             child: Padding(
-              padding: EdgeInsets.only(left: 13 - 5 * t),
+              padding: const EdgeInsets.only(left: 13),
               child: Row(
                 children: [
                   Icon(

@@ -531,7 +531,12 @@ class _HistoryPageState extends State<HistoryPage> {
         if (_selecting) _selectionBar(l10n),
         if (!_selecting)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: EdgeInsets.fromLTRB(
+              wide ? 20 : 16,
+              wide ? 10 : 8,
+              wide ? 20 : 16,
+              wide ? 6 : 4,
+            ),
             child: TextField(
               controller: _query,
               onChanged: (_) => _reload(),
@@ -552,7 +557,7 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
         if (!_selecting)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: wide ? 20 : 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -634,13 +639,15 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                  padding: wide
+                      ? const EdgeInsets.fromLTRB(20, 8, 20, 28)
+                      : const EdgeInsets.fromLTRB(12, 4, 12, 24),
                   itemCount: _rows.length,
                   itemBuilder: (context, index) {
                     final row = _rows[index];
                     final selected = _selectedIds.contains(row.id);
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
+                      padding: EdgeInsets.only(bottom: wide ? 18 : 14),
                       child: Card(
                       color: selected
                           ? theme.colorScheme.secondaryContainer
@@ -649,6 +656,10 @@ class _HistoryPageState extends State<HistoryPage> {
                           : null,
                       child: ListTile(
                         selected: selected,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         leading: _selecting
                             ? Checkbox(
                                 value: selected,
