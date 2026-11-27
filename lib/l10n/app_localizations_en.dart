@@ -284,6 +284,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueMoveDown => 'Move down';
 
   @override
+  String get queueColumnFile => 'File';
+
+  @override
+  String get queueColumnStatus => 'Status';
+
+  @override
   String get engineBusyNote =>
       'Another transcription is running. Wait for it to finish first.';
 

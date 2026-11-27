@@ -87,6 +87,8 @@
   "queueRemove": "Remove",
   "queueMoveUp": "Move up",
   "queueMoveDown": "Move down",
+  "queueColumnFile": "File",
+  "queueColumnStatus": "Status",
   "engineBusyNote": "Another transcription is running. Wait for it to finish first.",
   "historyTitle": "History",
   "historyBody": "Every transcript is stored locally, so you can search it, copy it again, or restore it from the trash.",

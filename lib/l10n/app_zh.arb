@@ -85,6 +85,8 @@
   "queueRemove": "移除",
   "queueMoveUp": "上移",
   "queueMoveDown": "下移",
+  "queueColumnFile": "文件",
+  "queueColumnStatus": "状态",
   "engineBusyNote": "正在执行另一项转录，请等待其完成。",
   "historyTitle": "历史",
   "historyBody": "每条转录都保存在本地，可以搜索、再次复制，也能从回收站恢复。",

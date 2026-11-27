@@ -240,6 +240,10 @@ class _QueuePageState extends State<QueuePage> {
     final busyElsewhere = _engineBusyElsewhere;
     final remote = state?.remoteHost;
 
+    if (MediaQuery.sizeOf(context).width >= 1000 && state != null) {
+      return _buildWide(context, state);
+    }
+
     return Column(
       children: [
         if (state != null && state.remoteHosts.isNotEmpty)
@@ -379,6 +383,218 @@ class _QueuePageState extends State<QueuePage> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildWide(BuildContext context, AppState state) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final remote = state.remoteHost;
+    final jobs = _queue.jobs;
+    final running = _running;
+    final modelPath = _modelPath;
+    final selectionProblem = _selectionProblem;
+    final needsVad = _needsVadModel;
+    final busyElsewhere = _engineBusyElsewhere;
+    final canRunLocal =
+        modelPath != null &&
+        selectionProblem == null &&
+        !needsVad &&
+        _queue.hasPending &&
+        !running &&
+        !busyElsewhere;
+
+    Widget headerCell(String text, int flex) => Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: running ? null : _add,
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(l10n.queueAddAudio),
+              ),
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: remote != null
+                    ? (_queue.hasPending && !running ? _sendAll : null)
+                    : (canRunLocal ? _run : null),
+                icon: Icon(
+                  remote != null ? Icons.computer : Icons.play_arrow,
+                  size: 18,
+                ),
+                label: Text(
+                  remote != null ? l10n.remoteSendAll : l10n.queueRun,
+                ),
+              ),
+              const Spacer(),
+              if (state.remoteHosts.isNotEmpty) RemoteTargetBar(state: state),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed:
+                    running ||
+                        busyElsewhere ||
+                        widget.modelLibrary == null
+                    ? null
+                    : _pickModel,
+                icon: const Icon(Icons.model_training_outlined, size: 18),
+                label: modelPath == null
+                    ? Text(l10n.queueChooseModel)
+                    : SelectedModelName(
+                        library: widget.modelLibrary,
+                        state: state,
+                        emptyLabel: l10n.queueChooseModel,
+                        maxLines: 1,
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (remote == null && selectionProblem != null)
+            _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.messageForModelSelectionProblem(selectionProblem),
+              color: scheme.error,
+            )
+          else if (remote == null && state.modelSelectionMissing)
+            _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.modelSelectionMissing,
+              color: scheme.error,
+            )
+          else if (remote == null && modelPath == null)
+            _Note(
+              icon: Icons.info_outline,
+              text: l10n.queueModelRequired,
+              color: scheme.onSurfaceVariant,
+            ),
+          if (remote == null && busyElsewhere)
+            _Note(
+              icon: Icons.sync,
+              text: l10n.engineBusyNote,
+              color: scheme.onSurfaceVariant,
+            ),
+          if (remote == null && needsVad)
+            _Note(
+              icon: Icons.warning_amber_rounded,
+              text: l10n.vadModelRequired,
+              color: scheme.error,
+            ),
+          if (!Platform.isAndroid) RemoteInboxSection(state: state),
+          if (remote != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: RemoteOutboxCard(state: state, hostId: remote.id),
+            ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    color: scheme.surfaceContainerHigh,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 26),
+                        headerCell(l10n.queueColumnFile, 5),
+                        const SizedBox(width: 12),
+                        headerCell(l10n.queueColumnStatus, 3),
+                        const SizedBox(width: 168),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: jobs.isEmpty
+                        ? Center(child: Text(l10n.queueEmpty))
+                        : ListView.separated(
+                            itemCount: jobs.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, index) {
+                              final job = jobs[index];
+                              return SizedBox(
+                                height: 46,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _icon(job.status),
+                                        size: 16,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        flex: 5,
+                                        child: Text(
+                                          job.displayName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodyMedium,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          job.error ??
+                                              _jobStatusLabel(l10n, job),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: job.error != null
+                                                    ? scheme.error
+                                                    : scheme.onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 168,
+                                        child: Align(
+                                          alignment: Alignment.centerRight,
+                                          child: _actions(
+                                            l10n,
+                                            job,
+                                            index,
+                                            jobs.length,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

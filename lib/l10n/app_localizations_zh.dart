@@ -274,6 +274,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get queueMoveDown => '下移';
 
   @override
+  String get queueColumnFile => '文件';
+
+  @override
+  String get queueColumnStatus => '状态';
+
+  @override
   String get engineBusyNote => '正在执行另一项转录，请等待其完成。';
 
   @override

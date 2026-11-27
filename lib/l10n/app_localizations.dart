@@ -610,6 +610,18 @@ abstract class AppLocalizations {
   /// **'Move down'**
   String get queueMoveDown;
 
+  /// No description provided for @queueColumnFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get queueColumnFile;
+
+  /// No description provided for @queueColumnStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get queueColumnStatus;
+
   /// No description provided for @engineBusyNote.
   ///
   /// In en, this message translates to:
