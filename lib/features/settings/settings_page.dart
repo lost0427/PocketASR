@@ -18,7 +18,7 @@ import '../remote/remote_widgets.dart';
 import '../update/update_dialog.dart';
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
-const String settingsAppVersion = '1.1.0';
+const String settingsAppVersion = '1.1.1';
 
 const String _systemLanguage = 'system';
 
