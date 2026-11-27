@@ -639,7 +639,9 @@ class _HistoryPageState extends State<HistoryPage> {
                   itemBuilder: (context, index) {
                     final row = _rows[index];
                     final selected = _selectedIds.contains(row.id);
-                    return Card(
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Card(
                       color: selected
                           ? theme.colorScheme.secondaryContainer
                           : row.id == _selectedId
@@ -709,6 +711,7 @@ class _HistoryPageState extends State<HistoryPage> {
                                     ),
                                 ],
                               ),
+                      ),
                       ),
                     );
                   },

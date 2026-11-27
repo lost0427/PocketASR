@@ -1,8 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../l10n/app_localizations.dart';
-
 class ShellDestination {
   const ShellDestination({
     required this.icon,
@@ -33,8 +31,18 @@ class DesktopShell extends StatefulWidget {
   State<DesktopShell> createState() => _DesktopShellState();
 }
 
-class _DesktopShellState extends State<DesktopShell> {
-  bool _expanded = true;
+class _DesktopShellState extends State<DesktopShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rail = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+  );
+
+  @override
+  void dispose() {
+    _rail.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,27 +67,38 @@ class _DesktopShellState extends State<DesktopShell> {
         child: Scaffold(
           body: Row(
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                width: _expanded ? 224 : 68,
-                color: scheme.surfaceContainerLow,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Brand(
-                      expanded: _expanded,
-                      onToggle: () => setState(() => _expanded = !_expanded),
-                    ),
-                    const SizedBox(height: 4),
-                    for (var i = 0; i < widget.destinations.length; i++)
-                      _RailItem(
-                        destination: widget.destinations[i],
-                        selected: i == widget.index,
-                        expanded: _expanded,
-                        onTap: () => widget.onSelected(i),
+              MouseRegion(
+                onEnter: (_) => _rail.forward(),
+                onExit: (_) => _rail.reverse(),
+                child: AnimatedBuilder(
+                  animation: _rail,
+                  builder: (context, _) {
+                    final t = Curves.easeOut.transform(_rail.value);
+                    return Container(
+                      width: 68 + 156 * t,
+                      color: scheme.surfaceContainerLow,
+                      child: ClipRect(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _Brand(t: t),
+                            const SizedBox(height: 4),
+                            for (
+                              var i = 0;
+                              i < widget.destinations.length;
+                              i++
+                            )
+                              _RailItem(
+                                destination: widget.destinations[i],
+                                selected: i == widget.index,
+                                t: t,
+                                onTap: () => widget.onSelected(i),
+                              ),
+                          ],
+                        ),
                       ),
-                  ],
+                    );
+                  },
                 ),
               ),
               const VerticalDivider(width: 1, thickness: 1),
@@ -121,49 +140,35 @@ class _DesktopShellState extends State<DesktopShell> {
 }
 
 class _Brand extends StatelessWidget {
-  const _Brand({required this.expanded, required this.onToggle});
+  const _Brand({required this.t});
 
-  final bool expanded;
-  final VoidCallback onToggle;
+  final double t;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final l10n = AppLocalizations.of(context);
-    if (!expanded) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: IconButton(
-            tooltip: l10n.sidebarExpand,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.menu, size: 20),
-            onPressed: onToggle,
-          ),
-        ),
-      );
-    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+      padding: EdgeInsets.fromLTRB(24 - 4 * t, 22, 12, 16),
       child: Row(
         children: [
           Icon(Icons.graphic_eq, size: 20, color: scheme.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'PocketASR',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.1,
+          SizedBox(width: 12 * t),
+          SizedBox(
+            width: 120 * t,
+            child: Opacity(
+              opacity: t,
+              child: Text(
+                'PocketASR',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.clip,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.1,
+                ),
               ),
             ),
-          ),
-          IconButton(
-            tooltip: l10n.sidebarCollapse,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_left, size: 20),
-            onPressed: onToggle,
           ),
         ],
       ),
@@ -175,76 +180,69 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.destination,
     required this.selected,
-    required this.expanded,
+    required this.t,
     required this.onTap,
   });
 
   final ShellDestination destination;
   final bool selected;
-  final bool expanded;
+  final double t;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = selected
-        ? scheme.onSecondaryContainer
-        : scheme.onSurfaceVariant;
-    final item = Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: expanded ? 10 : 8,
-        vertical: 3,
-      ),
+    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
-        color: selected ? scheme.secondaryContainer : Colors.transparent,
+        color: selected
+            ? scheme.onSurface.withValues(alpha: 0.06)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          hoverColor: scheme.onSurface.withValues(alpha: 0.05),
+          hoverColor: scheme.onSurface.withValues(alpha: 0.035),
           onTap: onTap,
           child: SizedBox(
             height: 40,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0),
+              padding: EdgeInsets.only(left: 17 - 5 * t),
               child: Row(
-                mainAxisAlignment: expanded
-                    ? MainAxisAlignment.start
-                    : MainAxisAlignment.center,
                 children: [
                   Icon(
                     selected ? destination.selectedIcon : destination.icon,
                     size: 18,
-                    color: color,
+                    color: foreground,
                   ),
-                  if (expanded) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
+                  SizedBox(width: 12 * t),
+                  SizedBox(
+                    width: 140 * t,
+                    child: Opacity(
+                      opacity: t,
                       child: Text(
                         destination.label,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: selected
                               ? FontWeight.w600
                               : FontWeight.w500,
-                          color: color,
+                          color: selected
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
-    );
-    if (expanded) return item;
-    return Tooltip(
-      message: destination.label,
-      waitDuration: const Duration(milliseconds: 300),
-      child: item,
     );
   }
 }

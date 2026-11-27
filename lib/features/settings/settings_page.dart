@@ -59,10 +59,52 @@ class _SettingsGroup {
   final List<Widget> children;
 }
 
+class _SettingsTab extends StatelessWidget {
+  const _SettingsTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          hoverColor: scheme.onSurface.withValues(alpha: 0.035),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SettingsPageState extends State<SettingsPage> {
   String _category = 'general';
   final ScrollController _scroll = ScrollController();
   final Map<String, GlobalKey> _anchors = {};
+  final GlobalKey _listAnchor = GlobalKey();
 
   @override
   void dispose() {
@@ -74,13 +116,19 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _goTo(String id) {
     setState(() => _category = id);
-    final anchor = _anchor(id).currentContext;
-    if (anchor == null) return;
-    Scrollable.ensureVisible(
-      anchor,
-      duration: const Duration(milliseconds: 220),
+    final anchorBox =
+        _anchor(id).currentContext?.findRenderObject() as RenderBox?;
+    final listBox =
+        _listAnchor.currentContext?.findRenderObject() as RenderBox?;
+    if (anchorBox == null || listBox == null || !_scroll.hasClients) return;
+    final offset =
+        _scroll.offset +
+        anchorBox.localToGlobal(Offset.zero, ancestor: listBox).dy -
+        8;
+    _scroll.animateTo(
+      offset.clamp(0.0, _scroll.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
-      alignment: 0.02,
     );
   }
 
@@ -243,82 +291,62 @@ class _SettingsPageState extends State<SettingsPage> {
       ]),
     ];
 
-    final list = ListView(
-      controller: _scroll,
-      padding: wide
-          ? const EdgeInsets.fromLTRB(28, 24, 28, 32)
-          : const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
-        for (var i = 0; i < groups.length; i++) ...[
-          if (wide)
-            Padding(
-              key: _anchor(groups[i].id),
-              padding: EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 10),
-              child: Text(
-                groups[i].label,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            )
-          else ...[
-            _SectionLabel(groups[i].label),
-            const SizedBox(height: 12),
-          ],
-          ...groups[i].children,
-          if (i != groups.length - 1) const SizedBox(height: 28),
+    final content = <Widget>[
+      for (var i = 0; i < groups.length; i++) ...[
+        if (wide)
+          Padding(
+            key: _anchor(groups[i].id),
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 10),
+            child: Text(
+              groups[i].label,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          )
+        else ...[
+          _SectionLabel(groups[i].label),
+          const SizedBox(height: 12),
         ],
+        ...groups[i].children,
+        if (i != groups.length - 1) const SizedBox(height: 28),
       ],
-    );
+    ];
 
-    if (!wide) return list;
+    if (!wide) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: content,
+      );
+    }
 
-    return Row(
+    return Column(
       children: [
         SizedBox(
-          width: 224,
+          height: 48,
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
               for (final group in groups)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Material(
-                    color: group.id == _category
-                        ? scheme.secondaryContainer
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      hoverColor: scheme.onSurface.withValues(alpha: 0.05),
-                      onTap: () => _goTo(group.id),
-                      child: SizedBox(
-                        height: 38,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              group.label,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: group.id == _category
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                                color: group.id == _category
-                                    ? scheme.onSecondaryContainer
-                                    : scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                _SettingsTab(
+                  label: group.label,
+                  selected: group.id == _category,
+                  onTap: () => _goTo(group.id),
                 ),
             ],
           ),
         ),
-        const VerticalDivider(width: 1, thickness: 1),
-        Expanded(child: list),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+            child: Column(
+              key: _listAnchor,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: content,
+            ),
+          ),
+        ),
       ],
     );
   }
