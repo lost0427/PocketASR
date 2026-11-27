@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
@@ -39,63 +40,81 @@ class _DesktopShellState extends State<DesktopShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Scaffold(
-      body: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            width: _expanded ? 224 : 68,
-            color: scheme.surfaceContainerLow,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Brand(
-                  expanded: _expanded,
-                  onToggle: () => setState(() => _expanded = !_expanded),
-                ),
-                const SizedBox(height: 4),
-                for (var i = 0; i < widget.destinations.length; i++)
-                  _RailItem(
-                    destination: widget.destinations[i],
-                    selected: i == widget.index,
-                    expanded: _expanded,
-                    onTap: () => widget.onSelected(i),
-                  ),
-              ],
-            ),
-          ),
-          const VerticalDivider(width: 1, thickness: 1),
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  height: 60,
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: scheme.outlineVariant),
+    return CallbackShortcuts(
+      bindings: {
+        for (var i = 0; i < widget.destinations.length && i < 5; i++)
+          SingleActivator(
+            [
+              LogicalKeyboardKey.digit1,
+              LogicalKeyboardKey.digit2,
+              LogicalKeyboardKey.digit3,
+              LogicalKeyboardKey.digit4,
+              LogicalKeyboardKey.digit5,
+            ][i],
+            control: true,
+          ): () => widget.onSelected(i),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          body: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                width: _expanded ? 224 : 68,
+                color: scheme.surfaceContainerLow,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Brand(
+                      expanded: _expanded,
+                      onToggle: () => setState(() => _expanded = !_expanded),
                     ),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    widget.destinations[widget.index].label,
-                    style: theme.textTheme.titleLarge,
-                  ),
+                    const SizedBox(height: 4),
+                    for (var i = 0; i < widget.destinations.length; i++)
+                      _RailItem(
+                        destination: widget.destinations[i],
+                        selected: i == widget.index,
+                        expanded: _expanded,
+                        onTap: () => widget.onSelected(i),
+                      ),
+                  ],
                 ),
-                Expanded(
-                  child: IndexedStack(
-                    index: widget.index,
-                    children: [
-                      for (final destination in widget.destinations)
-                        destination.page,
-                    ],
-                  ),
+              ),
+              const VerticalDivider(width: 1, thickness: 1),
+              Expanded(
+                child: Column(
+                  children: [
+                    Container(
+                      height: 60,
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: scheme.outlineVariant),
+                        ),
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        widget.destinations[widget.index].label,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                    ),
+                    Expanded(
+                      child: IndexedStack(
+                        index: widget.index,
+                        children: [
+                          for (final destination in widget.destinations)
+                            destination.page,
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
