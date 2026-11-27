@@ -80,7 +80,6 @@ class _SettingsTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         child: InkWell(
           borderRadius: BorderRadius.circular(4),
-          hoverColor: scheme.onSurface.withValues(alpha: 0.035),
           onTap: onTap,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -89,7 +88,7 @@ class _SettingsTab extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
                 color: selected ? scheme.primary : scheme.onSurfaceVariant,
               ),
             ),

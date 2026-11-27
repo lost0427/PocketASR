@@ -202,7 +202,6 @@ class _RailItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          hoverColor: scheme.onSurface.withValues(alpha: 0.035),
           onTap: onTap,
           child: SizedBox(
             height: 40,
@@ -228,8 +227,8 @@ class _RailItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                              ? FontWeight.w500
+                              : FontWeight.w400,
                           color: selected
                               ? scheme.onSurface
                               : scheme.onSurfaceVariant,

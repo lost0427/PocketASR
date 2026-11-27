@@ -5,14 +5,17 @@ import 'package:material_ui/material_ui.dart';
 /// One seed keeps the light and dark schemes in step.
 const Color seedColor = Color(0xFF4F46E5);
 
+const String _windowsFont = 'Microsoft YaHei UI';
+const List<String> _windowsFallback = ['Microsoft YaHei', 'Segoe UI'];
+
 ThemeData buildLightTheme() => _buildTheme(Brightness.light);
 
 ThemeData buildDarkTheme() => _buildTheme(Brightness.dark);
 
-/// Flutter Windows falls back to a CJK serif (SimSun) for Chinese text when
-/// no CJK font is declared; Segoe UI only covers Latin. Name Microsoft YaHei
-/// first so both scripts share one sans-serif stack.
-final _fontFamily = Platform.isWindows ? 'Microsoft YaHei UI' : null;
+/// Flutter Windows falls back to a CJK serif for Chinese when no CJK face is
+/// named, so the studio machine's YaHei UI is used with the plain family as a
+/// fallback.
+final _fontFamily = Platform.isWindows ? _windowsFont : null;
 
 ThemeData _buildTheme(Brightness brightness) {
   final scheme = ColorScheme.fromSeed(
@@ -22,9 +25,14 @@ ThemeData _buildTheme(Brightness brightness) {
   final desktop = Platform.isWindows;
   final base = ThemeData(
     fontFamily: _fontFamily,
+    fontFamilyFallback: desktop ? _windowsFallback : null,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     visualDensity: desktop ? VisualDensity.compact : VisualDensity.standard,
+    splashFactory: desktop ? NoSplash.splashFactory : null,
+    splashColor: desktop ? Colors.transparent : null,
+    highlightColor: desktop ? Colors.transparent : null,
+    hoverColor: desktop ? Colors.transparent : null,
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
@@ -32,10 +40,11 @@ ThemeData _buildTheme(Brightness brightness) {
       elevation: 0,
       scrolledUnderElevation: 2,
       titleTextStyle: TextStyle(
+        fontFamily: _fontFamily,
         color: scheme.onSurface,
         fontSize: 20,
         fontWeight: FontWeight.w600,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
@@ -46,45 +55,69 @@ ThemeData _buildTheme(Brightness brightness) {
     ),
   );
   if (!desktop) return base;
+
+  final text = base.textTheme
+      .copyWith(
+        headlineSmall: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+          letterSpacing: 0,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+          letterSpacing: 0,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: scheme.onSurface,
+          letterSpacing: 0,
+        ),
+        titleSmall: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: scheme.onSurface,
+          letterSpacing: 0,
+        ),
+        bodyLarge: TextStyle(
+          fontSize: 14,
+          color: scheme.onSurface,
+          height: 1.55,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: 13.5,
+          color: scheme.onSurface,
+          height: 1.55,
+        ),
+        bodySmall: TextStyle(
+          fontSize: 12,
+          color: scheme.onSurfaceVariant,
+          height: 1.5,
+        ),
+        labelLarge: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: scheme.onSurface,
+          letterSpacing: 0,
+        ),
+        labelMedium: TextStyle(
+          fontSize: 12,
+          color: scheme.onSurfaceVariant,
+          letterSpacing: 0,
+        ),
+        labelSmall: TextStyle(
+          fontSize: 11.5,
+          color: scheme.onSurfaceVariant,
+          letterSpacing: 0,
+        ),
+      )
+      .apply(fontFamily: _windowsFont, fontFamilyFallback: _windowsFallback);
+
   return base.copyWith(
-    textTheme: base.textTheme.copyWith(
-      headlineSmall: TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-        letterSpacing: -0.2,
-      ),
-      titleLarge: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-        letterSpacing: -0.1,
-      ),
-      titleMedium: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-      ),
-      titleSmall: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-      ),
-      bodyLarge: TextStyle(fontSize: 14, color: scheme.onSurface, height: 1.45),
-      bodyMedium: TextStyle(fontSize: 13, color: scheme.onSurface, height: 1.45),
-      bodySmall: TextStyle(
-        fontSize: 12,
-        color: scheme.onSurfaceVariant,
-        height: 1.4,
-      ),
-      labelLarge: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-      ),
-      labelMedium: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-      labelSmall: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-    ),
+    textTheme: text,
     cardTheme: CardThemeData(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -103,7 +136,8 @@ ThemeData _buildTheme(Brightness brightness) {
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        overlayColor: Colors.transparent,
+        textStyle: text.labelLarge,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     ),
@@ -111,7 +145,8 @@ ThemeData _buildTheme(Brightness brightness) {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        overlayColor: Colors.transparent,
+        textStyle: text.labelLarge,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     ),
@@ -119,7 +154,18 @@ ThemeData _buildTheme(Brightness brightness) {
       style: TextButton.styleFrom(
         minimumSize: const Size(0, 32),
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        overlayColor: Colors.transparent,
+        textStyle: text.labelLarge,
+      ),
+    ),
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(
+        overlayColor: WidgetStatePropertyAll<Color?>(Colors.transparent),
+      ),
+    ),
+    segmentedButtonTheme: const SegmentedButtonThemeData(
+      style: ButtonStyle(
+        overlayColor: WidgetStatePropertyAll<Color?>(Colors.transparent),
       ),
     ),
     inputDecorationTheme: const InputDecorationTheme(
