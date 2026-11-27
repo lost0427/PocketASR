@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../app/app_state.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/backup/backup_service.dart';
+import '../../core/net/download_source.dart';
 import '../../core/update/release_check.dart';
 import '../../l10n/app_localizations.dart';
 import '../bench/bench_page.dart';
@@ -59,8 +60,7 @@ class _SettingsGroup {
   final List<Widget> children;
 }
 
-class _SettingsTab extends StatelessWidget {
-  const _SettingsTab({
+class _SettingsTab extends StatelessWidget {  const _SettingsTab({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -232,6 +232,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
+      _SettingsGroup('downloads', l10n.settingsDownloads, [
+        _Card(child: _DownloadSourceControl(state: state)),
+      ]),
       _SettingsGroup(
         'updates',
         l10n.settingsUpdates,
@@ -367,6 +370,119 @@ class _SettingsPageState extends State<SettingsPage> {
               state.engineRegistry.createAsr(id, threads: state.threads),
         ),
       ),
+    );
+  }
+}
+
+class _DownloadSourceControl extends StatefulWidget {
+  const _DownloadSourceControl({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_DownloadSourceControl> createState() => _DownloadSourceControlState();
+}
+
+class _DownloadSourceControlState extends State<_DownloadSourceControl> {
+  late final TextEditingController _host = TextEditingController(
+    text: widget.state.modelMirrorHost,
+  );
+  late final TextEditingController _prefix = TextEditingController(
+    text: widget.state.githubPrefix,
+  );
+
+  @override
+  void dispose() {
+    _host.dispose();
+    _prefix.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final state = widget.state;
+    final source = state.downloadSource;
+    final active = [
+      if (source.huggingFaceHost != null)
+        'huggingface.co → ${source.huggingFaceHost}',
+      if (source.githubPrefixUrl.isNotEmpty)
+        'github.com → ${source.githubPrefixUrl}',
+    ].join('  ·  ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.downloadModelsSource,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<ModelMirror>(
+          expandedInsets: EdgeInsets.zero,
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(
+              value: ModelMirror.official,
+              label: Text(l10n.downloadOfficial),
+            ),
+            ButtonSegment(
+              value: ModelMirror.hfMirror,
+              label: Text(l10n.downloadHfMirror),
+            ),
+            ButtonSegment(
+              value: ModelMirror.custom,
+              label: Text(l10n.downloadCustom),
+            ),
+          ],
+          selected: {state.modelMirror},
+          onSelectionChanged: (selection) =>
+              state.modelMirror = selection.first,
+        ),
+        if (state.modelMirror == ModelMirror.custom) ...[
+          const SizedBox(height: 10),
+          TextField(
+            controller: _host,
+            decoration: InputDecoration(
+              labelText: l10n.downloadCustomHost,
+              hintText: 'hf-mirror.com',
+            ),
+            onChanged: (value) => state.modelMirrorHost = value,
+          ),
+        ],
+        const SizedBox(height: 18),
+        Text(
+          l10n.downloadGithubPrefix,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _prefix,
+          decoration: const InputDecoration(hintText: 'https://ghfast.top/'),
+          onChanged: (value) => state.githubPrefix = value,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          l10n.downloadSourceHint,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.5,
+          ),
+        ),
+        if (active.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            l10n.downloadSourceActive(active),
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.primary),
+          ),
+        ],
+      ],
     );
   }
 }

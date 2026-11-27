@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../net/download_source.dart';
 import 'release_check.dart';
 
 class UpdateException implements Exception {
@@ -30,10 +31,15 @@ class _DigestCapture implements Sink<Digest> {
 }
 
 class WindowsUpdater {
-  WindowsUpdater({required this.info, required this.installDirectory});
+  WindowsUpdater({
+    required this.info,
+    required this.installDirectory,
+    this.source = const DownloadSource(),
+  });
 
   final ReleaseInfo info;
   final Directory installDirectory;
+  final DownloadSource source;
 
   static const String _sep = r'\';
 
@@ -62,7 +68,9 @@ class WindowsUpdater {
     if (await _zipFile.exists()) await _zipFile.delete();
     final client = HttpClient()..autoUncompress = false;
     try {
-      final request = await client.getUrl(Uri.parse(info.downloadUrl));
+      final request = await client.getUrl(
+        Uri.parse(source.rewrite(info.downloadUrl)),
+      );
       request.headers.set(HttpHeaders.userAgentHeader, 'PocketASR');
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {

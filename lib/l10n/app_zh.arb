@@ -347,5 +347,15 @@
   "updateStartupCheck": "启动时检查更新",
   "sidebarCollapse": "收起侧边栏",
   "sidebarExpand": "展开侧边栏",
+  "settingsDownloads": "下载",
+  "downloadModelsSource": "模型下载源",
+  "downloadOfficial": "官方",
+  "downloadHfMirror": "hf-mirror",
+  "downloadCustom": "自定义",
+  "downloadCustomHost": "自定义 Host",
+  "downloadGithubPrefix": "GitHub 加速前缀",
+  "downloadSourceHint": "镜像只改下载地址；文件仍按内置 SHA-256 或 GitHub 摘要校验。",
+  "downloadSourceActive": "当前生效：{source}",
+  "@downloadSourceActive": {"placeholders": {"source": {"type": "String"}}},
   "historySelectPrompt": "从左侧选择一条记录"
 }

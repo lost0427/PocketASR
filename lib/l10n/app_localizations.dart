@@ -2140,6 +2140,60 @@ abstract class AppLocalizations {
   /// **'Expand sidebar'**
   String get sidebarExpand;
 
+  /// No description provided for @settingsDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get settingsDownloads;
+
+  /// No description provided for @downloadModelsSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Model source'**
+  String get downloadModelsSource;
+
+  /// No description provided for @downloadOfficial.
+  ///
+  /// In en, this message translates to:
+  /// **'Official'**
+  String get downloadOfficial;
+
+  /// No description provided for @downloadHfMirror.
+  ///
+  /// In en, this message translates to:
+  /// **'hf-mirror'**
+  String get downloadHfMirror;
+
+  /// No description provided for @downloadCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get downloadCustom;
+
+  /// No description provided for @downloadCustomHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom host'**
+  String get downloadCustomHost;
+
+  /// No description provided for @downloadGithubPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub mirror prefix'**
+  String get downloadGithubPrefix;
+
+  /// No description provided for @downloadSourceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Mirrors only change the download URL. Files are still checked against the built-in SHA-256 or GitHub digest.'**
+  String get downloadSourceHint;
+
+  /// No description provided for @downloadSourceActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active: {source}'**
+  String downloadSourceActive(String source);
+
   /// No description provided for @historySelectPrompt.
   ///
   /// In en, this message translates to:

@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_state.dart';
+import '../../core/net/download_source.dart';
 import '../../core/update/release_check.dart';
 import '../../core/update/windows_updater.dart';
 import '../../l10n/app_localizations.dart';
@@ -75,10 +76,10 @@ Future<void> handleAvailableUpdate(
   }
   if (!context.mounted) return;
   if (!installable) {
-    await _openPage(context, info.downloadUrl);
+    await _openPage(context, state.downloadSource.rewrite(info.downloadUrl));
     return;
   }
-  await _install(context, info, installPath);
+  await _install(context, info, installPath, state.downloadSource);
 }
 
 Future<void> _openPage(BuildContext context, String url) async {
@@ -103,12 +104,14 @@ Future<void> _install(
   BuildContext context,
   ReleaseInfo info,
   String installPath,
+  DownloadSource source,
 ) async {
   final l10n = AppLocalizations.of(context);
   final navigator = Navigator.of(context);
   final updater = WindowsUpdater(
     info: info,
     installDirectory: Directory(installPath),
+    source: source,
   );
   final progress = ValueNotifier<_Progress>(
     _Progress(l10n.updateDownloadingUnknown, null),

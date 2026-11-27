@@ -458,5 +458,15 @@
   "updateStartupCheck": "Check for updates on launch",
   "sidebarCollapse": "Collapse sidebar",
   "sidebarExpand": "Expand sidebar",
+  "settingsDownloads": "Downloads",
+  "downloadModelsSource": "Model source",
+  "downloadOfficial": "Official",
+  "downloadHfMirror": "hf-mirror",
+  "downloadCustom": "Custom",
+  "downloadCustomHost": "Custom host",
+  "downloadGithubPrefix": "GitHub mirror prefix",
+  "downloadSourceHint": "Mirrors only change the download URL. Files are still checked against the built-in SHA-256 or GitHub digest.",
+  "downloadSourceActive": "Active: {source}",
+  "@downloadSourceActive": {"placeholders": {"source": {"type": "String"}}},
   "historySelectPrompt": "Select a transcript"
 }

@@ -1162,5 +1162,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sidebarExpand => 'Expand sidebar';
 
   @override
+  String get settingsDownloads => 'Downloads';
+
+  @override
+  String get downloadModelsSource => 'Model source';
+
+  @override
+  String get downloadOfficial => 'Official';
+
+  @override
+  String get downloadHfMirror => 'hf-mirror';
+
+  @override
+  String get downloadCustom => 'Custom';
+
+  @override
+  String get downloadCustomHost => 'Custom host';
+
+  @override
+  String get downloadGithubPrefix => 'GitHub mirror prefix';
+
+  @override
+  String get downloadSourceHint =>
+      'Mirrors only change the download URL. Files are still checked against the built-in SHA-256 or GitHub digest.';
+
+  @override
+  String downloadSourceActive(String source) {
+    return 'Active: $source';
+  }
+
+  @override
   String get historySelectPrompt => 'Select a transcript';
 }

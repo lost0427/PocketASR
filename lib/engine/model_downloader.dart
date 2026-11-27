@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../core/net/download_source.dart';
 import 'model_catalog.dart';
 
 class ModelDownloadProgress {
@@ -26,8 +27,9 @@ class ModelDownloadProgress {
 /// All paths go through the store, which rejects names that could escape the
 /// bundle directory.
 class ModelDownloader {
-  ModelDownloader(this.store);
+  ModelDownloader(this.store, {this.source = const DownloadSource()});
   final LocalModelStore store;
+  final DownloadSource source;
 
   Future<void> download(
     ModelEntry entry, {
@@ -91,7 +93,7 @@ class ModelDownloader {
     var start = partial.existsSync() ? await partial.length() : 0;
     while (true) {
       if (isCancelled()) throw const HttpException('Download cancelled');
-      final request = await client.getUrl(Uri.parse(url));
+      final request = await client.getUrl(Uri.parse(source.rewrite(url)));
       if (start > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$start-');
       }

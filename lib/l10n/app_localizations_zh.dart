@@ -1096,5 +1096,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sidebarExpand => '展开侧边栏';
 
   @override
+  String get settingsDownloads => '下载';
+
+  @override
+  String get downloadModelsSource => '模型下载源';
+
+  @override
+  String get downloadOfficial => '官方';
+
+  @override
+  String get downloadHfMirror => 'hf-mirror';
+
+  @override
+  String get downloadCustom => '自定义';
+
+  @override
+  String get downloadCustomHost => '自定义 Host';
+
+  @override
+  String get downloadGithubPrefix => 'GitHub 加速前缀';
+
+  @override
+  String get downloadSourceHint => '镜像只改下载地址；文件仍按内置 SHA-256 或 GitHub 摘要校验。';
+
+  @override
+  String downloadSourceActive(String source) {
+    return '当前生效：$source';
+  }
+
+  @override
   String get historySelectPrompt => '从左侧选择一条记录';
 }

@@ -93,7 +93,14 @@ class _ModelsPageState extends State<ModelsPage> {
   /// Null means downloads cannot run, so the tile must not offer one.
   ModelDownloadRunner? _runnerFor(ModelStore? store) {
     if (widget.download != null) return widget.download;
-    if (store is LocalModelStore) return ModelDownloader(store).download;
+    if (store is LocalModelStore) {
+      return widget.state == null
+          ? ModelDownloader(store).download
+          : ModelDownloader(
+              store,
+              source: widget.state!.downloadSource,
+            ).download;
+    }
     return null;
   }
 

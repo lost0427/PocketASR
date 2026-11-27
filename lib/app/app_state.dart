@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/audio/chunk_planner.dart';
 import '../core/audio/audio_source.dart';
+import '../core/net/download_source.dart';
 import '../engine/asr_engine.dart';
 import '../engine/embedder.dart';
 import '../engine/embedding_worker.dart';
@@ -153,6 +154,13 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     _skippedUpdateVersion = skippedUpdate == null || skippedUpdate.isEmpty
         ? null
         : skippedUpdate;
+    final mirror = database.getSetting('model_mirror');
+    _modelMirror = ModelMirror.values.firstWhere(
+      (value) => value.name == mirror,
+      orElse: () => ModelMirror.official,
+    );
+    _modelMirrorHost = database.getSetting('model_mirror_host') ?? '';
+    _githubPrefix = database.getSetting('github_prefix') ?? '';
     _chunkStrategy = _chunkStrategyFrom(database.getSetting('chunk_mode'));
     _chunkSeconds = _boundedDouble(
       database.getSetting('chunk_seconds'),
@@ -376,6 +384,39 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     _save('update_skipped_version', next ?? '');
     notifyListeners();
   }
+
+  ModelMirror _modelMirror = ModelMirror.official;
+  ModelMirror get modelMirror => _modelMirror;
+  set modelMirror(ModelMirror value) {
+    if (value == _modelMirror) return;
+    _modelMirror = value;
+    _save('model_mirror', value.name);
+    notifyListeners();
+  }
+
+  String _modelMirrorHost = '';
+  String get modelMirrorHost => _modelMirrorHost;
+  set modelMirrorHost(String value) {
+    if (value == _modelMirrorHost) return;
+    _modelMirrorHost = value;
+    _save('model_mirror_host', value);
+    notifyListeners();
+  }
+
+  String _githubPrefix = '';
+  String get githubPrefix => _githubPrefix;
+  set githubPrefix(String value) {
+    if (value == _githubPrefix) return;
+    _githubPrefix = value;
+    _save('github_prefix', value);
+    notifyListeners();
+  }
+
+  DownloadSource get downloadSource => DownloadSource(
+    modelMirror: _modelMirror,
+    customHost: _modelMirrorHost,
+    githubPrefix: _githubPrefix,
+  );
 
   /// Filesystem path of the model both the transcribe and queue flows load.
   ///
