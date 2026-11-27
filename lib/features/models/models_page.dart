@@ -277,6 +277,7 @@ class _ModelsPageState extends State<ModelsPage> {
     final runner = _runnerFor(store);
     final state = widget.state;
     final scheme = Theme.of(context).colorScheme;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
     final asr = [
       for (final e in entries)
         if (e.type != 'embedding' && e.type != 'vad') e,
@@ -356,9 +357,31 @@ class _ModelsPageState extends State<ModelsPage> {
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
+    Iterable<Widget> sectionTiles(
+      List<ModelEntry> models,
+      _ModelKind kind,
+    ) sync* {
+      if (!wide) {
+        yield* frameworkTiles(models, kind);
+        return;
+      }
+      yield LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 1000 ? 3 : 2;
+          final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
+          return Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              for (final item in frameworkTiles(models, kind))
+                if (item is! Divider) SizedBox(width: width, child: item),
+            ],
+          );
+        },
+      );
+    }
+
+    final children = <Widget>[
         if (state?.modelSelectionMissing ?? false) ...[
           _Notice(
             icon: Icons.warning_amber_rounded,
@@ -402,7 +425,7 @@ class _ModelsPageState extends State<ModelsPage> {
           const SizedBox(height: 24),
           _SectionLabel(l10n.modelsAsrSection),
           const SizedBox(height: 12),
-          ...frameworkTiles(asr, _ModelKind.asr),
+          ...sectionTiles(asr, _ModelKind.asr),
         ],
         if (vad.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -414,7 +437,7 @@ class _ModelsPageState extends State<ModelsPage> {
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
-          ...frameworkTiles(vad, _ModelKind.vad),
+          ...sectionTiles(vad, _ModelKind.vad),
         ],
         if (embedding.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -426,9 +449,27 @@ class _ModelsPageState extends State<ModelsPage> {
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 12),
-          ...frameworkTiles(embedding, _ModelKind.embedding),
+          ...sectionTiles(embedding, _ModelKind.embedding),
         ],
-      ],
+    ];
+
+    if (!wide) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: children,
+      );
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ),
     );
   }
 }
