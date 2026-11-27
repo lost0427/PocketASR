@@ -2109,6 +2109,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check for updates on launch'**
   String get updateStartupCheck;
+
+  /// No description provided for @sidebarCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse sidebar'**
+  String get sidebarCollapse;
+
+  /// No description provided for @sidebarExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand sidebar'**
+  String get sidebarExpand;
 }
 
 class _AppLocalizationsDelegate

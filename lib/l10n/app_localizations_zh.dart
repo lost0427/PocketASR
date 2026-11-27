@@ -1079,4 +1079,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateStartupCheck => '启动时检查更新';
+
+  @override
+  String get sidebarCollapse => '收起侧边栏';
+
+  @override
+  String get sidebarExpand => '展开侧边栏';
 }

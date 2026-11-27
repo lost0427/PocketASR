@@ -452,5 +452,7 @@
   "updateExtracting": "Unpacking…",
   "updateRestarting": "Restarting to finish…",
   "updateFailed": "Update failed",
-  "updateStartupCheck": "Check for updates on launch"
+  "updateStartupCheck": "Check for updates on launch",
+  "sidebarCollapse": "Collapse sidebar",
+  "sidebarExpand": "Expand sidebar"
 }

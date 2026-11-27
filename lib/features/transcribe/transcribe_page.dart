@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/system_metrics.dart';
 import '../../app/app_state.dart';
+import '../../app/desktop_widgets.dart';
 import '../../data/transcript_repo.dart';
 import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_source.dart';
@@ -88,6 +89,7 @@ class _TranscribePageState extends State<TranscribePage> {
 
   double? _charsPerSec;
   Duration? _elapsed;
+  Duration? _audioDuration;
   double? _rtf;
   Backend? _runBackend;
   AudioDecoderInfo? _decoderInfo;
@@ -240,6 +242,7 @@ class _TranscribePageState extends State<TranscribePage> {
       _partialText = '';
       _charsPerSec = null;
       _elapsed = null;
+      _audioDuration = null;
       _rtf = null;
       _runBackend = null;
       _decoderInfo = null;
@@ -285,6 +288,7 @@ class _TranscribePageState extends State<TranscribePage> {
           _partialText = '';
           _progress = 1;
           _elapsed = result.elapsed;
+          _audioDuration = result.audioDuration;
           _rtf = result.rtf;
           _runBackend = result.backend;
           _decoderInfo = result.decoderInfo;
@@ -535,6 +539,24 @@ class _TranscribePageState extends State<TranscribePage> {
         // While running the panel echoes the engine's own partial text; it is
         // replaced by the finished transcript, never fabricated.
         final transcript = _result.isNotEmpty ? _result : _partialText;
+
+        if (MediaQuery.sizeOf(context).width >= 1000) {
+          return _buildWide(
+            context,
+            capabilities: capabilities,
+            engineAvailable: engineAvailable,
+            running: running,
+            busyElsewhere: busyElsewhere,
+            canStart: canStart,
+            canSend: canSend,
+            needsVadModel: needsVadModel,
+            neuralSelected: neuralSelected,
+            transcript: transcript,
+            hasResult: hasResult,
+            remote: remote,
+            selectionProblem: selectionProblem,
+          );
+        }
 
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
@@ -861,6 +883,352 @@ class _TranscribePageState extends State<TranscribePage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildWide(
+    BuildContext context, {
+    required EngineCapabilities? capabilities,
+    required bool engineAvailable,
+    required bool running,
+    required bool busyElsewhere,
+    required bool canStart,
+    required bool canSend,
+    required bool needsVadModel,
+    required bool neuralSelected,
+    required String transcript,
+    required bool hasResult,
+    required RemoteHost? remote,
+    required ModelSelectionProblem? selectionProblem,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final state = widget.state;
+    final modelPath = _modelPath;
+    final stageLabel = hasResult
+        ? l10n.transcribeResult
+        : !running
+        ? l10n.transcribeProgressIdle
+        : _cancelRequested
+        ? l10n.transcribeCancelling
+        : _stageLabel(l10n, _stage);
+
+    Widget infoRow(String label, Widget value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(child: value),
+        ],
+      ),
+    );
+
+    Widget stat(String label, String value) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontFamily: 'Consolas',
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final left = <Widget>[
+      if (state != null && state.remoteHosts.isNotEmpty) ...[
+        RemoteTargetBar(state: state),
+        const SizedBox(height: 16),
+      ],
+      _SourceCard(
+        fileName: _fileName,
+        hint: l10n.transcribeFileHint,
+        actionLabel: _fileName == null
+            ? l10n.transcribeChooseFile
+            : l10n.transcribeChangeFile,
+        enabled: !running && !_previewing && !_recordingBusy,
+        onPick: _pickFile,
+      ),
+      const SizedBox(height: 12),
+      RecordingControls(
+        enabled: !running && !_previewing && !busyElsewhere,
+        onBusy: (busy) => setState(() => _recordingBusy = busy),
+        onRecorded: (path) => setState(() {
+          _filePath = path;
+          _fileName = path.split(RegExp(r'[\\/]')).reversed.skip(1).first;
+          _vadPreview = null;
+          _vadPreviewSignature = null;
+          _vadPreviewError = null;
+          _result = '';
+        }),
+      ),
+      if (!engineAvailable) ...[
+        const SizedBox(height: 16),
+        _EngineBanner(
+          title: l10n.transcribeEngineUnavailableTitle,
+          body: l10n.transcribeEngineUnavailableBody,
+        ),
+      ],
+      const SizedBox(height: 20),
+      if (remote != null) ...[
+        Text(
+          l10n.remoteComputerHint,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: canSend ? () => _sendRemote(remote) : null,
+          icon: const Icon(Icons.computer, size: 18),
+          label: Text(l10n.remoteSend),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(40),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          Text(_error!, style: TextStyle(color: scheme.error)),
+        ],
+      ] else ...[
+        _SectionLabel(l10n.transcribeEngineSection),
+        infoRow(
+          l10n.transcribeModel,
+          state == null
+              ? Text(l10n.transcribeModelNone, style: theme.textTheme.bodyMedium)
+              : SelectedModelName(
+                  library: widget.modelLibrary,
+                  state: state,
+                  emptyLabel: l10n.transcribeModelNone,
+                  maxLines: 1,
+                  style: theme.textTheme.bodyMedium,
+                ),
+        ),
+        infoRow(
+          l10n.transcribeEngineSection,
+          Text(widget.engine.id, style: theme.textTheme.bodyMedium),
+        ),
+        infoRow(
+          l10n.transcribeBackend,
+          Text(
+            _backendLabel(capabilities, l10n),
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed:
+              running ||
+                  busyElsewhere ||
+                  state == null ||
+                  widget.modelLibrary == null
+              ? null
+              : _pickModel,
+          icon: const Icon(Icons.model_training_outlined, size: 18),
+          label: Text(
+            modelPath == null
+                ? l10n.transcribeChooseModel
+                : l10n.transcribeChangeModel,
+          ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(36),
+          ),
+        ),
+        if (selectionProblem != null) ...[
+          const SizedBox(height: 10),
+          _Hint(
+            icon: Icons.warning_amber_rounded,
+            text: l10n.messageForModelSelectionProblem(selectionProblem),
+            color: scheme.error,
+          ),
+        ] else if (state?.modelSelectionMissing ?? false) ...[
+          const SizedBox(height: 10),
+          _Hint(
+            icon: Icons.warning_amber_rounded,
+            text: l10n.modelSelectionMissing,
+            color: scheme.error,
+          ),
+        ] else if (modelPath == null) ...[
+          const SizedBox(height: 10),
+          _Hint(
+            icon: Icons.info_outline,
+            text: l10n.transcribeModelRequired,
+            color: scheme.onSurfaceVariant,
+          ),
+        ] else if (busyElsewhere) ...[
+          const SizedBox(height: 10),
+          _Hint(
+            icon: Icons.sync,
+            text: l10n.engineBusyNote,
+            color: scheme.onSurfaceVariant,
+          ),
+        ],
+        if (needsVadModel) ...[
+          const SizedBox(height: 10),
+          _Hint(
+            icon: Icons.warning_amber_rounded,
+            text: l10n.vadModelRequired,
+            color: scheme.error,
+          ),
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          Text(_error!, style: TextStyle(color: scheme.error)),
+        ],
+        if (neuralSelected) ...[
+          const SizedBox(height: 16),
+          _buildVadPreview(context),
+        ],
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: canStart ? _start : null,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: Text(l10n.transcribeStart),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(40),
+                ),
+              ),
+            ),
+            if (running) ...[
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _cancelRequested ? null : _cancelRun,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                ),
+                child: Text(
+                  _cancelRequested
+                      ? l10n.transcribeCancelling
+                      : l10n.transcribeCancel,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 380,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: left,
+              ),
+            ),
+          ),
+          const SizedBox(width: 32),
+          Expanded(
+            child: remote != null
+                ? SingleChildScrollView(
+                    child: state == null
+                        ? const SizedBox.shrink()
+                        : RemoteOutboxCard(state: state, hostId: remote.id),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Text(stageLabel, style: theme.textTheme.titleMedium),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: hasResult ? _copy : null,
+                            icon: const Icon(Icons.copy_all_outlined, size: 16),
+                            label: Text(l10n.transcribeCopy),
+                          ),
+                          TextButton.icon(
+                            onPressed: hasResult ? _exportTxt : null,
+                            icon: const Icon(Icons.download_outlined, size: 16),
+                            label: Text(l10n.transcribeExportTxt),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TimelineStrip(
+                        progress: running || hasResult ? _progress ?? 0 : null,
+                        total: _audioDuration,
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          stat(
+                            l10n.metricCharsPerSec,
+                            _rate(_charsPerSec) ?? l10n.metricUnavailable,
+                          ),
+                          stat(
+                            l10n.metricRtf,
+                            _rtf?.toStringAsFixed(2) ?? l10n.metricUnavailable,
+                          ),
+                          stat(
+                            l10n.metricElapsed,
+                            _formatElapsed(_elapsed) ?? l10n.metricUnavailable,
+                          ),
+                          stat(
+                            l10n.metricDecoder,
+                            _decoderMode(_decoderInfo, l10n),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: _Panel(
+                          padding: EdgeInsets.zero,
+                          child: transcript.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    l10n.transcribeResultEmpty,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                )
+                              : SelectionArea(
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(18),
+                                    child: Text(
+                                      transcript,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(height: 1.65),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1266,7 +1634,7 @@ class _ProgressPanel extends StatelessWidget {
 String? _rate(double? value) => value?.toStringAsFixed(1);
 
 /// Wall clock as `500ms` or `2.0s`, or null when no progress was seen.
-String? _elapsed(Duration? value) {
+String? _formatElapsed(Duration? value) {
   if (value == null) return null;
   final millis = value.inMilliseconds;
   return millis < 1000
@@ -1315,7 +1683,7 @@ class _MetricsGrid extends StatelessWidget {
         rtf?.toStringAsFixed(2) ?? unknown,
         null,
       ),
-      (l10n.metricElapsed, Icons.schedule, _elapsed(elapsed) ?? unknown, null),
+      (l10n.metricElapsed, Icons.schedule, _formatElapsed(elapsed) ?? unknown, null),
       (
         l10n.metricCpu,
         Icons.memory,

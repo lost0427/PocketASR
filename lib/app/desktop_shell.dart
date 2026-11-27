@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_localizations.dart';
+
 class ShellDestination {
   const ShellDestination({
     required this.icon,
@@ -14,7 +16,7 @@ class ShellDestination {
   final Widget page;
 }
 
-class DesktopShell extends StatelessWidget {
+class DesktopShell extends StatefulWidget {
   const DesktopShell({
     super.key,
     required this.index,
@@ -27,39 +29,38 @@ class DesktopShell extends StatelessWidget {
   final List<ShellDestination> destinations;
 
   @override
+  State<DesktopShell> createState() => _DesktopShellState();
+}
+
+class _DesktopShellState extends State<DesktopShell> {
+  bool _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
       body: Row(
         children: [
-          Container(
-            width: 208,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            width: _expanded ? 224 : 68,
             color: scheme.surfaceContainerLow,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.graphic_eq, size: 20, color: scheme.primary),
-                      const SizedBox(width: 10),
-                      Text(
-                        'PocketASR',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                    ],
-                  ),
+                _Brand(
+                  expanded: _expanded,
+                  onToggle: () => setState(() => _expanded = !_expanded),
                 ),
-                for (var i = 0; i < destinations.length; i++)
+                const SizedBox(height: 4),
+                for (var i = 0; i < widget.destinations.length; i++)
                   _RailItem(
-                    destination: destinations[i],
-                    selected: i == index,
-                    onTap: () => onSelected(i),
+                    destination: widget.destinations[i],
+                    selected: i == widget.index,
+                    expanded: _expanded,
+                    onTap: () => widget.onSelected(i),
                   ),
               ],
             ),
@@ -69,8 +70,8 @@ class DesktopShell extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  height: 56,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  height: 60,
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(color: scheme.outlineVariant),
@@ -78,15 +79,16 @@ class DesktopShell extends StatelessWidget {
                   ),
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    destinations[index].label,
+                    widget.destinations[widget.index].label,
                     style: theme.textTheme.titleLarge,
                   ),
                 ),
                 Expanded(
                   child: IndexedStack(
-                    index: index,
+                    index: widget.index,
                     children: [
-                      for (final destination in destinations) destination.page,
+                      for (final destination in widget.destinations)
+                        destination.page,
                     ],
                   ),
                 ),
@@ -99,23 +101,81 @@ class DesktopShell extends StatelessWidget {
   }
 }
 
+class _Brand extends StatelessWidget {
+  const _Brand({required this.expanded, required this.onToggle});
+
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
+    if (!expanded) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: IconButton(
+            tooltip: l10n.sidebarExpand,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.menu, size: 20),
+            onPressed: onToggle,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+      child: Row(
+        children: [
+          Icon(Icons.graphic_eq, size: 20, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'PocketASR',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: l10n.sidebarCollapse,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_left, size: 20),
+            onPressed: onToggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.destination,
     required this.selected,
+    required this.expanded,
     required this.onTap,
   });
 
   final ShellDestination destination;
   final bool selected;
+  final bool expanded;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+    final color = selected
+        ? scheme.onSecondaryContainer
+        : scheme.onSurfaceVariant;
+    final item = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: expanded ? 10 : 8,
+        vertical: 3,
+      ),
       child: Material(
         color: selected ? scheme.secondaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
@@ -124,35 +184,48 @@ class _RailItem extends StatelessWidget {
           hoverColor: scheme.onSurface.withValues(alpha: 0.05),
           onTap: onTap,
           child: SizedBox(
-            height: 36,
+            height: 40,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0),
               child: Row(
+                mainAxisAlignment: expanded
+                    ? MainAxisAlignment.start
+                    : MainAxisAlignment.center,
                 children: [
                   Icon(
                     selected ? destination.selectedIcon : destination.icon,
                     size: 18,
-                    color: selected ? scheme.onSecondaryContainer : color,
+                    color: color,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      destination.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                        color: color,
+                  if (expanded) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        destination.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: color,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+    if (expanded) return item;
+    return Tooltip(
+      message: destination.label,
+      waitDuration: const Duration(milliseconds: 300),
+      child: item,
     );
   }
 }

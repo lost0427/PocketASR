@@ -96,12 +96,12 @@ ThemeData _buildTheme(Brightness brightness) {
     ),
     listTileTheme: const ListTileThemeData(
       dense: true,
-      minVerticalPadding: 2,
+      minVerticalPadding: 4,
       visualDensity: VisualDensity.compact,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 34),
+        minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -109,7 +109,7 @@ ThemeData _buildTheme(Brightness brightness) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 34),
+        minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),

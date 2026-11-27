@@ -1145,4 +1145,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateStartupCheck => 'Check for updates on launch';
+
+  @override
+  String get sidebarCollapse => 'Collapse sidebar';
+
+  @override
+  String get sidebarExpand => 'Expand sidebar';
 }
