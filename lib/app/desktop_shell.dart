@@ -75,7 +75,7 @@ class _DesktopShellState extends State<DesktopShell>
                   builder: (context, _) {
                     final t = Curves.easeOut.transform(_rail.value);
                     return Container(
-                      width: 68 + 156 * t,
+                      width: 56 + 128 * t,
                       color: scheme.surfaceContainerLow,
                       child: ClipRect(
                         child: Column(
@@ -149,13 +149,13 @@ class _Brand extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(24 - 4 * t, 22, 12, 16),
+      padding: EdgeInsets.fromLTRB(18 - 2 * t, 22, 12, 16),
       child: Row(
         children: [
           Icon(Icons.graphic_eq, size: 20, color: scheme.primary),
           SizedBox(width: 12 * t),
           SizedBox(
-            width: 120 * t,
+            width: 110 * t,
             child: Opacity(
               opacity: t,
               child: Text(
@@ -194,7 +194,7 @@ class _RailItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       child: Material(
         color: selected
             ? scheme.onSurface.withValues(alpha: 0.06)
@@ -207,7 +207,7 @@ class _RailItem extends StatelessWidget {
           child: SizedBox(
             height: 40,
             child: Padding(
-              padding: EdgeInsets.only(left: 17 - 5 * t),
+              padding: EdgeInsets.only(left: 13 - 5 * t),
               child: Row(
                 children: [
                   Icon(
@@ -217,7 +217,7 @@ class _RailItem extends StatelessWidget {
                   ),
                   SizedBox(width: 12 * t),
                   SizedBox(
-                    width: 140 * t,
+                    width: 128 * t,
                     child: Opacity(
                       opacity: t,
                       child: Text(

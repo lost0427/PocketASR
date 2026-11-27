@@ -640,7 +640,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     final row = _rows[index];
                     final selected = _selectedIds.contains(row.id);
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: 14),
                       child: Card(
                       color: selected
                           ? theme.colorScheme.secondaryContainer

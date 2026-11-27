@@ -122,9 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _listAnchor.currentContext?.findRenderObject() as RenderBox?;
     if (anchorBox == null || listBox == null || !_scroll.hasClients) return;
     final offset =
-        _scroll.offset +
-        anchorBox.localToGlobal(Offset.zero, ancestor: listBox).dy -
-        8;
+        anchorBox.localToGlobal(Offset.zero, ancestor: listBox).dy - 8;
     _scroll.animateTo(
       offset.clamp(0.0, _scroll.position.maxScrollExtent),
       duration: const Duration(milliseconds: 200),
@@ -339,7 +337,14 @@ class _SettingsPageState extends State<SettingsPage> {
         Expanded(
           child: SingleChildScrollView(
             controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+            padding: EdgeInsets.fromLTRB(
+              28,
+              24,
+              28,
+              MediaQuery.sizeOf(context).height > 440
+                  ? MediaQuery.sizeOf(context).height - 240
+                  : 200,
+            ),
             child: Column(
               key: _listAnchor,
               crossAxisAlignment: CrossAxisAlignment.stretch,
