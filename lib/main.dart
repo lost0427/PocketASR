@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app_state.dart';
+import 'app/desktop_shell.dart';
 import 'app/theme.dart';
 import 'core/backup/backup_service.dart';
 import 'core/update/release_check.dart';
@@ -213,10 +214,10 @@ class _HomeShellState extends State<HomeShell> {
     final engine = state.engine;
 
     // Real feature pages replace the placeholders in later phases.
-    final sections = <_Section>[
-      _Section(
-        navIcon: Icons.mic_none,
-        selectedNavIcon: Icons.mic,
+    final sections = <ShellDestination>[
+      ShellDestination(
+        icon: Icons.mic_none,
+        selectedIcon: Icons.mic,
         label: l10n.navTranscribe,
         page: TranscribePage(
           engine: engine,
@@ -226,9 +227,9 @@ class _HomeShellState extends State<HomeShell> {
           onManageModels: _openModels,
         ),
       ),
-      _Section(
-        navIcon: Icons.list_alt_outlined,
-        selectedNavIcon: Icons.list_alt,
+      ShellDestination(
+        icon: Icons.list_alt_outlined,
+        selectedIcon: Icons.list_alt,
         label: l10n.navQueue,
         page: QueuePage(
           engine: engine,
@@ -238,9 +239,9 @@ class _HomeShellState extends State<HomeShell> {
           onManageModels: _openModels,
         ),
       ),
-      _Section(
-        navIcon: Icons.history,
-        selectedNavIcon: Icons.history,
+      ShellDestination(
+        icon: Icons.history,
+        selectedIcon: Icons.history,
         label: l10n.navHistory,
         page: HistoryPage(
           repo: state.transcriptRepo,
@@ -248,15 +249,15 @@ class _HomeShellState extends State<HomeShell> {
           indexer: state.indexer,
         ),
       ),
-      _Section(
-        navIcon: Icons.layers_outlined,
-        selectedNavIcon: Icons.layers,
+      ShellDestination(
+        icon: Icons.layers_outlined,
+        selectedIcon: Icons.layers,
         label: l10n.navModels,
         page: ModelsPage(state: state, library: _modelLibrary),
       ),
-      _Section(
-        navIcon: Icons.settings_outlined,
-        selectedNavIcon: Icons.settings,
+      ShellDestination(
+        icon: Icons.settings_outlined,
+        selectedIcon: Icons.settings,
         label: l10n.navSettings,
         page: SettingsPage(
           modelLibrary: _modelLibrary,
@@ -265,38 +266,35 @@ class _HomeShellState extends State<HomeShell> {
       ),
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: Text(sections[_index].label)),
-      body: IndexedStack(
-        index: _index,
-        children: [for (final section in sections) section.page],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: [
-          for (final section in sections)
-            NavigationDestination(
-              icon: Icon(section.navIcon),
-              selectedIcon: Icon(section.selectedNavIcon),
-              label: section.label,
-            ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 900) {
+          return DesktopShell(
+            index: _index,
+            onSelected: (index) => setState(() => _index = index),
+            destinations: sections,
+          );
+        }
+        return Scaffold(
+          appBar: AppBar(title: Text(sections[_index].label)),
+          body: IndexedStack(
+            index: _index,
+            children: [for (final section in sections) section.page],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (index) => setState(() => _index = index),
+            destinations: [
+              for (final section in sections)
+                NavigationDestination(
+                  icon: Icon(section.icon),
+                  selectedIcon: Icon(section.selectedIcon),
+                  label: section.label,
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
-}
-
-class _Section {
-  const _Section({
-    required this.navIcon,
-    required this.selectedNavIcon,
-    required this.label,
-    required this.page,
-  });
-
-  final IconData navIcon;
-  final IconData selectedNavIcon;
-  final String label;
-  final Widget page;
 }
