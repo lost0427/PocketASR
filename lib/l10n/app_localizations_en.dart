@@ -1111,4 +1111,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String remoteMore(int count) {
     return '$count more';
   }
+
+  @override
+  String get updateLater => 'Later';
+
+  @override
+  String get updateDownloadAndInstall => 'Download and update';
+
+  @override
+  String updateInstallPath(String path) {
+    return 'It replaces files in $path and restarts the app.';
+  }
+
+  @override
+  String get updateInProgress => 'Updating';
+
+  @override
+  String updateDownloading(int percent) {
+    return 'Downloading $percent%';
+  }
+
+  @override
+  String get updateDownloadingUnknown => 'Downloading…';
+
+  @override
+  String get updateExtracting => 'Unpacking…';
+
+  @override
+  String get updateRestarting => 'Restarting to finish…';
+
+  @override
+  String get updateFailed => 'Update failed';
+
+  @override
+  String get updateStartupCheck => 'Check for updates on launch';
 }

@@ -440,5 +440,17 @@
   "remoteRetry": "Retry",
   "remoteDismiss": "Dismiss",
   "remoteMore": "{count} more",
-  "@remoteMore": {"placeholders": {"count": {"type": "int"}}}
+  "@remoteMore": {"placeholders": {"count": {"type": "int"}}},
+  "updateLater": "Later",
+  "updateDownloadAndInstall": "Download and update",
+  "updateInstallPath": "It replaces files in {path} and restarts the app.",
+  "@updateInstallPath": {"placeholders": {"path": {"type": "String"}}},
+  "updateInProgress": "Updating",
+  "updateDownloading": "Downloading {percent}%",
+  "@updateDownloading": {"placeholders": {"percent": {"type": "int"}}},
+  "updateDownloadingUnknown": "Downloading…",
+  "updateExtracting": "Unpacking…",
+  "updateRestarting": "Restarting to finish…",
+  "updateFailed": "Update failed",
+  "updateStartupCheck": "Check for updates on launch"
 }

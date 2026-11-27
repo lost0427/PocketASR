@@ -2049,6 +2049,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} more'**
   String remoteMore(int count);
+
+  /// No description provided for @updateLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateLater;
+
+  /// No description provided for @updateDownloadAndInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Download and update'**
+  String get updateDownloadAndInstall;
+
+  /// No description provided for @updateInstallPath.
+  ///
+  /// In en, this message translates to:
+  /// **'It replaces files in {path} and restarts the app.'**
+  String updateInstallPath(String path);
+
+  /// No description provided for @updateInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating'**
+  String get updateInProgress;
+
+  /// No description provided for @updateDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {percent}%'**
+  String updateDownloading(int percent);
+
+  /// No description provided for @updateDownloadingUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading…'**
+  String get updateDownloadingUnknown;
+
+  /// No description provided for @updateExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpacking…'**
+  String get updateExtracting;
+
+  /// No description provided for @updateRestarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Restarting to finish…'**
+  String get updateRestarting;
+
+  /// No description provided for @updateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get updateFailed;
+
+  /// No description provided for @updateStartupCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates on launch'**
+  String get updateStartupCheck;
 }
 
 class _AppLocalizationsDelegate

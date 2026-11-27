@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app/app_state.dart';
 import 'app/theme.dart';
 import 'core/backup/backup_service.dart';
+import 'core/update/release_check.dart';
 import 'data/db.dart';
 import 'features/models/models_page.dart';
 import 'features/models/model_library.dart';
@@ -14,12 +15,15 @@ import 'features/history/history_page.dart';
 import 'features/queue/queue_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/transcribe/transcribe_page.dart';
+import 'features/update/update_dialog.dart';
 import 'l10n/app_delegates.dart';
 import 'l10n/app_localizations.dart';
 import 'remote/pair_link.dart';
 
 final GlobalKey<ScaffoldMessengerState> appScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +69,8 @@ class _PocketAsrAppState extends State<PocketAsrApp>
     supportDirectory: widget.supportDirectory,
   );
 
+  Timer? _updateTimer;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +79,31 @@ class _PocketAsrAppState extends State<PocketAsrApp>
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_listenForPairLinks()),
     );
+    if (Platform.isWindows) {
+      _updateTimer = Timer(
+        const Duration(seconds: 5),
+        () => unawaited(_checkForUpdates()),
+      );
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (!_state.updateCheckStartup) return;
+    try {
+      final info = await ReleaseChecker(
+        currentVersion: settingsAppVersion,
+      ).check();
+      if (!_state.updateCheckStartup ||
+          info == null ||
+          info.version == _state.skippedUpdateVersion) {
+        return;
+      }
+      final context = appNavigatorKey.currentState?.overlay?.context;
+      if (context == null || !context.mounted) return;
+      await handleAvailableUpdate(context, _state, info);
+    } on Object {
+      // A launch check is best effort; a manual check reports the error.
+    }
   }
 
   Future<void> _listenForPairLinks() async {
@@ -111,6 +142,7 @@ class _PocketAsrAppState extends State<PocketAsrApp>
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _state.dispose();
     super.dispose();
@@ -146,6 +178,7 @@ class _LocalizedApp extends StatelessWidget {
       themeMode: state.themeMode,
       locale: state.locale, // null = follow the system language
       scaffoldMessengerKey: appScaffoldMessengerKey,
+      navigatorKey: appNavigatorKey,
       localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: HomeShell(modelLibrary: modelLibrary),

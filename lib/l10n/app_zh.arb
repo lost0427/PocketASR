@@ -329,5 +329,17 @@
   "remoteRetry": "重试",
   "remoteDismiss": "移除",
   "remoteMore": "还有 {count} 个",
-  "@remoteMore": {"placeholders": {"count": {"type": "int"}}}
+  "@remoteMore": {"placeholders": {"count": {"type": "int"}}},
+  "updateLater": "稍后",
+  "updateDownloadAndInstall": "下载并更新",
+  "updateInstallPath": "将覆盖 {path} 中的文件并重启应用。",
+  "@updateInstallPath": {"placeholders": {"path": {"type": "String"}}},
+  "updateInProgress": "正在更新",
+  "updateDownloading": "下载中 {percent}%",
+  "@updateDownloading": {"placeholders": {"percent": {"type": "int"}}},
+  "updateDownloadingUnknown": "正在下载…",
+  "updateExtracting": "正在解压…",
+  "updateRestarting": "即将重启完成更新…",
+  "updateFailed": "更新失败",
+  "updateStartupCheck": "启动时检查更新"
 }

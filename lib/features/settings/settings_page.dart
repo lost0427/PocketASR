@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_state.dart';
 import '../../core/audio/audio_source.dart';
@@ -16,6 +15,7 @@ import '../bench/seven_tap.dart';
 import '../models/model_library.dart';
 import '../models/model_picker.dart';
 import '../remote/remote_widgets.dart';
+import '../update/update_dialog.dart';
 
 /// Version shown in About. Keep in step with `pubspec.yaml` (`version:`).
 const String settingsAppVersion = '1.1.0';
@@ -181,11 +181,11 @@ class SettingsPage extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
+        const SizedBox(height: 28),
+        const _UpdatesSection(),
         if (showDataTools) ...[
           const SizedBox(height: 20),
           _DataSection(modelLibrary: modelLibrary),
-          const SizedBox(height: 28),
-          const _UpdatesSection(),
         ],
         const SizedBox(height: 20),
         Row(
@@ -703,10 +703,12 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
     if (_checking) return;
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final state = AppStateScope.of(context);
     setState(() => _checking = true);
     try {
-      final info = await ReleaseChecker(currentVersion: settingsAppVersion)
-          .check();
+      final info = await ReleaseChecker(
+        currentVersion: settingsAppVersion,
+      ).check();
       if (!mounted) return;
       if (info == null) {
         messenger
@@ -714,57 +716,7 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
           ..showSnackBar(SnackBar(content: Text(l10n.settingsUpToDate)));
         return;
       }
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(l10n.settingsUpdateAvailableTitle),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(l10n.settingsUpdateAvailableBody(info.version)),
-                if (info.notes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    l10n.settingsUpdateNotes,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(info.notes),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.modelsCancel),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                try {
-                  final opened = await launchUrl(
-                    Uri.parse(info.downloadUrl),
-                    mode: LaunchMode.externalApplication,
-                  );
-                  if (!opened) throw StateError('No browser available');
-                } catch (error) {
-                  messenger
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      SnackBar(
-                        content: Text('${l10n.settingsUpdateFailed}: $error'),
-                      ),
-                    );
-                }
-              },
-              child: Text(l10n.settingsUpdateDownload),
-            ),
-          ],
-        ),
-      );
+      await handleAvailableUpdate(context, state, info);
     } catch (error) {
       if (!mounted) return;
       messenger
@@ -780,6 +732,7 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final state = AppStateScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -788,20 +741,31 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
         _Card(
           child: Material(
             color: Colors.transparent,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.system_update_alt_outlined),
-              title: Text(l10n.settingsCheckUpdates),
-              subtitle: Text(l10n.settingsCheckUpdatesHint),
-              trailing: _checking
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
-              enabled: !_checking,
-              onTap: _check,
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.system_update_alt_outlined),
+                  title: Text(l10n.settingsCheckUpdates),
+                  subtitle: Text(l10n.settingsCheckUpdatesHint),
+                  trailing: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  enabled: !_checking,
+                  onTap: _check,
+                ),
+                if (Platform.isWindows)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.updateStartupCheck),
+                    value: state.updateCheckStartup,
+                    onChanged: (value) => state.updateCheckStartup = value,
+                  ),
+              ],
             ),
           ),
         ),

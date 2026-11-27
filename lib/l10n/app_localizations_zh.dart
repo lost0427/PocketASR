@@ -1045,4 +1045,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String remoteMore(int count) {
     return '还有 $count 个';
   }
+
+  @override
+  String get updateLater => '稍后';
+
+  @override
+  String get updateDownloadAndInstall => '下载并更新';
+
+  @override
+  String updateInstallPath(String path) {
+    return '将覆盖 $path 中的文件并重启应用。';
+  }
+
+  @override
+  String get updateInProgress => '正在更新';
+
+  @override
+  String updateDownloading(int percent) {
+    return '下载中 $percent%';
+  }
+
+  @override
+  String get updateDownloadingUnknown => '正在下载…';
+
+  @override
+  String get updateExtracting => '正在解压…';
+
+  @override
+  String get updateRestarting => '即将重启完成更新…';
+
+  @override
+  String get updateFailed => '更新失败';
+
+  @override
+  String get updateStartupCheck => '启动时检查更新';
 }
