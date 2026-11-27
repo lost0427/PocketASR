@@ -417,7 +417,7 @@ class _QueuePageState extends State<QueuePage> {
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -494,7 +494,11 @@ class _QueuePageState extends State<QueuePage> {
               text: l10n.vadModelRequired,
               color: scheme.error,
             ),
-          if (!Platform.isAndroid) RemoteInboxSection(state: state),
+          if (!Platform.isAndroid)
+            RemoteInboxSection(
+              state: state,
+              margin: const EdgeInsets.only(bottom: 12),
+            ),
           if (remote != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -509,7 +513,7 @@ class _QueuePageState extends State<QueuePage> {
                 children: [
                   Container(
                     height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     color: scheme.surfaceContainerHigh,
                     child: Row(
                       children: [
@@ -535,7 +539,7 @@ class _QueuePageState extends State<QueuePage> {
                                 height: 46,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
+                                    horizontal: 16,
                                   ),
                                   child: Row(
                                     children: [

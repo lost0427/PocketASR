@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
+import '../../app/desktop_widgets.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/backup/backup_service.dart';
 import '../../core/net/download_source.dart';
@@ -307,7 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
         ],
         ...groups[i].children,
-        if (i != groups.length - 1) const SizedBox(height: 28),
+        if (i != groups.length - 1) const SizedBox(height: 24),
       ],
     ];
 
@@ -1294,7 +1295,7 @@ class _Card extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: child,

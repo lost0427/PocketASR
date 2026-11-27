@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/app_state.dart';
+import '../../app/desktop_widgets.dart';
 import '../../engine/asr_engine.dart';
 import '../../engine/embedder.dart';
 import '../../engine/model_catalog.dart';
@@ -319,7 +320,7 @@ class _ModelsPageState extends State<ModelsPage> {
             _ModelKind.vad => state.vadModelPath == path,
           };
       return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.only(bottom: wide ? 0 : 12),
         child: _ModelTile(
           entry: entry,
           store: store,
@@ -375,10 +376,10 @@ class _ModelsPageState extends State<ModelsPage> {
       yield LayoutBuilder(
         builder: (context, constraints) {
           final columns = constraints.maxWidth >= 1000 ? 3 : 2;
-          final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
+          final width = (constraints.maxWidth - 20 * (columns - 1)) / columns;
           return Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: 20,
+            runSpacing: 20,
             children: [
               for (final item in frameworkTiles(models, kind))
                 if (item is! Divider) SizedBox(width: width, child: item),
@@ -559,7 +560,7 @@ class _UsageCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
@@ -674,7 +675,7 @@ class _ModelTile extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(

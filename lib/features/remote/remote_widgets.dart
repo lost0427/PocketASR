@@ -173,9 +173,14 @@ class RemoteOutboxCard extends StatelessWidget {
 }
 
 class RemoteInboxSection extends StatelessWidget {
-  const RemoteInboxSection({super.key, required this.state});
+  const RemoteInboxSection({
+    super.key,
+    required this.state,
+    this.margin = const EdgeInsets.fromLTRB(16, 0, 16, 12),
+  });
 
   final AppState state;
+  final EdgeInsetsGeometry margin;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +193,7 @@ class RemoteInboxSection extends StatelessWidget {
         if (jobs.isEmpty) return const SizedBox.shrink();
         return Card(
           elevation: 0,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          margin: margin,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

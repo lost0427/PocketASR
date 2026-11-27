@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
+
+/// Panel radius: flat on desktop, unchanged on Android.
+double panelRadius() => Platform.isWindows ? 8 : 20;
 
 class TimelineStrip extends StatelessWidget {
   const TimelineStrip({super.key, required this.progress, this.total});

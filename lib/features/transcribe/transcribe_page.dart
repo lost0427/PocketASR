@@ -959,7 +959,7 @@ class _TranscribePageState extends State<TranscribePage> {
     final left = <Widget>[
       if (state != null && state.remoteHosts.isNotEmpty) ...[
         RemoteTargetBar(state: state),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
       ],
       _SourceCard(
         fileName: _fileName,
@@ -990,7 +990,7 @@ class _TranscribePageState extends State<TranscribePage> {
           body: l10n.transcribeEngineUnavailableBody,
         ),
       ],
-      const SizedBox(height: 20),
+      const SizedBox(height: 24),
       if (remote != null) ...[
         Text(
           l10n.remoteComputerHint,
@@ -1097,10 +1097,10 @@ class _TranscribePageState extends State<TranscribePage> {
           Text(_error!, style: TextStyle(color: scheme.error)),
         ],
         if (neuralSelected) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           _buildVadPreview(context),
         ],
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         Row(
           children: [
             Expanded(
@@ -1133,7 +1133,7 @@ class _TranscribePageState extends State<TranscribePage> {
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1173,12 +1173,12 @@ class _TranscribePageState extends State<TranscribePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       TimelineStrip(
                         progress: running || hasResult ? _progress ?? 0 : null,
                         total: _audioDuration,
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           stat(
@@ -1199,7 +1199,7 @@ class _TranscribePageState extends State<TranscribePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 20),
                       Expanded(
                         child: _Panel(
                           padding: EdgeInsets.zero,
@@ -1364,7 +1364,7 @@ class _Panel extends StatelessWidget {
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: child,
@@ -1465,7 +1465,7 @@ class _EngineBanner extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

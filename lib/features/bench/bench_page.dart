@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../app/app_state.dart';
+import '../../app/desktop_widgets.dart';
 import '../../core/audio/audio_picker.dart';
 import '../../core/audio/audio_source.dart';
 import '../../core/text/token_counter.dart';
@@ -901,7 +902,7 @@ class _Card extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: child,
@@ -1291,7 +1292,7 @@ class _UnavailableBanner extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1353,7 +1354,7 @@ class _EmptyResults extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(panelRadius()),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(

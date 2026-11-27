@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/text/token_counter.dart';
-import '../../core/text/transcript_export.dart';
+import '../../app/desktop_widgets.dart';import '../../core/text/transcript_export.dart';
 import '../../data/search_repo.dart';
 import '../../data/semantic_indexer.dart';
 import '../../data/transcript_repo.dart';
@@ -532,10 +532,10 @@ class _HistoryPageState extends State<HistoryPage> {
         if (!_selecting)
           Padding(
             padding: EdgeInsets.fromLTRB(
-              wide ? 20 : 16,
-              wide ? 10 : 8,
-              wide ? 20 : 16,
-              wide ? 6 : 4,
+              wide ? 28 : 16,
+              wide ? 16 : 8,
+              wide ? 28 : 16,
+              wide ? 10 : 4,
             ),
             child: TextField(
               controller: _query,
@@ -557,7 +557,7 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
         if (!_selecting)
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: wide ? 20 : 16),
+            padding: EdgeInsets.symmetric(horizontal: wide ? 28 : 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -640,14 +640,14 @@ class _HistoryPageState extends State<HistoryPage> {
                 )
               : ListView.builder(
                   padding: wide
-                      ? const EdgeInsets.fromLTRB(20, 8, 20, 28)
+                      ? const EdgeInsets.fromLTRB(28, 10, 28, 28)
                       : const EdgeInsets.fromLTRB(12, 4, 12, 24),
                   itemCount: _rows.length,
                   itemBuilder: (context, index) {
                     final row = _rows[index];
                     final selected = _selectedIds.contains(row.id);
                     return Padding(
-                      padding: EdgeInsets.only(bottom: wide ? 18 : 14),
+                      padding: EdgeInsets.only(bottom: wide ? 20 : 14),
                       child: Card(
                       color: selected
                           ? theme.colorScheme.secondaryContainer
@@ -657,8 +657,8 @@ class _HistoryPageState extends State<HistoryPage> {
                       child: ListTile(
                         selected: selected,
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
+                          horizontal: 16,
+                          vertical: 12,
                         ),
                         leading: _selecting
                             ? Checkbox(
@@ -883,7 +883,7 @@ class _TranscriptDetailBody extends StatelessWidget {
               TextButton(onPressed: onAction, child: Text(actionLabel)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           if (row.audioPath != null)
             Text(
               row.audioPath!,
@@ -891,12 +891,12 @@ class _TranscriptDetailBody extends StatelessWidget {
                 color: scheme.onSurfaceVariant,
               ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(panelRadius()),
               border: Border.all(color: scheme.outlineVariant),
             ),
             child: Column(
@@ -904,12 +904,12 @@ class _TranscriptDetailBody extends StatelessWidget {
               children: [
                 for (final (label, value) in metrics)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
-                          width: 120,
+                          width: 140,
                           child: Text(
                             label,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -926,12 +926,12 @@ class _TranscriptDetailBody extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(panelRadius()),
               border: Border.all(color: scheme.outlineVariant),
             ),
             child: SelectableText.rich(
@@ -942,7 +942,7 @@ class _TranscriptDetailBody extends StatelessWidget {
                   _markStyle(scheme),
                 ),
               ),
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.65),
             ),
           ),
       ],
