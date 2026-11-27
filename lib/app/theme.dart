@@ -163,14 +163,43 @@ ThemeData _buildTheme(Brightness brightness) {
         overlayColor: WidgetStatePropertyAll<Color?>(Colors.transparent),
       ),
     ),
-    segmentedButtonTheme: const SegmentedButtonThemeData(
+    segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
-        overlayColor: WidgetStatePropertyAll<Color?>(Colors.transparent),
+        overlayColor: const WidgetStatePropertyAll<Color?>(Colors.transparent),
+        minimumSize: const WidgetStatePropertyAll<Size?>(Size(0, 34)),
+        padding: const WidgetStatePropertyAll<EdgeInsetsGeometry?>(
+          EdgeInsets.symmetric(horizontal: 12),
+        ),
+        textStyle: WidgetStatePropertyAll<TextStyle?>(text.labelLarge),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
       ),
     ),
-    inputDecorationTheme: const InputDecorationTheme(
+    inputDecorationTheme: InputDecorationTheme(
       isDense: true,
-      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      filled: true,
+      fillColor: scheme.surfaceContainerLow,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: scheme.primary),
+      ),
+      prefixIconConstraints: const BoxConstraints(
+        minWidth: 34,
+        minHeight: 34,
+      ),
+      suffixIconConstraints: const BoxConstraints(
+        minWidth: 34,
+        minHeight: 34,
+      ),
     ),
     dividerTheme: const DividerThemeData(thickness: 1, space: 1),
     tooltipTheme: const TooltipThemeData(

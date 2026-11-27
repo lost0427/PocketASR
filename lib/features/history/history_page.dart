@@ -533,16 +533,16 @@ class _HistoryPageState extends State<HistoryPage> {
           Padding(
             padding: EdgeInsets.fromLTRB(
               wide ? 28 : 16,
-              wide ? 16 : 8,
+              wide ? 20 : 8,
               wide ? 28 : 16,
-              wide ? 10 : 4,
+              wide ? 24 : 4,
             ),
             child: TextField(
               controller: _query,
               onChanged: (_) => _reload(),
               decoration: InputDecoration(
                 hintText: l10n.historySearchHint,
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search, size: 18),
                 suffixIcon: _query.text.isEmpty
                     ? null
                     : IconButton(
@@ -550,7 +550,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           _query.clear();
                           _reload();
                         },
-                        icon: const Icon(Icons.clear),
+                        icon: const Icon(Icons.clear, size: 16),
                       ),
               ),
             ),
@@ -585,7 +585,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     Text('${_rows.length}', style: theme.textTheme.labelMedium),
                   ],
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: wide ? 16 : 6),
                 Row(
                   children: [
                     Expanded(
@@ -619,7 +619,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
                 if (!_hasEmbedder)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: wide ? 12 : 4),
                     child: Text(
                       l10n.historySearchSemanticOff,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -640,7 +640,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 )
               : ListView.builder(
                   padding: wide
-                      ? const EdgeInsets.fromLTRB(28, 10, 28, 28)
+                      ? const EdgeInsets.fromLTRB(28, 20, 28, 28)
                       : const EdgeInsets.fromLTRB(12, 4, 12, 24),
                   itemCount: _rows.length,
                   itemBuilder: (context, index) {
