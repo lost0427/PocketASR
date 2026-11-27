@@ -521,6 +521,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearance => 'Appearance';
 
   @override
+  String get settingsGeneral => 'General';
+
+  @override
   String get settingsLanguage => 'Language';
 
   @override

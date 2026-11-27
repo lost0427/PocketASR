@@ -199,6 +199,7 @@
   "modelsBusyNote": "A transcription is running. Stop it before switching models.",
   "settingsTitle": "Settings",
   "settingsAppearance": "Appearance",
+  "settingsGeneral": "General",
   "settingsLanguage": "Language",
   "themeSystem": "System",
   "themeLight": "Light",

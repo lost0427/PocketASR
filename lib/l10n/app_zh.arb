@@ -148,6 +148,7 @@
   "modelsBusyNote": "正在转录，停止后才能切换模型。",
   "settingsTitle": "设置",
   "settingsAppearance": "外观",
+  "settingsGeneral": "常规",
   "settingsLanguage": "语言",
   "themeSystem": "跟随系统",
   "themeLight": "浅色",

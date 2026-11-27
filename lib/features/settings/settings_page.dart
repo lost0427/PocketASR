@@ -29,7 +29,7 @@ const String _systemLanguage = 'system';
 /// Backend has no picker on purpose: the first release is CPU-only, and
 /// [AppState.backend] already carries the value so one can be added later
 /// without touching callers (plan D17).
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
     this.modelLibrary,
@@ -48,16 +48,54 @@ class SettingsPage extends StatelessWidget {
   final bool? showAndroidTools;
 
   @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsGroup {
+  const _SettingsGroup(this.id, this.label, this.children);
+
+  final String id;
+  final String label;
+  final List<Widget> children;
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  String _category = 'general';
+  final ScrollController _scroll = ScrollController();
+  final Map<String, GlobalKey> _anchors = {};
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  GlobalKey _anchor(String id) => _anchors.putIfAbsent(id, GlobalKey.new);
+
+  void _goTo(String id) {
+    setState(() => _category = id);
+    final anchor = _anchor(id).currentContext;
+    if (anchor == null) return;
+    Scrollable.ensureVisible(
+      anchor,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      alignment: 0.02,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final state = AppStateScope.of(context);
-    final showDecoder = showDecoderPreference ?? Platform.isAndroid;
-    final showDataTools = showAndroidTools ?? Platform.isAndroid;
+    final showDecoder =
+        widget.showDecoderPreference ?? Platform.isAndroid;
+    final showDataTools = widget.showAndroidTools ?? Platform.isAndroid;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
+    final groups = <_SettingsGroup>[
+      _SettingsGroup('general', l10n.settingsGeneral, [
         _SectionLabel(l10n.settingsAppearance),
         const SizedBox(height: 12),
         SegmentedButton<ThemeMode>(
@@ -74,7 +112,7 @@ class SettingsPage extends StatelessWidget {
           selected: {state.themeMode},
           onSelectionChanged: (selection) => state.themeMode = selection.first,
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
         _SectionLabel(l10n.settingsLanguage),
         const SizedBox(height: 12),
         SegmentedButton<String>(
@@ -94,19 +132,17 @@ class SettingsPage extends StatelessWidget {
             state.locale = code == _systemLanguage ? null : Locale(code);
           },
         ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsModel),
-        const SizedBox(height: 12),
+      ]),
+      _SettingsGroup('model', l10n.settingsModel, [
         _Card(
           child: _ModelControl(
             state: state,
-            modelLibrary: modelLibrary,
-            onManageModels: onManageModels,
+            modelLibrary: widget.modelLibrary,
+            onManageModels: widget.onManageModels,
           ),
         ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsPerformance),
-        const SizedBox(height: 12),
+      ]),
+      _SettingsGroup('performance', l10n.settingsPerformance, [
         _Card(
           child: Column(
             children: [
@@ -118,13 +154,11 @@ class SettingsPage extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsChunking),
-        const SizedBox(height: 12),
+      ]),
+      _SettingsGroup('chunking', l10n.settingsChunking, [
         _Card(child: _ChunkControl(state: state)),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsTextCorrection),
-        const SizedBox(height: 12),
+      ]),
+      _SettingsGroup('text', l10n.settingsTextCorrection, [
         _Card(
           child: Material(
             color: Colors.transparent,
@@ -141,19 +175,24 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 28),
-        _SectionLabel(
-          Platform.isAndroid ? l10n.remoteLink : l10n.remoteServer,
-        ),
-        const SizedBox(height: 12),
-        _Card(
-          child: Platform.isAndroid
-              ? ComputerLinkSection(state: state)
-              : HostServerSection(state: state),
-        ),
-        const SizedBox(height: 28),
-        _SectionLabel(l10n.settingsAbout),
-        const SizedBox(height: 12),
+      ]),
+      _SettingsGroup(
+        'link',
+        Platform.isAndroid ? l10n.remoteLink : l10n.remoteServer,
+        [
+          _Card(
+            child: Platform.isAndroid
+                ? ComputerLinkSection(state: state)
+                : HostServerSection(state: state),
+          ),
+        ],
+      ),
+      _SettingsGroup(
+        'updates',
+        l10n.settingsUpdates,
+        [const _UpdatesSection()],
+      ),
+      _SettingsGroup('about', l10n.settingsAbout, [
         _Card(
           child: SevenTapGate(
             onTriggered: () => _openBench(context),
@@ -178,14 +217,13 @@ class SettingsPage extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           l10n.settingsAboutHint,
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 28),
-        const _UpdatesSection(),
         if (showDataTools) ...[
           const SizedBox(height: 20),
-          _DataSection(modelLibrary: modelLibrary),
+          _DataSection(modelLibrary: widget.modelLibrary),
         ],
         const SizedBox(height: 20),
         Row(
@@ -202,6 +240,85 @@ class SettingsPage extends StatelessWidget {
             ),
           ],
         ),
+      ]),
+    ];
+
+    final list = ListView(
+      controller: _scroll,
+      padding: wide
+          ? const EdgeInsets.fromLTRB(28, 24, 28, 32)
+          : const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        for (var i = 0; i < groups.length; i++) ...[
+          if (wide)
+            Padding(
+              key: _anchor(groups[i].id),
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 10),
+              child: Text(
+                groups[i].label,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            )
+          else ...[
+            _SectionLabel(groups[i].label),
+            const SizedBox(height: 12),
+          ],
+          ...groups[i].children,
+          if (i != groups.length - 1) const SizedBox(height: 28),
+        ],
+      ],
+    );
+
+    if (!wide) return list;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 224,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            children: [
+              for (final group in groups)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Material(
+                    color: group.id == _category
+                        ? scheme.secondaryContainer
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      hoverColor: scheme.onSurface.withValues(alpha: 0.05),
+                      onTap: () => _goTo(group.id),
+                      child: SizedBox(
+                        height: 38,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              group.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: group.id == _category
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: group.id == _category
+                                    ? scheme.onSecondaryContainer
+                                    : scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1, thickness: 1),
+        Expanded(child: list),
       ],
     );
   }
@@ -736,8 +853,6 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionLabel(l10n.settingsUpdates),
-        const SizedBox(height: 12),
         _Card(
           child: Material(
             color: Colors.transparent,
