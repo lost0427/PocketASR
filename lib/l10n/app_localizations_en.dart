@@ -1157,4 +1157,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sidebarExpand => 'Expand sidebar';
+
+  @override
+  String get historySelectPrompt => 'Select a transcript';
 }

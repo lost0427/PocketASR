@@ -1091,4 +1091,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sidebarExpand => '展开侧边栏';
+
+  @override
+  String get historySelectPrompt => '从左侧选择一条记录';
 }

@@ -345,5 +345,6 @@
   "updateFailed": "更新失败",
   "updateStartupCheck": "启动时检查更新",
   "sidebarCollapse": "收起侧边栏",
-  "sidebarExpand": "展开侧边栏"
+  "sidebarExpand": "展开侧边栏",
+  "historySelectPrompt": "从左侧选择一条记录"
 }

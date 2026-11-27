@@ -51,6 +51,7 @@ class _HistoryPageState extends State<HistoryPage> {
   List<Transcript> _rows = const [];
   final Set<int> _selectedIds = {};
   bool _exporting = false;
+  int? _selectedId;
 
   bool get _hasEmbedder => widget.search.embedder != null;
   bool get _selecting => _selectedIds.isNotEmpty;
@@ -523,6 +524,7 @@ class _HistoryPageState extends State<HistoryPage> {
     // Literal hit terms to mark in each row; empty for semantic/hybrid.
     final terms = _hitTerms;
     final mark = _markStyle(theme.colorScheme);
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
 
     final body = Column(
       children: [
@@ -640,6 +642,8 @@ class _HistoryPageState extends State<HistoryPage> {
                     return Card(
                       color: selected
                           ? theme.colorScheme.secondaryContainer
+                          : row.id == _selectedId
+                          ? theme.colorScheme.surfaceContainerHigh
                           : null,
                       child: ListTile(
                         selected: selected,
@@ -663,6 +667,8 @@ class _HistoryPageState extends State<HistoryPage> {
                         ),
                         onTap: () => _selecting
                             ? _toggleSelection(row)
+                            : wide
+                            ? setState(() => _selectedId = row.id)
                             : _openDetail(row),
                         onLongPress: () => _startSelection(row),
                         trailing: _selecting
@@ -710,6 +716,51 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
       ],
     );
+    if (wide) {
+      Transcript? current;
+      for (final row in _rows) {
+        if (row.id == _selectedId) {
+          current = row;
+          break;
+        }
+      }
+      return Row(
+        children: [
+          SizedBox(width: 420, child: body),
+          const VerticalDivider(width: 1, thickness: 1),
+          Expanded(
+            child: current == null
+                ? Center(
+                    child: Text(
+                      l10n.historySelectPrompt,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                : _TranscriptDetailBody(
+                    row: current,
+                    highlightTerms: terms,
+                    padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
+                    onCopy: () => _copy(current!),
+                    actionLabel: _trash
+                        ? l10n.historyRestore
+                        : l10n.historyMoveToTrash,
+                    onAction: () {
+                      final row = current!;
+                      if (_trash) {
+                        _restore(row);
+                      } else {
+                        _moveToTrash(row);
+                      }
+                      setState(() => _selectedId = null);
+                    },
+                  ),
+          ),
+        ],
+      );
+    }
+
     return PopScope<void>(
       canPop: !_selecting,
       onPopInvokedWithResult: (didPop, _) {
@@ -742,6 +793,39 @@ class _TranscriptDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.historyDetailTitle)),
+      body: _TranscriptDetailBody(
+        row: row,
+        onCopy: onCopy,
+        actionLabel: actionLabel,
+        onAction: onAction,
+        highlightTerms: highlightTerms,
+      ),
+    );
+  }
+}
+
+class _TranscriptDetailBody extends StatelessWidget {
+  const _TranscriptDetailBody({
+    required this.row,
+    required this.onCopy,
+    required this.actionLabel,
+    required this.onAction,
+    this.highlightTerms = const [],
+    this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 32),
+  });
+
+  final Transcript row;
+  final VoidCallback onCopy;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final List<String> highlightTerms;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final localizations = MaterialLocalizations.of(context);
@@ -769,11 +853,9 @@ class _TranscriptDetailPage extends StatelessWidget {
         (l10n.historyDetailAudio, '${row.audioSeconds!.toStringAsFixed(1)} s'),
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.historyDetailTitle)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
+    return ListView(
+      padding: padding,
+      children: [
           Row(
             children: [
               Expanded(
@@ -849,8 +931,7 @@ class _TranscriptDetailPage extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

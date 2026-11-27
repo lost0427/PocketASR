@@ -2133,6 +2133,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Expand sidebar'**
   String get sidebarExpand;
+
+  /// No description provided for @historySelectPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a transcript'**
+  String get historySelectPrompt;
 }
 
 class _AppLocalizationsDelegate
