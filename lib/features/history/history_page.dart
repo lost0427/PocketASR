@@ -631,6 +631,7 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             ),
           ),
+        if (!_selecting) SizedBox(height: wide ? 12 : 6),
         Expanded(
           child: _rows.isEmpty
               ? Center(
