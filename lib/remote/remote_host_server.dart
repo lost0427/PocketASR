@@ -16,6 +16,7 @@ abstract interface class RemoteHostBridge {
   RemoteJobRepo get remoteJobs;
   bool get engineBusy;
   void cancelRemoteJob(String id);
+  void remoteJobQueued();
 }
 
 class RemoteHostServer extends ChangeNotifier {
@@ -258,6 +259,7 @@ class RemoteHostServer extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     bridge.remoteJobs.insert(job);
+    bridge.remoteJobQueued();
     await _json(request.response, 201, job.toJson());
   }
 

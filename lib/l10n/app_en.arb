@@ -411,6 +411,8 @@
   "remoteServer": "Phone connection",
   "remoteServerEnable": "Accept files from phones",
   "remoteServerEnableHint": "Off by default. Only the local network and Tailscale are accepted.",
+  "remoteAutoRun": "Run phone files automatically",
+  "remoteAutoRunHint": "Start as soon as a file arrives, using this computer's current model.",
   "remoteServerAddresses": "Addresses",
   "remoteServerPort": "Port {port}",
   "@remoteServerPort": {"placeholders": {"port": {"type": "String"}}},

@@ -400,6 +400,15 @@ class _HostServerSectionState extends State<HostServerSection> {
                     value: state.remoteServerEnabled,
                     onChanged: (value) => state.remoteServerEnabled = value,
                   ),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    title: Text(l10n.remoteAutoRun),
+                    subtitle: Text(l10n.remoteAutoRunHint),
+                    value: state.remoteAutoRun,
+                    onChanged: state.remoteServerEnabled
+                        ? (value) => state.remoteAutoRun = value
+                        : null,
+                  ),
                   if (state.remoteServerError != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),

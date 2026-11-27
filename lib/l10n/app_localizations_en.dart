@@ -1024,6 +1024,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Off by default. Only the local network and Tailscale are accepted.';
 
   @override
+  String get remoteAutoRun => 'Run phone files automatically';
+
+  @override
+  String get remoteAutoRunHint =>
+      'Start as soon as a file arrives, using this computer\'s current model.';
+
+  @override
   String get remoteServerAddresses => 'Addresses';
 
   @override

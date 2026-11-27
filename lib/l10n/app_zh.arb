@@ -300,6 +300,8 @@
   "remoteServer": "手机连接",
   "remoteServerEnable": "允许手机发送文件",
   "remoteServerEnableHint": "默认关闭，仅接受局域网与 Tailscale 来源。",
+  "remoteAutoRun": "自动运行手机任务",
+  "remoteAutoRunHint": "收到文件立即用电脑当前模型开始转写。",
   "remoteServerAddresses": "本机地址",
   "remoteServerPort": "端口 {port}",
   "@remoteServerPort": {"placeholders": {"port": {"type": "String"}}},

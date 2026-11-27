@@ -960,6 +960,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteServerEnableHint => '默认关闭，仅接受局域网与 Tailscale 来源。';
 
   @override
+  String get remoteAutoRun => '自动运行手机任务';
+
+  @override
+  String get remoteAutoRunHint => '收到文件立即用电脑当前模型开始转写。';
+
+  @override
   String get remoteServerAddresses => '本机地址';
 
   @override

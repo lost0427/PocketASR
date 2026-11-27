@@ -210,6 +210,15 @@ class RemoteJobRepo extends ChangeNotifier {
       row['audio_path'] as String,
   };
 
+  RemoteJob? nextPending() {
+    final rows = _db.select(
+      'SELECT * FROM remote_job WHERE status = ? ORDER BY created_at ASC '
+      'LIMIT 1',
+      [RemoteJobStatus.pending.name],
+    );
+    return rows.isEmpty ? null : RemoteJob.fromRow(rows.first);
+  }
+
   int pendingCount() =>
       _db.select(
             'SELECT COUNT(*) AS n FROM remote_job WHERE status = ?',

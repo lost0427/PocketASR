@@ -1888,6 +1888,18 @@ abstract class AppLocalizations {
   /// **'Off by default. Only the local network and Tailscale are accepted.'**
   String get remoteServerEnableHint;
 
+  /// No description provided for @remoteAutoRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run phone files automatically'**
+  String get remoteAutoRun;
+
+  /// No description provided for @remoteAutoRunHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start as soon as a file arrives, using this computer\'s current model.'**
+  String get remoteAutoRunHint;
+
   /// No description provided for @remoteServerAddresses.
   ///
   /// In en, this message translates to:

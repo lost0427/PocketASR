@@ -201,6 +201,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     _restoreEmbedding();
     _restoreRemoteHosts();
     _remoteServerEnabled = database.getSetting('remote_server') == 'true';
+    _remoteAutoRun = database.getSetting('remote_auto_run') == 'true';
   }
 
   void _save(String key, String value) => database.setSetting(key, value);
@@ -435,6 +436,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     _persistSelection();
     this.engineId = engineId; // disposes the previous engine instance
     notifyListeners();
+    unawaited(_drainRemoteJobs());
   }
 
   /// Forgets the selection — e.g. its bundle was deleted — and notifies the
@@ -624,6 +626,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
     if (value == _engineBusy) return;
     _engineBusy = value;
     notifyListeners();
+    if (!value) unawaited(_drainRemoteJobs());
   }
 
   /// Chunking defaults and the bounds the Settings sliders offer. The energy
@@ -1181,8 +1184,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
   }
 
   bool _remoteServerEnabled = false;
-  bool get remoteServerEnabled => _remoteServerEnabled;
-  set remoteServerEnabled(bool value) {
+  bool get remoteServerEnabled => _remoteServerEnabled;  set remoteServerEnabled(bool value) {
     if (value == _remoteServerEnabled) return;
     _remoteServerEnabled = value;
     _save('remote_server', '$value');
@@ -1206,6 +1208,38 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
   }
 
   final Set<String> _remoteCancelled = {};
+
+  bool _remoteAutoRun = false;
+  bool get remoteAutoRun => _remoteAutoRun;
+  set remoteAutoRun(bool value) {
+    if (value == _remoteAutoRun) return;
+    _remoteAutoRun = value;
+    _save('remote_auto_run', '$value');
+    notifyListeners();
+    if (value) unawaited(_drainRemoteJobs());
+  }
+
+  bool _remoteDraining = false;
+
+  @override
+  void remoteJobQueued() => unawaited(_drainRemoteJobs());
+
+  Future<void> _drainRemoteJobs() async {
+    if (!_remoteAutoRun || _remoteDraining || _engineBusy) return;
+    _remoteDraining = true;
+    try {
+      while (_remoteAutoRun && !_engineBusy) {
+        if (modelSpec == null || modelSelectionProblem != null) break;
+        final job = remoteJobs.nextPending();
+        if (job == null) break;
+        final id = job.id;
+        await runRemoteJob(job);
+        if (remoteJobs.nextPending()?.id == id) break;
+      }
+    } finally {
+      _remoteDraining = false;
+    }
+  }
 
   List<RemoteHost> _remoteHosts = [];
   List<RemoteHost> get remoteHosts => List.unmodifiable(_remoteHosts);
@@ -1415,6 +1449,7 @@ class AppState extends ChangeNotifier implements RemoteHostBridge {
       }
       remoteJobs.save(job);
       notifyListeners();
+      if (_remoteAutoRun) unawaited(_drainRemoteJobs());
     }
   }
 
